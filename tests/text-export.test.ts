@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const require = createRequire(import.meta.url)
@@ -22,14 +23,16 @@ describe('desktop text export formats', () => {
   })
 
   it('normalizes the selected destination while preserving its directory', () => {
-    expect(textExport.normalizeExportPath('/exports/nested/my-song', 'oks')).toBe(
-      '/exports/nested/my-song.oks',
+    const nestedDirectory = join('MixedCase Exports', 'Nested Folder')
+
+    expect(textExport.normalizeExportPath(join(nestedDirectory, 'my-song'), 'oks')).toBe(
+      join(nestedDirectory, 'my-song.oks'),
     )
-    expect(textExport.normalizeExportPath('/exports/nested/my-song.ass', 'oks')).toBe(
-      '/exports/nested/my-song.oks',
+    expect(textExport.normalizeExportPath(join(nestedDirectory, 'my-song.ass'), 'oks')).toBe(
+      join(nestedDirectory, 'my-song.oks'),
     )
-    expect(textExport.normalizeExportPath('/exports/nested/my-song.JSON', 'oks')).toBe(
-      '/exports/nested/my-song.oks',
+    expect(textExport.normalizeExportPath(join(nestedDirectory, 'my-song.JSON'), 'oks')).toBe(
+      join(nestedDirectory, 'my-song.oks'),
     )
   })
 
