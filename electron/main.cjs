@@ -16,6 +16,7 @@ const {
   EXPORT_FILTERS,
   ensureExportExtension,
   normalizeExportFormat,
+  normalizeExportPath,
 } = require('./text-export.cjs')
 
 const APP_NAME = 'Okay Karaoke Studio'
@@ -726,7 +727,7 @@ function registerIpcHandlers() {
 
     if (result.canceled || !result.filePath) return null
 
-    const filePath = path.resolve(result.filePath)
+    const filePath = path.resolve(normalizeExportPath(result.filePath, request.format))
     await writeUtf8FileAtomically(filePath, request.contents)
     return { path: filePath }
   })
@@ -752,9 +753,7 @@ function registerIpcHandlers() {
       })
       if (result.canceled || !result.filePath) return null
       if (operation.controller.signal.aborted) throw canceledVideoExportError()
-      const selectedOutputPath = path.extname(result.filePath).toLowerCase() === '.mp4'
-        ? result.filePath
-        : `${result.filePath}.mp4`
+      const selectedOutputPath = normalizeExportPath(result.filePath, 'mp4')
 
       const sendProgress = (progress) => {
         if (!event.sender.isDestroyed()) {

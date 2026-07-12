@@ -35,19 +35,36 @@ function ensureExportExtension(fileName, format) {
     throw new TypeError('unsupported export filename format')
   }
   const desiredExtension = `.${normalizedFormat}`
-  const currentExtension = path.extname(fileName).toLowerCase()
-  if (currentExtension === desiredExtension) return fileName
+  const rawExtension = path.extname(fileName)
+  const currentExtension = rawExtension.toLowerCase()
+  const baseName = path.basename(fileName)
+  const stem = rawExtension ? baseName.slice(0, -rawExtension.length) : baseName
+  if (currentExtension === desiredExtension) {
+    return rawExtension === desiredExtension
+      ? fileName
+      : `${stem || (normalizedFormat === 'oks' ? 'project' : 'lyrics')}${desiredExtension}`
+  }
 
   if (!KNOWN_EXPORT_EXTENSIONS.has(currentExtension)) {
     return `${fileName}${desiredExtension}`
   }
 
-  const stem = path.basename(fileName, currentExtension)
   return `${stem || (normalizedFormat === 'oks' ? 'project' : 'lyrics')}${desiredExtension}`
+}
+
+function normalizeExportPath(filePath, format) {
+  if (typeof filePath !== 'string' || !filePath) {
+    throw new TypeError('filePath must be a non-empty string')
+  }
+  return path.join(
+    path.dirname(filePath),
+    ensureExportExtension(path.basename(filePath), format),
+  )
 }
 
 module.exports = {
   EXPORT_FILTERS,
   ensureExportExtension,
   normalizeExportFormat,
+  normalizeExportPath,
 }

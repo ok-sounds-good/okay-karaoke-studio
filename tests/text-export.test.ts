@@ -6,16 +6,31 @@ const textExport = require('../electron/text-export.cjs') as {
   EXPORT_FILTERS: Record<string, Array<{ name: string; extensions: string[] }>>
   ensureExportExtension(fileName: string, format: string): string
   normalizeExportFormat(value: unknown): string
+  normalizeExportPath(filePath: string, format: string): string
 }
 
 describe('desktop text export formats', () => {
   it('treats an editable project as an exact .oks export', () => {
     expect(textExport.normalizeExportFormat('OKS')).toBe('oks')
     expect(textExport.ensureExportExtension('my-song.oks', 'oks')).toBe('my-song.oks')
+    expect(textExport.ensureExportExtension('my-song.OKS', 'oks')).toBe('my-song.oks')
     expect(textExport.ensureExportExtension('my-song.json', 'oks')).toBe('my-song.oks')
+    expect(textExport.ensureExportExtension('my-song.JSON', 'oks')).toBe('my-song.oks')
     expect(textExport.EXPORT_FILTERS.oks).toEqual([
       { name: 'Okay Karaoke Studio Project', extensions: ['oks'] },
     ])
+  })
+
+  it('normalizes the selected destination while preserving its directory', () => {
+    expect(textExport.normalizeExportPath('/exports/nested/my-song', 'oks')).toBe(
+      '/exports/nested/my-song.oks',
+    )
+    expect(textExport.normalizeExportPath('/exports/nested/my-song.ass', 'oks')).toBe(
+      '/exports/nested/my-song.oks',
+    )
+    expect(textExport.normalizeExportPath('/exports/nested/my-song.JSON', 'oks')).toBe(
+      '/exports/nested/my-song.oks',
+    )
   })
 
   it('rejects the obsolete JSON route and unknown formats', () => {
