@@ -32,8 +32,18 @@ export interface TimelineTimingGesture {
   deltaMs: number
 }
 
-interface DragState extends TimelineTimingGesture {
+export interface TimelinePointerGesture extends TimelineTimingGesture {
   clientX: number
+  pointerId: number
+  captureTarget: EventTarget
+}
+
+export interface TimelineGestureContext {
+  project: KaraokeProject
+  pixelsPerSecond: number
+  onTimingDraftChange: (draft: ProjectTimingDraft | null) => void
+  onShiftWords: (wordIds: Set<string>, deltaMs: number) => void
+  onResizeWord: (wordId: string, startMs: number, endMs: number) => void
 }
 
 export function timelineTime(rawTimingMs: number, offsetMs: number) {
@@ -75,6 +85,87 @@ export function timingDraftForGesture(
   return timingDraft
 }
 
+export function createTimelineGestureSession(
+  getContext: () => TimelineGestureContext,
+) {
+  let active: TimelinePointerGesture | null = null
+
+  const clear = (pointerId: number, captureTarget: EventTarget) => {
+    if (active?.pointerId !== pointerId || active.captureTarget !== captureTarget) return null
+    const gesture = active
+    active = null
+    getContext().onTimingDraftChange(null)
+    return gesture
+  }
+
+  return {
+    begin(gesture: TimelinePointerGesture) {
+      if (active) return false
+      active = gesture
+      return true
+    },
+    move(pointerId: number, captureTarget: EventTarget, clientX: number) {
+      if (active?.pointerId !== pointerId || active.captureTarget !== captureTarget) return false
+      const context = getContext()
+      const deltaMs = Math.round(((clientX - active.clientX) / context.pixelsPerSecond) * 1000)
+      active = { ...active, deltaMs }
+      context.onTimingDraftChange(timingDraftForGesture(context.project, active))
+      return true
+    },
+    finish(pointerId: number, captureTarget: EventTarget) {
+      const gesture = clear(pointerId, captureTarget)
+      if (!gesture) return false
+
+      const context = getContext()
+      if (gesture.mode === 'move') {
+        if (gesture.deltaMs !== 0) context.onShiftWords(gesture.ids, gesture.deltaMs)
+        return true
+      }
+
+      if (gesture.deltaMs === 0) return true
+
+      const minDuration = 80
+      const startMs = gesture.mode === 'start'
+        ? Math.max(0, Math.min(gesture.originalEnd - minDuration, gesture.originalStart + gesture.deltaMs))
+        : gesture.originalStart
+      const endMs = gesture.mode === 'end'
+        ? Math.max(gesture.originalStart + minDuration, gesture.originalEnd + gesture.deltaMs)
+        : gesture.originalEnd
+      if (startMs !== gesture.originalStart || endMs !== gesture.originalEnd) {
+        context.onResizeWord(gesture.wordId, startMs, endMs)
+      }
+      return true
+    },
+    cancel(pointerId: number, captureTarget: EventTarget) {
+      return clear(pointerId, captureTarget) !== null
+    },
+    owns(pointerId: number, captureTarget: EventTarget) {
+      return active?.pointerId === pointerId && active.captureTarget === captureTarget
+    },
+    abandon() {
+      const hadActiveGesture = active !== null
+      active = null
+      return hadActiveGesture
+    },
+  }
+}
+
+function safelyHasPointerCapture(element: HTMLElement, pointerId: number) {
+  try {
+    return element.hasPointerCapture(pointerId)
+  } catch {
+    return false
+  }
+}
+
+function safelyReleasePointerCapture(element: HTMLElement, pointerId: number) {
+  try {
+    if (element.hasPointerCapture(pointerId)) element.releasePointerCapture(pointerId)
+  } catch {
+    // Capture may already have been released by the browser during cancellation.
+  }
+}
+
 export function Timeline({
   project,
   peaks,
@@ -93,13 +184,29 @@ export function Timeline({
   onTimingDraftChange,
 }: TimelineProps) {
   const viewportRef = useRef<HTMLDivElement>(null)
-  const dragRef = useRef<DragState | null>(null)
   const [timingDraft, setTimingDraft] = useState<ProjectTimingDraft | null>(null)
   const pixelsPerSecond = 72 * zoom
   const width = Math.max(1040, (durationMs / 1000) * pixelsPerSecond)
   const playheadLeft = (currentMs / 1000) * pixelsPerSecond
   const tickStepSeconds = zoom < 0.8 ? 5 : zoom < 1.7 ? 2 : 1
   const labelStepSeconds = zoom < 0.8 ? 10 : zoom < 1.7 ? 5 : 2
+  const gestureContextRef = useRef<TimelineGestureContext | null>(null)
+  gestureContextRef.current = {
+    project,
+    pixelsPerSecond,
+    onTimingDraftChange: (nextDraft) => {
+      setTimingDraft(nextDraft)
+      onTimingDraftChange(nextDraft)
+    },
+    onShiftWords,
+    onResizeWord,
+  }
+  const gestureSessionRef = useRef<ReturnType<typeof createTimelineGestureSession> | null>(null)
+  if (!gestureSessionRef.current) {
+    gestureSessionRef.current = createTimelineGestureSession(() => gestureContextRef.current!)
+  }
+  const parentDraftCallbackRef = useRef(onTimingDraftChange)
+  parentDraftCallbackRef.current = onTimingDraftChange
   const ticks = useMemo(
     () => Array.from({ length: Math.ceil(durationMs / 1000 / tickStepSeconds) + 1 }, (_, index) => index * tickStepSeconds),
     [durationMs, tickStepSeconds],
@@ -121,6 +228,10 @@ export function Timeline({
     }
   }, [Math.floor(currentMs / 500), playheadLeft])
 
+  useEffect(() => () => {
+    if (gestureSessionRef.current?.abandon()) parentDraftCallbackRef.current(null)
+  }, [])
+
   const seekFromPointer = (event: ReactPointerEvent<HTMLElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect()
     const x = event.clientX - bounds.left
@@ -130,56 +241,45 @@ export function Timeline({
   const pointerDown = (event: ReactPointerEvent<HTMLButtonElement>, word: LyricWord) => {
     if (word.startMs === null) return
     event.stopPropagation()
-    const mode = (event.target as HTMLElement).dataset.resize as DragState['mode'] | undefined
+    const mode = (event.target as HTMLElement).dataset.resize as TimelinePointerGesture['mode'] | undefined
     const activeIds = selectedWordIds.has(word.id) && !mode ? new Set(selectedWordIds) : new Set([word.id])
-    if (!selectedWordIds.has(word.id)) onSelectWord(word.id, event.shiftKey || event.metaKey)
-    const drag: DragState = {
+    const drag: TimelinePointerGesture = {
       wordId: word.id,
       mode: mode ?? 'move',
       clientX: event.clientX,
+      pointerId: event.pointerId,
+      captureTarget: event.currentTarget,
       originalStart: word.startMs,
       originalEnd: word.endMs ?? word.startMs + 360,
       ids: activeIds,
       deltaMs: 0,
     }
-    dragRef.current = drag
-    setTimingDraft(null)
-    event.currentTarget.setPointerCapture(event.pointerId)
+    if (!gestureSessionRef.current!.begin(drag)) return
+    if (!selectedWordIds.has(word.id)) onSelectWord(word.id, event.shiftKey || event.metaKey)
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId)
+    } catch {
+      gestureSessionRef.current!.cancel(event.pointerId, event.currentTarget)
+    }
   }
 
   const pointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    const drag = dragRef.current
-    if (!drag) return
-    const deltaMs = Math.round(((event.clientX - drag.clientX) / pixelsPerSecond) * 1000)
-    const next = { ...drag, deltaMs }
-    const nextTimingDraft = timingDraftForGesture(project, next)
-    dragRef.current = next
-    setTimingDraft(nextTimingDraft)
-    onTimingDraftChange(nextTimingDraft)
+    gestureSessionRef.current!.move(event.pointerId, event.currentTarget, event.clientX)
   }
 
   const pointerUp = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    const drag = dragRef.current
-    if (!drag) return
-    event.currentTarget.releasePointerCapture(event.pointerId)
-    const minDuration = 80
-    if (drag.mode === 'move') {
-      onShiftWords(drag.ids, drag.deltaMs)
-    } else if (drag.mode === 'start') {
-      onResizeWord(drag.wordId, Math.max(0, Math.min(drag.originalEnd - minDuration, drag.originalStart + drag.deltaMs)), drag.originalEnd)
-    } else {
-      onResizeWord(drag.wordId, drag.originalStart, Math.max(drag.originalStart + minDuration, drag.originalEnd + drag.deltaMs))
-    }
-    dragRef.current = null
-    setTimingDraft(null)
-    onTimingDraftChange(null)
+    if (!gestureSessionRef.current!.finish(event.pointerId, event.currentTarget)) return
+    safelyReleasePointerCapture(event.currentTarget, event.pointerId)
   }
 
-  const pointerCancel = () => {
-    if (!dragRef.current) return
-    dragRef.current = null
-    setTimingDraft(null)
-    onTimingDraftChange(null)
+  const pointerCancel = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (!gestureSessionRef.current!.cancel(event.pointerId, event.currentTarget)) return
+    safelyReleasePointerCapture(event.currentTarget, event.pointerId)
+  }
+
+  const lostPointerCapture = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (safelyHasPointerCapture(event.currentTarget, event.pointerId)) return
+    gestureSessionRef.current!.cancel(event.pointerId, event.currentTarget)
   }
 
   const untimedWords = project.tracks.flatMap((track) =>
@@ -305,6 +405,7 @@ export function Timeline({
                         onPointerMove={pointerMove}
                         onPointerUp={pointerUp}
                         onPointerCancel={pointerCancel}
+                        onLostPointerCapture={lostPointerCapture}
                         onDoubleClick={() => onSeek(Math.max(0, timelineTime(word.startMs ?? 0, project.offsetMs)))}
                       >
                         <i data-resize="start" className="timeline-word__handle timeline-word__handle--start" />

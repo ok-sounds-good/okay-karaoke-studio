@@ -7,10 +7,16 @@ import {
   createWorkflowGuideActions,
   EDITABLE_PROJECT_EXPORT_FORMAT,
   lyricTimeAtPlayback,
+  projectForTimingPreview,
+  type ActiveTimingDraft,
 } from '../src/App'
 import { KaraokePreview } from '../src/components/KaraokePreview'
 import { LyricsPanel } from '../src/components/LyricsPanel'
-import { timelineTime, timingDraftForGesture } from '../src/components/Timeline'
+import {
+  createTimelineGestureSession,
+  timelineTime,
+  timingDraftForGesture,
+} from '../src/components/Timeline'
 import { WorkflowGuideDialog } from '../src/components/Dialogs'
 import { TopBar } from '../src/components/TopBar'
 import {
@@ -20,7 +26,7 @@ import {
   createVocalTrack,
   retimeLine,
 } from '../src/lib/karaoke'
-import { applyTimingDraft } from '../src/utils'
+import { applyTimingDraft, patchWord, shiftWords } from '../src/utils'
 
 function offsetProject() {
   const line = retimeLine(createLyricLine('Hold'), 1_000, 2_000)
@@ -306,17 +312,37 @@ describe('live timeline timing drafts', () => {
     })
   }
 
-  it('renders move drafts immediately without changing saved project state', () => {
+  it('publishes actual gesture-session moves through the App preview projection', () => {
     const project = timedProject()
-    const draft = timingDraftForGesture(project, {
+    const draftEvents: Array<ActiveTimingDraft | null> = []
+    const shifts: Array<{ ids: Set<string>; deltaMs: number }> = []
+    let activeDraft: ActiveTimingDraft | null = null
+    const context = {
+      project,
+      pixelsPerSecond: 1_000,
+      onTimingDraftChange: (timings: ReturnType<typeof timingDraftForGesture> | null) => {
+        activeDraft = timings ? { revision: 7, timings } : null
+        draftEvents.push(activeDraft)
+      },
+      onShiftWords: (ids: Set<string>, deltaMs: number) => shifts.push({ ids, deltaMs }),
+      onResizeWord: () => undefined,
+    }
+    const session = createTimelineGestureSession(() => context)
+    const captureTarget = new EventTarget()
+    expect(session.begin({
       wordId: 'move',
       mode: 'move',
       originalStart: 1_000,
       originalEnd: 2_000,
       ids: new Set(['move', 'resize']),
-      deltaMs: 500,
-    })
-    const previewProject = applyTimingDraft(project, draft)
+      deltaMs: 0,
+      clientX: 100,
+      pointerId: 41,
+      captureTarget,
+    })).toBe(true)
+    expect(session.move(41, captureTarget, 600)).toBe(true)
+
+    const previewProject = projectForTimingPreview(project, 7, activeDraft)
     const committedMarkup = renderToStaticMarkup(
       <KaraokePreview
         project={project}
@@ -334,38 +360,179 @@ describe('live timeline timing drafts', () => {
       />,
     )
 
-    expect(draft.get('move')).toEqual({ startMs: 1_500, endMs: 2_500 })
-    expect(draft.get('resize')).toEqual({ startMs: 2_600, endMs: 3_500 })
+    expect(activeDraft!.timings.get('move')).toEqual({ startMs: 1_500, endMs: 2_500 })
+    expect(activeDraft!.timings.get('resize')).toEqual({ startMs: 2_600, endMs: 3_500 })
     expect(previewProject.tracks[0].lines[0]).toMatchObject({ startMs: 1_500, endMs: 3_500 })
     expect(committedMarkup).toContain('--word-progress:50%')
     expect(previewMarkup).toContain('--word-progress:0%')
     expect(previewMarkup).not.toContain('--word-progress:50%')
     expect(project.tracks[0].lines[0].words[0]).toMatchObject({ startMs: 1_000, endMs: 2_000 })
     expect(previewProject.updatedAt).toBe(project.updatedAt)
+
+    expect(session.finish(41, captureTarget)).toBe(true)
+    expect(draftEvents.at(-1)).toBeNull()
+    expect(shifts).toEqual([{ ids: new Set(['move', 'resize']), deltaMs: 500 }])
   })
 
   it('renders edge-resize drafts with the same minimum-duration bounds as commit', () => {
     const project = timedProject()
-    const startDraft = timingDraftForGesture(project, {
+    let currentDraft: ReturnType<typeof timingDraftForGesture> | null = null
+    const resizeCommits: Array<{ startMs: number; endMs: number }> = []
+    const context = {
+      project,
+      pixelsPerSecond: 1_000,
+      onTimingDraftChange: (draft: ReturnType<typeof timingDraftForGesture> | null) => { currentDraft = draft },
+      onShiftWords: () => undefined,
+      onResizeWord: (_wordId: string, startMs: number, endMs: number) => resizeCommits.push({ startMs, endMs }),
+    }
+    const session = createTimelineGestureSession(() => context)
+    const startTarget = new EventTarget()
+    expect(session.begin({
       wordId: 'move',
       mode: 'start',
       originalStart: 1_000,
       originalEnd: 2_000,
       ids: new Set(['move']),
-      deltaMs: 2_000,
-    })
-    const endDraft = timingDraftForGesture(project, {
+      deltaMs: 0,
+      clientX: 100,
+      pointerId: 51,
+      captureTarget: startTarget,
+    })).toBe(true)
+    expect(session.move(51, startTarget, 2_100)).toBe(true)
+    expect(currentDraft!.get('move')).toEqual({ startMs: 1_920, endMs: 2_000 })
+    expect(applyTimingDraft(project, currentDraft!).tracks[0].lines[0].startMs).toBe(1_920)
+    expect(session.finish(51, startTarget)).toBe(true)
+
+    const endTarget = new EventTarget()
+    expect(session.begin({
       wordId: 'move',
       mode: 'end',
       originalStart: 1_000,
       originalEnd: 2_000,
       ids: new Set(['move']),
-      deltaMs: -2_000,
-    })
+      deltaMs: 0,
+      clientX: 2_100,
+      pointerId: 52,
+      captureTarget: endTarget,
+    })).toBe(true)
+    expect(session.move(52, endTarget, 100)).toBe(true)
+    expect(currentDraft!.get('move')).toEqual({ startMs: 1_000, endMs: 1_080 })
+    expect(session.finish(52, endTarget)).toBe(true)
 
-    expect(startDraft.get('move')).toEqual({ startMs: 1_920, endMs: 2_000 })
-    expect(endDraft.get('move')).toEqual({ startMs: 1_000, endMs: 1_080 })
-    expect(applyTimingDraft(project, startDraft).tracks[0].lines[0].startMs).toBe(1_920)
+    expect(resizeCommits).toEqual([
+      { startMs: 1_920, endMs: 2_000 },
+      { startMs: 1_000, endMs: 1_080 },
+    ])
     expect(project.tracks[0].lines[0].startMs).toBe(1_000)
+  })
+
+  it('preserves untouched line timing and makes draft and committed moves agree', () => {
+    const movedLine = createLyricLine('Timed word', {
+      id: 'moved-line',
+      startMs: 1_000,
+      endMs: 2_000,
+      words: [createLyricWord('Timed', { id: 'timed', startMs: 1_000, endMs: 2_000 })],
+    })
+    const lineTimedOnly = createLyricLine('Line timed only', {
+      id: 'line-only',
+      startMs: 5_000,
+      endMs: 6_000,
+    })
+    const project = createProject({
+      tracks: [createVocalTrack({ id: 'lead', lines: [movedLine, lineTimedOnly] })],
+    })
+    const untouchedLine = project.tracks[0].lines[1]
+    const gesture = {
+      wordId: 'timed',
+      mode: 'move' as const,
+      originalStart: 1_000,
+      originalEnd: 2_000,
+      ids: new Set(['timed']),
+      deltaMs: 375,
+    }
+    const preview = applyTimingDraft(project, timingDraftForGesture(project, gesture))
+    const committed = shiftWords(project, gesture.ids, gesture.deltaMs)
+
+    expect(committed.tracks[0].lines[1]).toBe(untouchedLine)
+    expect(committed.tracks[0].lines[1]).toMatchObject({ startMs: 5_000, endMs: 6_000 })
+    expect(preview.tracks[0].lines[1]).toBe(untouchedLine)
+    expect(committed.tracks[0].lines[0].words[0]).toEqual(preview.tracks[0].lines[0].words[0])
+    expect(committed.tracks[0].lines[0]).toMatchObject({ startMs: 1_375, endMs: 2_375 })
+  })
+
+  it('owns one pointer and ignores stale cancellation from another gesture', () => {
+    const project = timedProject()
+    const draftEvents: Array<ReturnType<typeof timingDraftForGesture> | null> = []
+    const shifts: number[] = []
+    const context = {
+      project,
+      pixelsPerSecond: 1_000,
+      onTimingDraftChange: (draft: ReturnType<typeof timingDraftForGesture> | null) => draftEvents.push(draft),
+      onShiftWords: (_ids: Set<string>, deltaMs: number) => shifts.push(deltaMs),
+      onResizeWord: () => undefined,
+    }
+    const session = createTimelineGestureSession(() => context)
+    const firstTarget = new EventTarget()
+    const nextTarget = new EventTarget()
+    const gesture = {
+      wordId: 'move',
+      mode: 'move' as const,
+      originalStart: 1_000,
+      originalEnd: 2_000,
+      ids: new Set(['move']),
+      deltaMs: 0,
+      clientX: 100,
+      pointerId: 7,
+      captureTarget: firstTarget,
+    }
+
+    expect(session.begin(gesture)).toBe(true)
+    expect(session.begin({ ...gesture, pointerId: 8, captureTarget: nextTarget })).toBe(false)
+    expect(session.move(8, nextTarget, 600)).toBe(false)
+    expect(session.cancel(8, nextTarget)).toBe(false)
+    expect(draftEvents).toEqual([])
+    expect(session.move(7, firstTarget, 350)).toBe(true)
+    expect(draftEvents).toHaveLength(1)
+    expect(session.cancel(7, firstTarget)).toBe(true)
+    expect(draftEvents.at(-1)).toBeNull()
+
+    expect(session.begin({ ...gesture, captureTarget: nextTarget })).toBe(true)
+    expect(session.cancel(7, firstTarget)).toBe(false)
+    expect(session.owns(7, nextTarget)).toBe(true)
+    expect(session.finish(7, nextTarget)).toBe(true)
+    expect(shifts).toEqual([])
+  })
+
+  it('returns original project identity for no-op move and resize commits', () => {
+    const project = timedProject()
+    const line = project.tracks[0].lines[0]
+    const word = line.words[0]
+    const resizeCommits: Array<{ startMs: number; endMs: number }> = []
+    const captureTarget = new EventTarget()
+    const session = createTimelineGestureSession(() => ({
+      project,
+      pixelsPerSecond: 1_000,
+      onTimingDraftChange: () => undefined,
+      onShiftWords: () => undefined,
+      onResizeWord: (_wordId, startMs, endMs) => resizeCommits.push({ startMs, endMs }),
+    }))
+
+    expect(shiftWords(project, new Set([word.id]), 0)).toBe(project)
+    expect(patchWord(project, word.id, { startMs: word.startMs, endMs: word.endMs })).toBe(project)
+    expect(patchWord(project, 'missing', { startMs: 100, endMs: 200 })).toBe(project)
+    expect(project.tracks[0].lines[0]).toBe(line)
+    expect(session.begin({
+      wordId: word.id,
+      mode: 'start',
+      originalStart: word.startMs!,
+      originalEnd: word.endMs!,
+      ids: new Set([word.id]),
+      deltaMs: 0,
+      clientX: 100,
+      pointerId: 12,
+      captureTarget,
+    })).toBe(true)
+    expect(session.finish(12, captureTarget)).toBe(true)
+    expect(resizeCommits).toEqual([])
   })
 })

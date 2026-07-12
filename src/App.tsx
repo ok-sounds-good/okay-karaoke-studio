@@ -172,9 +172,19 @@ export function createWorkflowGuideActions({
   }
 }
 
-interface ActiveTimingDraft {
+export interface ActiveTimingDraft {
   revision: number
   timings: ProjectTimingDraft
+}
+
+export function projectForTimingPreview(
+  project: KaraokeProject,
+  revision: number,
+  timingDraft: ActiveTimingDraft | null,
+) {
+  return timingDraft?.revision === revision
+    ? applyTimingDraft(project, timingDraft.timings)
+    : project
 }
 
 function inputHasTypingFocus() {
@@ -225,9 +235,7 @@ export default function App() {
   const waveform = useWaveform(audioUrl)
   const lyricTimeMs = lyricTimeAtPlayback(playback.currentMs, project.offsetMs)
   const previewProject = useMemo(
-    () => timingDraft?.revision === history.revision
-      ? applyTimingDraft(project, timingDraft.timings)
-      : project,
+    () => projectForTimingPreview(project, history.revision, timingDraft),
     [history.revision, project, timingDraft],
   )
 
