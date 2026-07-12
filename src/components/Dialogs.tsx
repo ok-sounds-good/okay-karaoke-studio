@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { AlertTriangle, CheckCircle2, Clapperboard, Download, FileJson2, FileText, Music, Sparkles } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, CircleStop, Clapperboard, Download, FileJson2, FileText, Music, Sparkles } from 'lucide-react'
 import type { ValidationIssue, VocalTrack } from '../lib/model'
 import { Button, Modal } from './ui'
 
@@ -83,6 +83,7 @@ interface ExportDialogProps {
   onExportLrc: () => void
   onExportAss: () => void
   onExportVideo: () => void
+  onCancelVideo: () => void
   onExportProject: () => void
   videoAvailable: boolean
   videoProgress: StudioVideoExportProgress | null
@@ -96,6 +97,7 @@ export function ExportDialog({
   onExportLrc,
   onExportAss,
   onExportVideo,
+  onCancelVideo,
   onExportProject,
   videoAvailable,
   videoProgress,
@@ -112,7 +114,12 @@ export function ExportDialog({
           : 'Attach audio in the desktop app to enable'
 
   return (
-    <Modal title="Export karaoke" eyebrow={projectTitle} onClose={onClose}>
+    <Modal
+      title="Export karaoke"
+      eyebrow={projectTitle}
+      onClose={onClose}
+      closeDisabled={exportingVideo}
+    >
       <div className={`export-readiness ${issueCount ? 'export-readiness--warning' : ''}`}>
         {issueCount ? <AlertTriangle size={18} /> : <CheckCircle2 size={18} />}
         <div>
@@ -120,6 +127,16 @@ export function ExportDialog({
           <span>{issueCount ? 'You can export a draft now or review the timing first.' : 'This project is ready to hand off.'}</span>
         </div>
       </div>
+      {videoProgress && (
+        <div className="video-export-progress" role="status" aria-live="polite">
+          <span>{videoStatus}</span>
+          <progress
+            aria-label="Karaoke video export progress"
+            max={videoProgress.total}
+            value={videoProgress.phase === 'frames' ? videoProgress.completed : undefined}
+          />
+        </div>
+      )}
       <div className="export-options">
         <button onClick={onExportLrc} disabled={exportingVideo}>
           <span className="export-option__icon"><FileText size={21} /></span>
@@ -132,13 +149,18 @@ export function ExportDialog({
           <Download size={16} />
         </button>
         <button
-          onClick={onExportVideo}
-          disabled={!videoAvailable || exportingVideo}
+          onClick={exportingVideo ? onCancelVideo : onExportVideo}
+          disabled={!exportingVideo && !videoAvailable}
           aria-busy={exportingVideo}
         >
-          <span className="export-option__icon"><Clapperboard size={21} /></span>
-          <span><strong>Karaoke video</strong><small>{videoStatus}</small></span>
-          <Download size={16} />
+          <span className="export-option__icon">
+            {exportingVideo ? <CircleStop size={21} /> : <Clapperboard size={21} />}
+          </span>
+          <span>
+            <strong>{exportingVideo ? 'Cancel video export' : 'Karaoke video'}</strong>
+            <small>{videoStatus}</small>
+          </span>
+          {exportingVideo ? <CircleStop size={16} /> : <Download size={16} />}
         </button>
         <button onClick={onExportProject} disabled={exportingVideo}>
           <span className="export-option__icon"><FileJson2 size={21} /></span>

@@ -3,9 +3,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 interface PlaybackOptions {
   durationMs: number
   audioUrl?: string | null
+  onDuration?: (durationMs: number) => void
 }
 
-export function usePlayback({ durationMs, audioUrl }: PlaybackOptions) {
+export function usePlayback({ durationMs, audioUrl, onDuration }: PlaybackOptions) {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const frameRef = useRef<number | null>(null)
   const lastFrameRef = useRef<number | null>(null)
@@ -27,19 +28,26 @@ export function usePlayback({ durationMs, audioUrl }: PlaybackOptions) {
     audio.preload = 'metadata'
     audio.playbackRate = rate
     audio.volume = volume
-    audio.addEventListener('loadedmetadata', () => {
-      if (Number.isFinite(audio.duration)) setAudioDurationMs(Math.round(audio.duration * 1000))
-    })
-    audio.addEventListener('ended', () => setIsPlaying(false))
+    const handleLoadedMetadata = () => {
+      if (!Number.isFinite(audio.duration)) return
+      const nextDurationMs = Math.round(audio.duration * 1000)
+      setAudioDurationMs(nextDurationMs)
+      onDuration?.(nextDurationMs)
+    }
+    const handleEnded = () => setIsPlaying(false)
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata)
+    audio.addEventListener('ended', handleEnded)
     audioRef.current = audio
 
     return () => {
       audio.pause()
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata)
+      audio.removeEventListener('ended', handleEnded)
       audio.removeAttribute('src')
       audio.load()
       if (audioRef.current === audio) audioRef.current = null
     }
-  }, [audioUrl])
+  }, [audioUrl, onDuration])
 
   useEffect(() => {
     const audio = audioRef.current

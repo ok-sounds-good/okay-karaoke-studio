@@ -1,4 +1,10 @@
-import type { KaraokeProject, LyricLine, LyricWord, VocalTrack } from './lib/model'
+import {
+  MAX_PROJECT_DURATION_MS,
+  type KaraokeProject,
+  type LyricLine,
+  type LyricWord,
+  type VocalTrack,
+} from './lib/model'
 
 export interface WordRef {
   word: LyricWord
@@ -34,7 +40,14 @@ export function effectiveDuration(project: KaraokeProject): number {
       })
     })
   })
-  return Math.max(project.durationMs ?? 0, latestTiming + 4000, 30_000)
+  const adjustedLatest = latestTiming > 0
+    ? latestTiming + Math.max(0, project.offsetMs)
+    : 0
+  const paddedLatest = Math.min(
+    MAX_PROJECT_DURATION_MS,
+    adjustedLatest > 0 ? adjustedLatest + 4_000 : 0,
+  )
+  return Math.max(project.durationMs ?? 0, paddedLatest, 30_000)
 }
 
 export function getActiveLine(track: VocalTrack, timeMs: number): LyricLine | null {
@@ -53,12 +66,16 @@ export function lineProgress(line: LyricLine, timeMs: number): number {
 }
 
 export function recalculateLine(line: LyricLine): LyricLine {
-  const starts = line.words.flatMap((word) => (word.startMs === null ? [] : [word.startMs]))
-  const ends = line.words.flatMap((word) => (word.endMs === null ? [] : [word.endMs]))
+  let startMs: number | null = null
+  let endMs: number | null = null
+  line.words.forEach((word) => {
+    if (word.startMs !== null) startMs = Math.min(startMs ?? word.startMs, word.startMs)
+    if (word.endMs !== null) endMs = Math.max(endMs ?? word.endMs, word.endMs)
+  })
   return {
     ...line,
-    startMs: starts.length ? Math.min(...starts) : null,
-    endMs: ends.length ? Math.max(...ends) : starts.length ? Math.max(...starts) : null,
+    startMs,
+    endMs: endMs ?? startMs,
     text: line.words.map((word) => word.text).join(' '),
   }
 }

@@ -58,7 +58,11 @@ function PreviewLine({
 }
 
 export function KaraokePreview({ project, playbackMs, lyricMs, selectedWordIds }: KaraokePreviewProps) {
-  const visibleTracks = project.tracks.filter((track) => !track.muted)
+  const unmutedTracks = project.tracks.filter((track) => !track.muted)
+  const hasSolo = unmutedTracks.some((track) => track.solo)
+  const visibleTracks = hasSolo
+    ? unmutedTracks.filter((track) => track.solo)
+    : unmutedTracks
   const active = visibleTracks
     .map((track) => ({ track, line: getActiveLine(track, lyricMs) }))
     .filter((item): item is { track: VocalTrack; line: LyricLine } => Boolean(item.line))
@@ -66,7 +70,7 @@ export function KaraokePreview({ project, playbackMs, lyricMs, selectedWordIds }
     .map((track) => ({ track, line: lineAfter(track, getActiveLine(track, lyricMs), lyricMs) }))
     .find((item) => item.line)
   const firstTimedWord = Math.min(
-    ...project.tracks.flatMap((track) =>
+    ...visibleTracks.flatMap((track) =>
       track.lines.flatMap((line) => line.words.flatMap((word) => (word.startMs === null ? [] : [word.startMs]))),
     ),
     Number.POSITIVE_INFINITY,

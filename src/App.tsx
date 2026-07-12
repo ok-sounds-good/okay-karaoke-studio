@@ -58,6 +58,15 @@ function useProjectHistory(initialProject: KaraokeProject) {
     })
   }, [])
 
+  const replaceCurrent = useCallback((updater: (project: KaraokeProject) => KaraokeProject) => {
+    setEntry((current) => {
+      const nextProject = updater(current.project)
+      if (nextProject === current.project) return current
+      sequenceRef.current += 1
+      return { project: nextProject, revision: sequenceRef.current }
+    })
+  }, [])
+
   const reset = useCallback((project: KaraokeProject, markClean = true) => {
     sequenceRef.current += 1
     const next = { project, revision: sequenceRef.current }
@@ -98,6 +107,7 @@ function useProjectHistory(initialProject: KaraokeProject) {
     canRedo: futureRef.current.length > 0,
     historyVersion,
     commit,
+    replaceCurrent,
     reset,
     undo,
     redo,
@@ -121,7 +131,7 @@ export function lyricTimeAtPlayback(playbackMs: number, offsetMs: number) {
 
 export default function App() {
   const history = useProjectHistory(createDemoProject())
-  const { project, commit } = history
+  const { project, commit, replaceCurrent } = history
   const [projectPath, setProjectPath] = useState<string | null>(null)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [activeTrackId, setActiveTrackId] = useState(project.tracks[0]?.id ?? '')
@@ -141,11 +151,18 @@ export default function App() {
   const currentTimeRef = useRef(0)
   const syncHeldRef = useRef<{ wordId: string; startMs: number } | null>(null)
   const projectRestoreSequenceRef = useRef(0)
+  const videoExportActiveRef = useRef(false)
+
+  const persistAudioDuration = useCallback((nextDurationMs: number) => {
+    replaceCurrent((current) => current.durationMs === nextDurationMs
+      ? current
+      : { ...current, durationMs: nextDurationMs })
+  }, [replaceCurrent])
 
   const activeTrack = project.tracks.find((track) => track.id === activeTrackId) ?? project.tracks[0]
   const syncWords = useMemo(() => (activeTrack ? flattenTrack(activeTrack).map(({ word }) => word) : []), [activeTrack])
   const durationMs = effectiveDuration(project)
-  const playback = usePlayback({ durationMs, audioUrl })
+  const playback = usePlayback({ durationMs, audioUrl, onDuration: persistAudioDuration })
   const waveform = useWaveform(audioUrl)
   const lyricTimeMs = lyricTimeAtPlayback(playback.currentMs, project.offsetMs)
 
@@ -163,6 +180,10 @@ export default function App() {
     if (!window.studio?.onVideoExportProgress) return
     return window.studio.onVideoExportProgress(setVideoExportProgress)
   }, [])
+
+  useEffect(() => {
+    videoExportActiveRef.current = videoExportProgress !== null
+  }, [videoExportProgress])
 
   useEffect(() => {
     if (!activeTrack && project.tracks[0]) setActiveTrackId(project.tracks[0].id)
@@ -256,13 +277,13 @@ export default function App() {
       showToast(`Opened ${next.title}`, 'success')
       return
     }
-    if (!window.studio?.resolveAudio) {
+    if (!window.studio?.resolveProjectAudio || !path) {
       showToast('Project opened; relink its audio file in this browser.', 'warning')
       return
     }
 
     try {
-      const resolved = await window.studio.resolveAudio(next.audioPath)
+      const resolved = await window.studio.resolveProjectAudio(path)
       if (restoreSequence !== projectRestoreSequenceRef.current) return
       setAudioUrl(resolved?.url ?? null)
       showToast(
@@ -349,14 +370,14 @@ export default function App() {
   const applyLrc = useCallback((contents: string) => {
     if (!activeTrack) return
     try {
-      const imported = importLrc(contents, activeTrack.id)
+      const imported = importLrc(contents, activeTrack.id, project.offsetMs)
       replaceTrack(activeTrack.id, { ...imported, name: activeTrack.name, color: activeTrack.color })
       setSelectedWordIds(new Set())
       showToast(`Imported LRC into ${activeTrack.name}`, 'success')
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Could not import that LRC file.', 'warning')
     }
-  }, [activeTrack, replaceTrack, showToast])
+  }, [activeTrack, project.offsetMs, replaceTrack, showToast])
 
   const handleImportLrc = useCallback(async () => {
     if (window.studio) {
@@ -402,6 +423,7 @@ export default function App() {
 
     try {
       playback.pause()
+      videoExportActiveRef.current = true
       setVideoExportProgress({ phase: 'preparing', completed: 0, total: 1 })
       const result = await window.studio.exportVideo({
         suggestedName: `${slugify(`${project.artist}-${project.title}`)}.mp4`,
@@ -413,11 +435,23 @@ export default function App() {
       setExportDialogOpen(false)
       showToast(`Video export created with ${result.frameCount} lyric frames`, 'success')
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Video export failed.', 'warning')
+      const detail = error instanceof Error ? error.message : 'Video export failed.'
+      showToast(
+        /cancel(?:led|ed|ing)/iu.test(detail) ? 'Video export cancelled' : detail,
+        /cancel(?:led|ed|ing)/iu.test(detail) ? 'neutral' : 'warning',
+      )
     } finally {
+      videoExportActiveRef.current = false
       setVideoExportProgress(null)
     }
   }, [playback.durationMs, playback.hasAudio, playback.pause, project, showToast])
+
+  const cancelVideoExport = useCallback(() => {
+    if (!window.studio?.cancelVideoExport) return
+    void window.studio.cancelVideoExport().catch((error: unknown) => {
+      showToast(error instanceof Error ? error.message : 'Could not cancel video export.', 'warning')
+    })
+  }, [showToast])
 
   const handleSelectWord = useCallback((word: LyricWord, add: boolean) => {
     setSelectedWordIds((current) => {
@@ -426,10 +460,10 @@ export default function App() {
       else next.add(word.id)
       return next
     })
-    if (word.startMs !== null) playback.seek(word.startMs)
+    if (word.startMs !== null) playback.seek(Math.max(0, word.startMs + project.offsetMs))
     const index = syncWords.findIndex((candidate) => candidate.id === word.id)
     if (index >= 0 && syncMode) setSyncCursor(index)
-  }, [playback.seek, syncMode, syncWords])
+  }, [playback.seek, project.offsetMs, syncMode, syncWords])
 
   const handleSelectWordId = useCallback((wordId: string, add: boolean) => {
     const item = flattenProject(project).find(({ word }) => word.id === wordId)
@@ -443,7 +477,8 @@ export default function App() {
     setSyncMode((enabled) => {
       const next = !enabled
       if (next) {
-        const fromPlayhead = syncWords.findIndex((word) => word.startMs === null || word.startMs >= currentTimeRef.current - 80)
+        const lyricTimeMs = lyricTimeAtPlayback(currentTimeRef.current, project.offsetMs)
+        const fromPlayhead = syncWords.findIndex((word) => word.startMs === null || word.startMs >= lyricTimeMs - 80)
         setSyncCursor(fromPlayhead >= 0 ? fromPlayhead : 0)
         playback.play()
         showToast('Tap sync armed — hold Space for each word', 'neutral')
@@ -453,10 +488,11 @@ export default function App() {
       }
       return next
     })
-  }, [playback.play, showToast, syncWords])
+  }, [playback.play, project.offsetMs, showToast, syncWords])
 
   useEffect(() => {
     const keyDown = (event: KeyboardEvent) => {
+      if (document.querySelector('[role="dialog"]')) return
       if (inputHasTypingFocus()) return
       if (event.code === 'Escape' && syncMode) {
         event.preventDefault()
@@ -497,17 +533,28 @@ export default function App() {
         showToast('All words are timed', 'success')
         return
       }
-      syncHeldRef.current = { wordId: word.id, startMs: currentTimeRef.current }
+      syncHeldRef.current = {
+        wordId: word.id,
+        startMs: Math.max(0, lyricTimeAtPlayback(currentTimeRef.current, project.offsetMs)),
+      }
       setHeldWordId(word.id)
       playback.play()
     }
 
     const keyUp = (event: KeyboardEvent) => {
+      if (document.querySelector('[role="dialog"]')) {
+        if (event.code === 'Space') {
+          syncHeldRef.current = null
+          setHeldWordId(null)
+        }
+        return
+      }
       if (event.code !== 'Space' || !syncMode) return
       event.preventDefault()
       const held = syncHeldRef.current
       if (!held) return
-      const endMs = Math.max(held.startMs + 100, currentTimeRef.current)
+      const rawCurrentMs = Math.max(0, lyricTimeAtPlayback(currentTimeRef.current, project.offsetMs))
+      const endMs = Math.max(held.startMs + 100, rawCurrentMs)
       commit((current) => patchWord(current, held.wordId, { startMs: Math.round(held.startMs), endMs: Math.round(endMs) }))
       syncHeldRef.current = null
       setHeldWordId(null)
@@ -527,11 +574,18 @@ export default function App() {
       window.removeEventListener('keydown', keyDown)
       window.removeEventListener('keyup', keyUp)
     }
-  }, [commit, playback.play, playback.seek, playback.toggle, selectedWordIds, showToast, syncCursor, syncMode, syncWords])
+  }, [commit, playback.play, playback.seek, playback.toggle, project.offsetMs, selectedWordIds, showToast, syncCursor, syncMode, syncWords])
 
   useEffect(() => {
     if (!window.studio) return
     return window.studio.onMenuAction((action) => {
+      if (
+        videoExportActiveRef.current &&
+        ['new', 'open', 'import-audio', 'import-lrc'].includes(action)
+      ) {
+        showToast('Cancel the video export before changing projects or media.', 'warning')
+        return
+      }
       if (action === 'new') handleNew()
       else if (action === 'open') void handleOpen()
       else if (action === 'save') void handleSave(false)
@@ -543,7 +597,7 @@ export default function App() {
       else if (action === 'undo') history.undo()
       else if (action === 'redo') history.redo()
     })
-  }, [handleImportAudio, handleImportLrc, handleNew, handleOpen, handleSave, history.redo, history.undo, playback.toggle])
+  }, [handleImportAudio, handleImportLrc, handleNew, handleOpen, handleSave, history.redo, history.undo, playback.toggle, showToast])
 
   const syncWordId = heldWordId ?? (syncMode ? syncWords[syncCursor]?.id ?? null : null)
 
@@ -702,6 +756,7 @@ export default function App() {
           onExportLrc={() => void exportText('lrc')}
           onExportAss={() => void exportText('ass')}
           onExportVideo={() => void exportVideo()}
+          onCancelVideo={cancelVideoExport}
           onExportProject={() => void exportText('json')}
           videoAvailable={Boolean(window.studio?.exportVideo && project.audioPath && playback.hasAudio)}
           videoProgress={videoExportProgress}

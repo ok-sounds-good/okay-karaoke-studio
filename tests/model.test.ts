@@ -11,6 +11,8 @@ import {
   exportLrc,
   formatTime,
   importLrc,
+  MAX_PROJECT_DURATION_MS,
+  MAX_PROJECT_WORDS,
   migrateProject,
   parseLyrics,
   parseProject,
@@ -19,7 +21,7 @@ import {
   validateProject,
   type KaraokeProject,
 } from '../src/lib/karaoke'
-import { effectiveDuration } from '../src/utils'
+import { effectiveDuration, recalculateLine } from '../src/utils'
 
 describe('karaoke project model', () => {
   it('creates a valid seeded project with integer word timings', () => {
@@ -98,6 +100,16 @@ describe('karaoke project model', () => {
     expect(edited.lines[1].id).toBe(timed.lines[2].id)
   })
 
+  it('fails fast when an edited lyric diff would require an unsafe alignment matrix', () => {
+    const text = Array.from({ length: 2_100 }, (_, index) => `Line ${index}`).join('\n')
+    const initial = parseLyrics(text, 'lead')
+    const edited = text.replace('Line 1000', 'Changed 1000')
+
+    expect(() => parseLyrics(edited, 'lead', initial)).toThrow(
+      'too large to align safely',
+    )
+  })
+
   it('reports invalid and overlapping timing without rejecting untimed lyrics', () => {
     const first = retimeLine(createLyricLine('First line'), 1_000, 2_000)
     const second = retimeLine(createLyricLine('Second line'), 1_800, 2_800)
@@ -114,6 +126,67 @@ describe('karaoke project model', () => {
 
     const plain = createProject({ tracks: [parseLyrics('No timing yet', 'plain')] })
     expect(validateProject(plain).filter((issue) => issue.severity === 'error')).toEqual([])
+  })
+
+  it('rejects unsafe, over-limit, and over-cardinality project state', () => {
+    const project = createProject({
+      durationMs: MAX_PROJECT_DURATION_MS + 1,
+      offsetMs: Number.MAX_SAFE_INTEGER,
+      tracks: Array.from({ length: 9 }, (_, index) =>
+        createVocalTrack({ id: `track-${index}` }),
+      ),
+    })
+
+    expect(validateProject(project).map((validationIssue) => validationIssue.code)).toEqual(
+      expect.arrayContaining(['duration-invalid', 'offset-not-integer', 'track-count-limit']),
+    )
+    expect(() => parseProject(JSON.stringify(project))).toThrow(
+      'limited to 8 vocal tracks',
+    )
+
+    const shiftedPastLimit = createProject({
+      offsetMs: 1_000,
+      tracks: [
+        createVocalTrack({
+          id: 'lead',
+          lines: [
+            createLyricLine('Last line', {
+              startMs: MAX_PROJECT_DURATION_MS - 2_000,
+              endMs: MAX_PROJECT_DURATION_MS,
+            }),
+          ],
+        }),
+      ],
+    })
+    expect(validateProject(shiftedPastLimit).map((validationIssue) => validationIssue.code)).toContain(
+      'timing-after-limit',
+    )
+  })
+
+  it('validates timing against duration after applying the global offset', () => {
+    const shiftedLate = createProject({
+      durationMs: 30_000,
+      offsetMs: 10_000,
+      tracks: [createVocalTrack({
+        id: 'late',
+        lines: [createLyricLine('Late', { startMs: 28_000, endMs: 30_000 })],
+      })],
+    })
+    expect(validateProject(shiftedLate).map((issue) => issue.code)).toContain(
+      'timing-after-duration',
+    )
+
+    const shiftedEarlier = createProject({
+      durationMs: 30_000,
+      offsetMs: -10_000,
+      tracks: [createVocalTrack({
+        id: 'earlier',
+        lines: [createLyricLine('Earlier', { startMs: 32_000, endMs: 34_000 })],
+      })],
+    })
+    expect(validateProject(shiftedEarlier).map((issue) => issue.code)).not.toContain(
+      'timing-after-duration',
+    )
   })
 })
 
@@ -136,6 +209,28 @@ describe('timing helpers', () => {
 
     expect(track.lines[0].endMs).toBe(183_000)
     expect(effectiveDuration(project)).toBe(187_000)
+  })
+
+  it('includes positive project offset in effective duration', () => {
+    const line = createLyricLine('Late lyric', { startMs: 28_000, endMs: 30_000 })
+    const project = createProject({
+      durationMs: null,
+      offsetMs: 10_000,
+      tracks: [createVocalTrack({ id: 'lead', lines: [line] })],
+    })
+
+    expect(effectiveDuration(project)).toBe(44_000)
+  })
+
+  it('recalculates a maximum-size line without spreading timing arrays', () => {
+    const words = Array.from({ length: 150_000 }, (_, index) =>
+      createLyricWord('x', { id: `word-${index}`, startMs: index, endMs: index + 1 }),
+    )
+
+    expect(recalculateLine(createLyricLine('', { words }))).toMatchObject({
+      startMs: 0,
+      endMs: 150_000,
+    })
   })
 })
 
@@ -174,6 +269,39 @@ describe('LRC interchange', () => {
       '[00:01.125]<00:01.125>Exact <00:01.875>timing',
     )
     expect(() => exportLrc(project, 'missing')).toThrow(RangeError)
+  })
+
+  it('materializes an LRC offset relative to the target project offset', () => {
+    const line = createLyricLine('Offset lyric', { startMs: 1_000, endMs: 2_000 })
+    const project = createProject({
+      offsetMs: 100,
+      tracks: [createVocalTrack({ id: 'lead', lines: [line] })],
+    })
+    const exported = exportLrc(project, 'lead')
+
+    const imported = importLrc(exported, 'round-trip', project.offsetMs)
+
+    expect(imported.lines[0].startMs).toBe(1_000)
+    expect(imported.lines[0].endMs).toBe(4_000)
+  })
+
+  it('rejects unsafe and over-limit LRC timing before it reaches project state', () => {
+    expect(() => importLrc('[offset:9007199254740991]\n[00:01]Unsafe', 'lead')).toThrow(
+      'offsets must be within four hours',
+    )
+    expect(() => importLrc('[241:00]Too late', 'lead')).toThrow(
+      'cannot exceed four hours',
+    )
+    expect(() => importLrc('[00:00.500]Too early', 'lead', 1_000)).toThrow(
+      'occurs before zero',
+    )
+  })
+
+  it('rejects compact LRC text before allocating over the word cap', () => {
+    const tooManyWords = Array.from({ length: MAX_PROJECT_WORDS + 1 }, () => 'x').join(' ')
+    expect(() => importLrc(`[00:01]${tooManyWords}`, 'lead')).toThrow(
+      'word limit',
+    )
   })
 
   it('round-trips timestamp-shaped lyric text without creating extra timing', () => {
@@ -360,6 +488,14 @@ describe('project serialization and migration', () => {
     })
     expect(migrated.tracks[0].lines[0].words[1].startMs).toBe(2_000)
     expect(validateProject(migrated).filter((issue) => issue.severity === 'error')).toEqual([])
+  })
+
+  it('rejects compact legacy lyrics before allocating over the word cap', () => {
+    const tooManyWords = Array.from({ length: MAX_PROJECT_WORDS + 1 }, () => 'x').join(' ')
+    expect(() => migrateProject({
+      version: 1,
+      vocalTracks: [{ lyrics: [{ text: tooManyWords }] }],
+    })).toThrow('word limit')
   })
 
   it('rejects malformed, future, and invalid project JSON', () => {

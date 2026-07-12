@@ -23,11 +23,12 @@ const CHANNELS = Object.freeze({
   openProject: 'studio:open-project',
   saveProject: 'studio:save-project',
   importAudio: 'studio:import-audio',
-  resolveAudio: 'studio:resolve-audio',
+  resolveProjectAudio: 'studio:resolve-project-audio',
   releaseAudio: 'studio:release-audio',
   importLrc: 'studio:import-lrc',
   exportText: 'studio:export-text',
   exportVideo: 'studio:export-video',
+  cancelVideoExport: 'studio:cancel-video-export',
   videoExportProgress: 'studio:video-export-progress',
   menuAction: 'studio:menu-action',
 })
@@ -115,11 +116,17 @@ const VIDEO_FILTERS = [{ name: 'MPEG-4 Karaoke Video', extensions: ['mp4'] }]
 
 const mediaFiles = new Map()
 const mediaTokensByOwner = new Map()
+const mediaRequestSequences = new Map()
+const restorableProjectAudioByOwner = new Map()
 const writableProjectPaths = new Set()
 const projectSaveQueues = new Map()
 
 let mainWindow = null
-let videoExportInProgress = false
+let activeVideoExport = null
+let pendingWindowClose = false
+let pendingAppQuit = false
+let allowWindowCloseOnce = false
+let allowAppQuitOnce = false
 
 app.setName(APP_NAME)
 
@@ -524,6 +531,39 @@ function revokeMediaForOwner(ownerId) {
   for (const token of [...ownerTokens]) revokeMediaToken(token)
 }
 
+function beginMediaRequest(ownerId) {
+  const sequence = (mediaRequestSequences.get(ownerId) || 0) + 1
+  mediaRequestSequences.set(ownerId, sequence)
+  return sequence
+}
+
+function mediaRequestIsCurrent(ownerId, sequence) {
+  return mediaRequestSequences.get(ownerId) === sequence
+}
+
+function authorizeProjectAudio(ownerId, projectPath, contents) {
+  let audioPath = null
+  try {
+    const project = JSON.parse(contents)
+    if (isRecord(project)) {
+      const rawAudioPath = typeof project.audioPath === 'string'
+        ? project.audioPath
+        : typeof project.audioFile === 'string'
+          ? project.audioFile
+          : null
+      if (rawAudioPath) {
+        const candidate = path.isAbsolute(rawAudioPath)
+          ? path.resolve(rawAudioPath)
+          : path.resolve(path.dirname(projectPath), rawAudioPath)
+        if (AUDIO_EXTENSIONS.has(path.extname(candidate).toLowerCase())) audioPath = candidate
+      }
+    }
+  } catch {
+    // The renderer performs full schema parsing and will report malformed data.
+  }
+  restorableProjectAudioByOwner.set(ownerId, { projectPath, audioPath })
+}
+
 function assertTrustedSender(event) {
   const owner = BrowserWindow.fromWebContents(event.sender)
   const isMainFrame = event.senderFrame && event.senderFrame === event.sender.mainFrame
@@ -570,7 +610,7 @@ function normalizeVideoExportRequest(value) {
     durationMs < 1_000 ||
     durationMs > MAX_VIDEO_DURATION_MS
   ) {
-    throw new RangeError('durationMs must be an integer between one second and four hours')
+    throw new RangeError('durationMs must be an integer between one second and thirty minutes')
   }
   const audioPath = path.resolve(requireString(value.audioPath, 'audioPath'))
   if (!AUDIO_EXTENSIONS.has(path.extname(audioPath).toLowerCase())) {
@@ -607,6 +647,54 @@ function makeMediaResult(filePath, ownerContents) {
   }
 }
 
+function beginVideoExport(ownerId) {
+  let resolveFinished
+  const operation = {
+    ownerId,
+    controller: new AbortController(),
+    finished: new Promise((resolve) => { resolveFinished = resolve }),
+    resolveFinished,
+  }
+  activeVideoExport = operation
+  return operation
+}
+
+function canceledVideoExportError() {
+  const error = new Error('Video export canceled')
+  error.name = 'AbortError'
+  return error
+}
+
+function retryPendingLifecycleAction() {
+  if (pendingAppQuit) {
+    pendingAppQuit = false
+    pendingWindowClose = false
+    allowAppQuitOnce = true
+    setImmediate(() => app.quit())
+    return
+  }
+  if (pendingWindowClose) {
+    pendingWindowClose = false
+    setImmediate(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        allowWindowCloseOnce = true
+        mainWindow.close()
+      }
+    })
+  }
+}
+
+function finishVideoExport(operation) {
+  if (activeVideoExport === operation) activeVideoExport = null
+  operation.resolveFinished()
+  retryPendingLifecycleAction()
+}
+
+function abortActiveVideoExport() {
+  activeVideoExport?.controller.abort()
+  return activeVideoExport?.finished || Promise.resolve()
+}
+
 function registerIpcHandlers() {
   ipcMain.handle(CHANNELS.openProject, async (event) => {
     const owner = assertTrustedSender(event)
@@ -625,6 +713,7 @@ function registerIpcHandlers() {
       MAX_PROJECT_FILE_BYTES,
       'Project file',
     )
+    authorizeProjectAudio(event.sender.id, filePath, contents)
     writableProjectPaths.add(filePath)
     return { path: filePath, contents }
   })
@@ -661,6 +750,8 @@ function registerIpcHandlers() {
 
   ipcMain.handle(CHANNELS.importAudio, async (event) => {
     const owner = assertTrustedSender(event)
+    const ownerId = event.sender.id
+    const requestSequence = beginMediaRequest(ownerId)
     const result = await dialog.showOpenDialog(owner, {
       title: 'Import Audio',
       buttonLabel: 'Import Audio',
@@ -676,18 +767,25 @@ function registerIpcHandlers() {
     if (!fileStats.isFile() || !AUDIO_EXTENSIONS.has(extension)) {
       throw new TypeError('The selected file is not a supported audio file')
     }
+    if (!mediaRequestIsCurrent(ownerId, requestSequence)) return null
 
     return makeMediaResult(filePath, event.sender)
   })
 
-  ipcMain.handle(CHANNELS.resolveAudio, async (event, value) => {
+  ipcMain.handle(CHANNELS.resolveProjectAudio, async (event, value) => {
     assertTrustedSender(event)
-    const filePath = path.resolve(requireString(value, 'path'))
-    const extension = path.extname(filePath).toLowerCase()
-    if (!AUDIO_EXTENSIONS.has(extension)) return null
+    if (!isRecord(value)) throw new TypeError('resolveProjectAudio requires an options object')
+    const ownerId = event.sender.id
+    const requestSequence = beginMediaRequest(ownerId)
+    const projectPath = path.resolve(requireString(value.projectPath, 'projectPath'))
+    const authorization = restorableProjectAudioByOwner.get(ownerId)
+    if (authorization?.projectPath !== projectPath) return null
+    restorableProjectAudioByOwner.delete(ownerId)
+    if (!authorization.audioPath) return null
     try {
-      const fileStats = await fs.stat(filePath)
-      return fileStats.isFile() ? makeMediaResult(filePath, event.sender) : null
+      const fileStats = await fs.stat(authorization.audioPath)
+      if (!fileStats.isFile() || !mediaRequestIsCurrent(ownerId, requestSequence)) return null
+      return makeMediaResult(authorization.audioPath, event.sender)
     } catch {
       return null
     }
@@ -695,6 +793,7 @@ function registerIpcHandlers() {
 
   ipcMain.handle(CHANNELS.releaseAudio, async (event) => {
     assertTrustedSender(event)
+    beginMediaRequest(event.sender.id)
     revokeMediaForOwner(event.sender.id)
   })
 
@@ -741,9 +840,11 @@ function registerIpcHandlers() {
 
   ipcMain.handle(CHANNELS.exportVideo, async (event, value) => {
     const owner = assertTrustedSender(event)
-    if (videoExportInProgress) throw new Error('Another karaoke video export is already running')
+    if (activeVideoExport) throw new Error('Another karaoke video export is already running')
     const request = normalizeVideoExportRequest(value)
-    videoExportInProgress = true
+    const operation = beginVideoExport(event.sender.id)
+    const abortWhenOwnerCloses = () => operation.controller.abort()
+    event.sender.once('destroyed', abortWhenOwnerCloses)
 
     try {
       const defaultName = ensureExportExtension(
@@ -757,6 +858,10 @@ function registerIpcHandlers() {
         filters: VIDEO_FILTERS,
       })
       if (result.canceled || !result.filePath) return null
+      if (operation.controller.signal.aborted) throw canceledVideoExportError()
+      const selectedOutputPath = path.extname(result.filePath).toLowerCase() === '.mp4'
+        ? result.filePath
+        : `${result.filePath}.mp4`
 
       const sendProgress = (progress) => {
         if (!event.sender.isDestroyed()) {
@@ -768,12 +873,23 @@ function registerIpcHandlers() {
         projectJson: request.projectJson,
         durationMs: request.durationMs,
         audioPath: request.audioPath,
-        outputPath: path.resolve(result.filePath),
+        outputPath: path.resolve(selectedOutputPath),
         onProgress: sendProgress,
+        signal: operation.controller.signal,
       })
     } finally {
-      videoExportInProgress = false
+      event.sender.removeListener('destroyed', abortWhenOwnerCloses)
+      finishVideoExport(operation)
     }
+  })
+
+  ipcMain.handle(CHANNELS.cancelVideoExport, async (event) => {
+    assertTrustedSender(event)
+    const operation = activeVideoExport
+    if (!operation || operation.ownerId !== event.sender.id) return false
+    operation.controller.abort()
+    await operation.finished
+    return true
   })
 }
 
@@ -940,9 +1056,17 @@ function secureWebContents(contents) {
     if (choice === 0) event.preventDefault()
   })
   contents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
-    if (isMainFrame && !isInPlace) revokeMediaForOwner(ownerId)
+    if (isMainFrame && !isInPlace) {
+      beginMediaRequest(ownerId)
+      revokeMediaForOwner(ownerId)
+    }
   })
-  contents.once('destroyed', () => revokeMediaForOwner(ownerId))
+  contents.once('destroyed', () => {
+    beginMediaRequest(ownerId)
+    revokeMediaForOwner(ownerId)
+    restorableProjectAudioByOwner.delete(ownerId)
+    mediaRequestSequences.delete(ownerId)
+  })
 }
 
 async function createMainWindow() {
@@ -974,6 +1098,16 @@ async function createMainWindow() {
 
   window.once('ready-to-show', () => {
     if (!window.isDestroyed()) window.show()
+  })
+  window.on('close', (event) => {
+    if (allowWindowCloseOnce) {
+      allowWindowCloseOnce = false
+      return
+    }
+    if (!activeVideoExport) return
+    event.preventDefault()
+    pendingWindowClose = true
+    void abortActiveVideoExport()
   })
   window.on('closed', () => {
     if (mainWindow === window) mainWindow = null
@@ -1010,6 +1144,17 @@ if (!hasSingleInstanceLock) {
   app.quit()
 } else {
   app.on('second-instance', focusMainWindow)
+  app.on('before-quit', (event) => {
+    if (allowAppQuitOnce) {
+      allowAppQuitOnce = false
+      return
+    }
+    if (!activeVideoExport) return
+    event.preventDefault()
+    pendingAppQuit = true
+    pendingWindowClose = false
+    void abortActiveVideoExport()
+  })
 
   app.whenReady().then(async () => {
     if (app.isPackaged) installApplicationProtocol()

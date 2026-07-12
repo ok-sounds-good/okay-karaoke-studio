@@ -27,7 +27,8 @@ version used for the lockfile is pinned in `package.json`.
 
 MP4 export additionally requires `ffmpeg` on `PATH`. macOS installations in
 `/opt/homebrew/bin` or `/usr/local/bin` are detected automatically. Set
-`OKAY_KARAOKE_FFMPEG` to use another executable. The MVP does not bundle FFmpeg.
+`OKAY_KARAOKE_FFMPEG` to use another executable. The MVP does not bundle FFmpeg;
+video rendering is currently limited to 30 minutes and the MVP's two vocal tracks.
 
 ```bash
 bun install --frozen-lockfile
@@ -48,12 +49,15 @@ bun run dev:web
 bun run test
 bun run build
 bun run dist:dir
+# Requires Electron, FFmpeg, and FFprobe:
+bun run test:video
 ```
 
 - `bun run test` runs the project-model, migration, validation, LRC, ASS, and renderer tests through Vitest.
 - `bun run build` performs a strict TypeScript check and production renderer build.
 - `bun run dist:dir` creates an unpacked desktop application in `release/`.
 - `bun run dist` creates distributable macOS artifacts. Public distribution still requires signing and notarization credentials.
+- `bun run test:video` performs the gated end-to-end 1080p H.264/AAC render and stream inspection.
 
 ## Editing workflow
 
@@ -94,7 +98,7 @@ docs/MVP.md             Version 0.1 release contract
 docs/ROADMAP.md         Explicitly post-MVP capabilities
 ```
 
-The canonical model stores integer-millisecond word timings inside lines and vocal tracks. The renderer does not receive Node.js access. Electron exposes a small typed bridge for project dialogs, audio import, audio-path restoration, text/video export, and menu commands. Linked audio is streamed through a tokenized read-only custom protocol with byte-range support. MP4 export renders the stage in an isolated offscreen Electron surface, then invokes FFmpeg without a shell to encode H.264 and mux AAC audio; temporary frames and partial outputs are cleaned on success or failure.
+The canonical model stores integer-millisecond word timings inside lines and vocal tracks. The renderer does not receive Node.js access. Electron exposes a small typed bridge for project dialogs, audio import, project-authorized audio restoration, text/video export, and menu commands. Linked audio is streamed through an owner-scoped, tokenized read-only custom protocol with byte-range support. MP4 export renders the stage in an isolated offscreen Electron surface and streams backpressured PNG frames directly into a shell-free FFmpeg process for H.264/AAC encoding. Cancellation terminates the encoder and removes its partial output before close or quit continues.
 
 ## Reference boundaries
 

@@ -72,7 +72,7 @@ Focused overlays are permitted for short, transactional tasks such as pasting ra
 - Save all lyric text, word timings, track styling, media linkage, and metadata in `.oks`.
 - Export the active vocal track as LRC.
 - Export the project as ASS with karaoke timing tags.
-- Render a 1080p MP4 from the built-in stage design and linked backing track through a locally installed FFmpeg executable.
+- Render a 1080p MP4 up to 30 minutes from the built-in stage design, up to two vocal tracks, and linked backing track through a locally installed FFmpeg executable.
 - Show frame-rendering and encoding progress, and fail without leaving a partial destination file when video requirements are unavailable.
 - Validate and report untimed, invalid, or overlapping timing before export.
 - Browser fallbacks for open/download when the React surface is run outside Electron.
@@ -83,7 +83,7 @@ Focused overlays are permitted for short, transactional tasks such as pasting ra
 - Responsive down to a 1280 × 720 application window; optimized for larger desktop displays.
 - Complete keyboard focus states, labels for icon-only actions, and adequate contrast.
 - Unit tests for project parsing, lyric parsing, timing validation, and LRC/ASS round trips.
-- Unit tests for video frame planning plus an end-to-end H.264/AAC export smoke check.
+- Unit tests for video frame planning plus the gated `bun run test:video` H.264/AAC export smoke check.
 - Clean TypeScript build, production Vite build, and launchable unpacked desktop package.
 
 ## Explicitly out of scope for 0.1

@@ -6,11 +6,12 @@ const CHANNELS = Object.freeze({
   openProject: 'studio:open-project',
   saveProject: 'studio:save-project',
   importAudio: 'studio:import-audio',
-  resolveAudio: 'studio:resolve-audio',
+  resolveProjectAudio: 'studio:resolve-project-audio',
   releaseAudio: 'studio:release-audio',
   importLrc: 'studio:import-lrc',
   exportText: 'studio:export-text',
   exportVideo: 'studio:export-video',
+  cancelVideoExport: 'studio:cancel-video-export',
   videoExportProgress: 'studio:video-export-progress',
   menuAction: 'studio:menu-action',
 })
@@ -33,11 +34,15 @@ const studio = Object.freeze({
   openProject: () => ipcRenderer.invoke(CHANNELS.openProject),
   saveProject: (options) => ipcRenderer.invoke(CHANNELS.saveProject, options),
   importAudio: () => ipcRenderer.invoke(CHANNELS.importAudio),
-  resolveAudio: (filePath) => ipcRenderer.invoke(CHANNELS.resolveAudio, filePath),
+  resolveProjectAudio: (projectPath) => ipcRenderer.invoke(
+    CHANNELS.resolveProjectAudio,
+    { projectPath },
+  ),
   releaseAudio: () => ipcRenderer.invoke(CHANNELS.releaseAudio),
   importLrc: () => ipcRenderer.invoke(CHANNELS.importLrc),
   exportText: (options) => ipcRenderer.invoke(CHANNELS.exportText, options),
   exportVideo: (options) => ipcRenderer.invoke(CHANNELS.exportVideo, options),
+  cancelVideoExport: () => ipcRenderer.invoke(CHANNELS.cancelVideoExport),
   onVideoExportProgress: (callback) => {
     if (typeof callback !== 'function') {
       throw new TypeError('onVideoExportProgress requires a callback function')

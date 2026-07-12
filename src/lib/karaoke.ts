@@ -1,4 +1,8 @@
 export const PROJECT_SCHEMA_VERSION = 2 as const
+export const MAX_PROJECT_DURATION_MS = 4 * 60 * 60 * 1_000
+export const MAX_PROJECT_TRACKS = 8
+export const MAX_PROJECT_LINES = 20_000
+export const MAX_PROJECT_WORDS = 150_000
 
 export type ProjectSchemaVersion = typeof PROJECT_SCHEMA_VERSION
 
@@ -76,6 +80,7 @@ export interface CreateProjectOptions {
 
 const DEFAULT_TRACK_COLOR = '#22d3ee'
 const DEFAULT_LRC_LINE_DURATION_MS = 3_000
+const MAX_LYRIC_ALIGNMENT_CELLS = 4_000_000
 let idSequence = 0
 
 function createId(prefix: string): string {
@@ -129,6 +134,23 @@ function normalizeText(text: string): string {
 export function tokenizeLyricLine(text: string): string[] {
   const normalized = normalizeText(text)
   return normalized ? normalized.split(' ') : []
+}
+
+function countLyricWordsWithinLimit(text: string, maximumWords: number, label: string): number {
+  const matcher = /\S+/gu
+  let count = 0
+  while (matcher.exec(text)) {
+    count += 1
+    if (count > maximumWords) {
+      throw new RangeError(`${label} exceeds the remaining ${maximumWords} word limit.`)
+    }
+  }
+  return count
+}
+
+function tokenizeLyricLineWithinLimit(text: string, maximumWords: number, label: string): string[] {
+  countLyricWordsWithinLimit(text, maximumWords, label)
+  return tokenizeLyricLine(text)
 }
 
 export function createLyricWord(
@@ -422,6 +444,11 @@ function alignExistingLines(
 
   const rows = lineTexts.length + 1
   const columns = existingLines.length + 1
+  if (rows * columns > MAX_LYRIC_ALIGNMENT_CELLS) {
+    throw new RangeError(
+      'This lyric edit is too large to align safely. Split it into smaller edits.',
+    )
+  }
   const lengths = Array.from({ length: rows }, () => Array<number>(columns).fill(0))
 
   for (let newIndex = lineTexts.length - 1; newIndex >= 0; newIndex -= 1) {
@@ -482,13 +509,21 @@ export function parseLyrics(
     .split(/\r\n?|\n/u)
     .map(normalizeText)
     .filter(Boolean)
+  if (lyricLines.length > MAX_PROJECT_LINES || (existing?.lines.length ?? 0) > MAX_PROJECT_LINES) {
+    throw new RangeError(`Lyrics are limited to ${MAX_PROJECT_LINES} lines per project.`)
+  }
+  const tokensByLine = lyricLines.map(tokenizeLyricLine)
+  const wordCount = tokensByLine.reduce((total, tokens) => total + tokens.length, 0)
+  if (wordCount > MAX_PROJECT_WORDS) {
+    throw new RangeError(`Lyrics are limited to ${MAX_PROJECT_WORDS} words per project.`)
+  }
   const alignedLines = existing
     ? alignExistingLines(lyricLines, existing.lines)
     : new Map<number, LyricLine>()
 
   const lines = lyricLines.map((lineText, index) => {
     const previous = alignedLines.get(index)
-    const tokens = tokenizeLyricLine(lineText)
+    const tokens = tokensByLine[index]
     return createLyricLine(lineText, {
       id: previous?.id,
       startMs: previous?.startMs,
@@ -540,12 +575,12 @@ function validateRange(
     )
     return false
   }
-  if (!Number.isInteger(startMs) || !Number.isInteger(endMs)) {
+  if (!Number.isSafeInteger(startMs) || !Number.isSafeInteger(endMs)) {
     issue(
       issues,
       'error',
       'timing-not-integer',
-      `${label} timings must be integer milliseconds.`,
+      `${label} timings must be safe integer milliseconds.`,
       path,
       context,
     )
@@ -557,6 +592,17 @@ function validateRange(
       'error',
       'timing-negative',
       `${label} timings cannot be negative.`,
+      path,
+      context,
+    )
+    return false
+  }
+  if (startMs > MAX_PROJECT_DURATION_MS || endMs > MAX_PROJECT_DURATION_MS) {
+    issue(
+      issues,
+      'error',
+      'timing-after-limit',
+      `${label} timings cannot exceed four hours.`,
       path,
       context,
     )
@@ -605,33 +651,52 @@ export function validateProject(project: KaraokeProject): ValidationIssue[] {
   }
   if (
     project.durationMs !== null &&
-    (!Number.isInteger(project.durationMs) || project.durationMs < 0)
+    (!Number.isSafeInteger(project.durationMs) ||
+      project.durationMs < 0 ||
+      project.durationMs > MAX_PROJECT_DURATION_MS)
   ) {
     issue(
       issues,
       'error',
       'duration-invalid',
-      'Project duration must be a non-negative integer millisecond value.',
+      'Project duration must be a safe integer between zero and four hours.',
       'durationMs',
     )
   }
-  if (!Number.isInteger(project.offsetMs)) {
+  if (
+    !Number.isSafeInteger(project.offsetMs) ||
+    Math.abs(project.offsetMs) > MAX_PROJECT_DURATION_MS
+  ) {
     issue(
       issues,
       'error',
       'offset-not-integer',
-      'Project offset must be an integer millisecond value.',
+      'Project offset must be a safe integer between negative and positive four hours.',
       'offsetMs',
     )
   }
 
+  if (project.tracks.length > MAX_PROJECT_TRACKS) {
+    issue(
+      issues,
+      'error',
+      'track-count-limit',
+      `Projects are limited to ${MAX_PROJECT_TRACKS} vocal tracks.`,
+      'tracks',
+    )
+  }
+  let lineCount = 0
+  let wordCount = 0
+
   project.tracks.forEach((track, trackIndex) => {
+    lineCount += track.lines.length
     const trackPath = `tracks[${trackIndex}]`
     const trackContext = { trackId: track.id }
     registerId(track.id, `${trackPath}.id`, trackContext)
     let priorTimedLine: LyricLine | undefined
 
     track.lines.forEach((line, lineIndex) => {
+      wordCount += line.words.length
       const linePath = `${trackPath}.lines[${lineIndex}]`
       const lineContext = { ...trackContext, lineId: line.id }
       registerId(line.id, `${linePath}.id`, lineContext)
@@ -658,13 +723,29 @@ export function validateProject(project: KaraokeProject): ValidationIssue[] {
         lineIsTimed &&
         project.durationMs !== null &&
         line.endMs !== null &&
-        line.endMs > project.durationMs
+        Number.isSafeInteger(project.offsetMs) &&
+        line.endMs + project.offsetMs > project.durationMs
       ) {
         issue(
           issues,
           'error',
           'timing-after-duration',
           'Line ends after the project duration.',
+          linePath,
+          lineContext,
+        )
+      }
+      if (
+        lineIsTimed &&
+        line.endMs !== null &&
+        Number.isSafeInteger(project.offsetMs) &&
+        line.endMs + project.offsetMs > MAX_PROJECT_DURATION_MS
+      ) {
+        issue(
+          issues,
+          'error',
+          'timing-after-limit',
+          'Offset-adjusted line timing cannot exceed four hours.',
           linePath,
           lineContext,
         )
@@ -739,13 +820,29 @@ export function validateProject(project: KaraokeProject): ValidationIssue[] {
           wordIsTimed &&
           project.durationMs !== null &&
           word.endMs !== null &&
-          word.endMs > project.durationMs
+          Number.isSafeInteger(project.offsetMs) &&
+          word.endMs + project.offsetMs > project.durationMs
         ) {
           issue(
             issues,
             'error',
             'timing-after-duration',
             'Word ends after the project duration.',
+            wordPath,
+            wordContext,
+          )
+        }
+        if (
+          wordIsTimed &&
+          word.endMs !== null &&
+          Number.isSafeInteger(project.offsetMs) &&
+          word.endMs + project.offsetMs > MAX_PROJECT_DURATION_MS
+        ) {
+          issue(
+            issues,
+            'error',
+            'timing-after-limit',
+            'Offset-adjusted word timing cannot exceed four hours.',
             wordPath,
             wordContext,
           )
@@ -786,6 +883,25 @@ export function validateProject(project: KaraokeProject): ValidationIssue[] {
       })
     })
   })
+
+  if (lineCount > MAX_PROJECT_LINES) {
+    issue(
+      issues,
+      'error',
+      'line-count-limit',
+      `Projects are limited to ${MAX_PROJECT_LINES} lyric lines.`,
+      'tracks',
+    )
+  }
+  if (wordCount > MAX_PROJECT_WORDS) {
+    issue(
+      issues,
+      'error',
+      'word-count-limit',
+      `Projects are limited to ${MAX_PROJECT_WORDS} lyric words.`,
+      'tracks',
+    )
+  }
 
   return issues
 }
@@ -877,23 +993,80 @@ function splitLeadingLrcTimestamps(rawLine: string): {
   return timestamps.length > 0 ? { timestamps, body: remainder.trim() } : null
 }
 
-function parseEnhancedLrcWords(body: string, offsetMs: number): LyricWord[] {
-  const matches = [...body.matchAll(LRC_WORD_TIMESTAMP)]
+function materializeLrcTimestamp(
+  minutes: string,
+  seconds: string,
+  fraction: string | undefined,
+  lrcOffsetMs: number,
+  targetProjectOffsetMs: number,
+): number {
+  const timestampMs = parseTimestamp(minutes, seconds, fraction)
+  const effectiveMs = timestampMs + lrcOffsetMs
+  const internalMs = effectiveMs - targetProjectOffsetMs
+  if (
+    !Number.isSafeInteger(timestampMs) ||
+    !Number.isSafeInteger(effectiveMs) ||
+    !Number.isSafeInteger(internalMs) ||
+    timestampMs > MAX_PROJECT_DURATION_MS ||
+    effectiveMs > MAX_PROJECT_DURATION_MS ||
+    internalMs > MAX_PROJECT_DURATION_MS
+  ) {
+    throw new RangeError('LRC timing cannot exceed four hours.')
+  }
+  if (internalMs < 0) {
+    throw new RangeError('LRC timing occurs before zero after applying project and file offsets.')
+  }
+  return internalMs
+}
+
+function parseEnhancedLrcWords(
+  body: string,
+  lrcOffsetMs: number,
+  targetProjectOffsetMs: number,
+  remainingWordBudget: number,
+): LyricWord[] {
+  const matches: RegExpExecArray[] = []
+  LRC_WORD_TIMESTAMP.lastIndex = 0
+  let match: RegExpExecArray | null
+  while ((match = LRC_WORD_TIMESTAMP.exec(body))) {
+    matches.push(match)
+    if (matches.length > remainingWordBudget + 1) {
+      throw new RangeError(`LRC imports are limited to ${MAX_PROJECT_WORDS} lyric words.`)
+    }
+  }
   if (matches.length === 0) {
-    return tokenizeLyricLine(unescapeLrcText(body)).map((word) => createLyricWord(word))
+    return tokenizeLyricLineWithinLimit(
+      unescapeLrcText(body),
+      remainingWordBudget,
+      'LRC import',
+    ).map((word) => createLyricWord(word))
   }
 
   const words: LyricWord[] = []
   const prefix = normalizeText(unescapeLrcText(body.slice(0, matches[0].index)))
   if (prefix) {
-    words.push(...tokenizeLyricLine(prefix).map((word) => createLyricWord(word)))
+    words.push(...tokenizeLyricLineWithinLimit(
+      prefix,
+      remainingWordBudget,
+      'LRC import',
+    ).map((word) => createLyricWord(word)))
   }
 
   matches.forEach((match, index) => {
     const contentStart = (match.index ?? 0) + match[0].length
     const contentEnd = matches[index + 1]?.index ?? body.length
-    const tokens = tokenizeLyricLine(unescapeLrcText(body.slice(contentStart, contentEnd)))
-    const startMs = Math.max(0, parseTimestamp(match[1], match[2], match[3]) + offsetMs)
+    const tokens = tokenizeLyricLineWithinLimit(
+      unescapeLrcText(body.slice(contentStart, contentEnd)),
+      remainingWordBudget - words.length,
+      'LRC import',
+    )
+    const startMs = materializeLrcTimestamp(
+      match[1],
+      match[2],
+      match[3],
+      lrcOffsetMs,
+      targetProjectOffsetMs,
+    )
     tokens.forEach((token) => {
       words.push(createLyricWord(token, { startMs, endMs: null }))
     })
@@ -901,24 +1074,49 @@ function parseEnhancedLrcWords(body: string, offsetMs: number): LyricWord[] {
   return words
 }
 
-export function importLrc(text: string, trackId: string): VocalTrack {
+export function importLrc(
+  text: string,
+  trackId: string,
+  targetProjectOffsetMs = 0,
+): VocalTrack {
   const normalized = text.replace(/^\uFEFF/u, '').replace(/\r\n?/gu, '\n')
   const offsetMatch = normalized.match(/^\s*\[offset:([+-]?\d+)\]\s*$/imu)
   const offsetMs = offsetMatch ? Number(offsetMatch[1]) : 0
-  if (!Number.isSafeInteger(offsetMs)) {
-    throw new RangeError('LRC offset must be a safe integer millisecond value.')
+  if (
+    !Number.isSafeInteger(offsetMs) ||
+    Math.abs(offsetMs) > MAX_PROJECT_DURATION_MS ||
+    !Number.isSafeInteger(targetProjectOffsetMs) ||
+    Math.abs(targetProjectOffsetMs) > MAX_PROJECT_DURATION_MS
+  ) {
+    throw new RangeError('LRC and target project offsets must be within four hours.')
   }
   const imported: ImportedLrcLine[] = []
+  let importedWordCount = 0
 
   normalized.split('\n').forEach((rawLine, sourceIndex) => {
     const parsedLine = splitLeadingLrcTimestamps(rawLine)
     if (!parsedLine) return
     parsedLine.timestamps.forEach((timestamp) => {
-      const startMs = Math.max(
-        0,
-        parseTimestamp(timestamp[1], timestamp[2], timestamp[3]) + offsetMs,
+      if (imported.length >= MAX_PROJECT_LINES) {
+        throw new RangeError(`LRC imports are limited to ${MAX_PROJECT_LINES} lyric lines.`)
+      }
+      const startMs = materializeLrcTimestamp(
+        timestamp[1],
+        timestamp[2],
+        timestamp[3],
+        offsetMs,
+        targetProjectOffsetMs,
       )
-      const words = parseEnhancedLrcWords(parsedLine.body, offsetMs)
+      const words = parseEnhancedLrcWords(
+        parsedLine.body,
+        offsetMs,
+        targetProjectOffsetMs,
+        MAX_PROJECT_WORDS - importedWordCount,
+      )
+      importedWordCount += words.length
+      if (importedWordCount > MAX_PROJECT_WORDS) {
+        throw new RangeError(`LRC imports are limited to ${MAX_PROJECT_WORDS} lyric words.`)
+      }
       imported.push({
         sourceIndex,
         startMs,
@@ -946,12 +1144,16 @@ export function importLrc(text: string, trackId: string): VocalTrack {
         word.startMs === null ? latest : Math.max(latest ?? word.startMs, word.startMs),
       null,
     )
-    const endMs =
+    const inferredEndMs =
       nextStart ??
       Math.max(
         entry.startMs + DEFAULT_LRC_LINE_DURATION_MS,
         (lastWordStart ?? entry.startMs) + 1_500,
       )
+    const endMs = Math.min(MAX_PROJECT_DURATION_MS, inferredEndMs)
+    if (endMs <= entry.startMs) {
+      throw new RangeError('An LRC line starts too close to the four-hour limit.')
+    }
 
     const words = entry.words.map((word) => ({ ...word }))
     let nextTimedWordStart = endMs
@@ -1246,6 +1448,45 @@ function migrateTrack(value: unknown, fallbackId: string): VocalTrack {
   })
 }
 
+function assertRawProjectCardinality(rawTracks: unknown[]): void {
+  if (rawTracks.length > MAX_PROJECT_TRACKS) {
+    throw new RangeError(`Projects are limited to ${MAX_PROJECT_TRACKS} vocal tracks.`)
+  }
+  let lineCount = 0
+  let wordCount = 0
+  rawTracks.forEach((rawTrack) => {
+    if (!isRecord(rawTrack)) return
+    const rawLines = Array.isArray(rawTrack.lines)
+      ? rawTrack.lines
+      : Array.isArray(rawTrack.lyrics)
+        ? rawTrack.lyrics
+        : []
+    lineCount += rawLines.length
+    if (lineCount > MAX_PROJECT_LINES) {
+      throw new RangeError(`Projects are limited to ${MAX_PROJECT_LINES} lyric lines.`)
+    }
+    rawLines.forEach((rawLine) => {
+      if (!isRecord(rawLine)) return
+      if (Array.isArray(rawLine.words)) {
+        wordCount += rawLine.words.length
+      } else {
+        const rawText = asString(
+          rawLine.text,
+          asString(rawLine.lyric, asString(rawLine.value)),
+        )
+        wordCount += countLyricWordsWithinLimit(
+          rawText,
+          MAX_PROJECT_WORDS - wordCount,
+          'Project lyrics',
+        )
+      }
+      if (wordCount > MAX_PROJECT_WORDS) {
+        throw new RangeError(`Projects are limited to ${MAX_PROJECT_WORDS} lyric words.`)
+      }
+    })
+  })
+}
+
 function requireCurrentRecord(value: unknown, path: string): Record<string, unknown> {
   if (!isRecord(value)) throw new TypeError(`${path} must be an object.`)
   return value
@@ -1331,6 +1572,8 @@ function decodeCurrentTrack(value: unknown, path: string): VocalTrack {
 }
 
 function decodeCurrentProject(value: Record<string, unknown>): KaraokeProject {
+  const rawTracks = requireCurrentArray(value, 'tracks', 'project')
+  assertRawProjectCardinality(rawTracks)
   const audioPath = value.audioPath
   if (audioPath !== null && typeof audioPath !== 'string') {
     throw new TypeError('project.audioPath must be a string or null.')
@@ -1349,7 +1592,7 @@ function decodeCurrentProject(value: Record<string, unknown>): KaraokeProject {
     })(),
     createdAt: requireCurrentString(value, 'createdAt', 'project'),
     updatedAt: requireCurrentString(value, 'updatedAt', 'project'),
-    tracks: requireCurrentArray(value, 'tracks', 'project').map((track, index) =>
+    tracks: rawTracks.map((track, index) =>
       decodeCurrentTrack(track, `project.tracks[${index}]`),
     ),
   }
@@ -1387,6 +1630,7 @@ export function migrateProject(value: unknown): KaraokeProject {
     : Array.isArray(value.vocalTracks)
       ? value.vocalTracks
       : []
+  assertRawProjectCardinality(rawTracks)
   const projectId = asString(value.id, createId('project'))
   const createdAt = asString(value.createdAt, new Date().toISOString())
   const durationMs =

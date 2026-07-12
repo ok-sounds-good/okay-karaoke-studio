@@ -19,6 +19,7 @@
     "preview": "vite preview --host 127.0.0.1",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:video": "electron scripts/video-export-smoke.cjs",
     "dist": "bun run build && electron-builder",
     "dist:dir": "bun run build && electron-builder --dir"
   },
@@ -49,6 +50,17 @@
     ],
     "directories": {
       "output": "release"
+    },
+    "electronFuses": {
+      "resetAdHocDarwinSignature": true,
+      "runAsNode": false,
+      "enableCookieEncryption": true,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true,
+      "loadBrowserProcessSpecificV8Snapshot": false,
+      "grantFileProtocolExtraPrivileges": false
     },
     "mac": {
       "category": "public.app-category.music",

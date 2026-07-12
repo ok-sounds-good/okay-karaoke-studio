@@ -32,6 +32,10 @@ interface DragState {
   deltaMs: number
 }
 
+export function timelineTime(rawTimingMs: number, offsetMs: number) {
+  return rawTimingMs + offsetMs
+}
+
 export function Timeline({
   project,
   peaks,
@@ -210,19 +214,24 @@ export function Timeline({
             <div className="timeline-lanes">
               {project.tracks.map((track) => (
                 <div key={track.id} className={`timeline-lane ${track.id === activeTrackId ? 'is-active' : ''}`}>
-                  {track.lines.map((line) =>
-                    line.startMs !== null && line.endMs !== null ? (
+                  {track.lines.map((line) => {
+                    if (line.startMs === null || line.endMs === null) return null
+                    const adjustedStart = timelineTime(line.startMs, project.offsetMs)
+                    const adjustedEnd = timelineTime(line.endMs, project.offsetMs)
+                    if (adjustedEnd <= 0) return null
+                    const visibleStart = Math.max(0, adjustedStart)
+                    return (
                       <span
                         key={line.id}
                         className="line-region"
                         style={{
-                          left: (line.startMs / 1000) * pixelsPerSecond,
-                          width: Math.max(2, ((line.endMs - line.startMs) / 1000) * pixelsPerSecond),
+                          left: (visibleStart / 1000) * pixelsPerSecond,
+                          width: Math.max(2, ((adjustedEnd - visibleStart) / 1000) * pixelsPerSecond),
                           '--track-color': track.color,
                         } as CSSProperties}
                       />
-                    ) : null,
-                  )}
+                    )
+                  })}
                   {flattenTrack(track).map(({ word }) => {
                     if (word.startMs === null) return null
                     const endMs = word.endMs ?? word.startMs + 360
@@ -239,19 +248,23 @@ export function Timeline({
                         draftEnd = Math.max(draft.originalStart + 80, draft.originalEnd + draft.deltaMs)
                       }
                     }
-                    const left = (draftStart / 1000) * pixelsPerSecond
-                    const blockWidth = Math.max(16, ((draftEnd - draftStart) / 1000) * pixelsPerSecond)
+                    const adjustedStart = timelineTime(draftStart, project.offsetMs)
+                    const adjustedEnd = timelineTime(draftEnd, project.offsetMs)
+                    if (adjustedEnd <= 0) return null
+                    const visibleStart = Math.max(0, adjustedStart)
+                    const left = (visibleStart / 1000) * pixelsPerSecond
+                    const blockWidth = Math.max(16, ((adjustedEnd - visibleStart) / 1000) * pixelsPerSecond)
                     const selected = selectedWordIds.has(word.id)
                     return (
                       <button
                         key={word.id}
                         className={`timeline-word ${selected ? 'is-selected' : ''} ${syncWordId === word.id ? 'is-sync-target' : ''}`}
                         style={{ left, width: blockWidth, '--track-color': track.color } as CSSProperties}
-                        title={`${word.text} · ${formatTime(draftStart, true)}–${formatTime(draftEnd, true)}`}
+                        title={`${word.text} · ${formatTime(visibleStart, true)}–${formatTime(adjustedEnd, true)}`}
                         onPointerDown={(event) => pointerDown(event, word)}
                         onPointerMove={pointerMove}
                         onPointerUp={pointerUp}
-                        onDoubleClick={() => onSeek(word.startMs ?? 0)}
+                        onDoubleClick={() => onSeek(Math.max(0, timelineTime(word.startMs ?? 0, project.offsetMs)))}
                       >
                         <i data-resize="start" className="timeline-word__handle timeline-word__handle--start" />
                         <span>{word.text.replaceAll('/', '·')}</span>

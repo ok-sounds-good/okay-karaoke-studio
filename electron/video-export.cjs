@@ -1,16 +1,19 @@
 'use strict'
 
 const { spawn } = require('node:child_process')
+const { once } = require('node:events')
 const fs = require('node:fs/promises')
-const os = require('node:os')
 const path = require('node:path')
 const { randomUUID } = require('node:crypto')
 
 const VIDEO_WIDTH = 1920
 const VIDEO_HEIGHT = 1080
-const MAX_VIDEO_DURATION_MS = 4 * 60 * 60 * 1000
-const MAX_VIDEO_FRAMES = 12_000
-const MAX_TRACKS = 8
+const VIDEO_RENDER_FPS = 10
+const VIDEO_OUTPUT_FPS = 30
+const FRAME_INTERVAL_MS = 1_000 / VIDEO_RENDER_FPS
+const MAX_VIDEO_DURATION_MS = 30 * 60 * 1000
+const MAX_VIDEO_FRAMES = Math.ceil(MAX_VIDEO_DURATION_MS / FRAME_INTERVAL_MS)
+const MAX_TRACKS = 2
 const MAX_LINES = 20_000
 const MAX_WORDS = 150_000
 
@@ -27,10 +30,22 @@ function limitedText(value, fallback, maximumLength = 500) {
   return value.replaceAll('\0', '').slice(0, maximumLength)
 }
 
-function normalizeTiming(value) {
-  return Number.isSafeInteger(value) && value >= 0 && value <= MAX_VIDEO_DURATION_MS
-    ? value
-    : null
+function normalizeTiming(value, label) {
+  if (value === null || value === undefined) return null
+  if (!Number.isSafeInteger(value)) throw new TypeError(`${label} must be an integer or null`)
+  if (value < 0 || value > MAX_VIDEO_DURATION_MS) {
+    throw new RangeError(`${label} must be between zero and thirty minutes`)
+  }
+  return value
+}
+
+function validateTimingPair(startMs, endMs, label) {
+  if ((startMs === null) !== (endMs === null)) {
+    throw new TypeError(`${label} must have both a start and end time, or neither`)
+  }
+  if (startMs !== null && endMs <= startMs) {
+    throw new RangeError(`${label} must end after it starts`)
+  }
 }
 
 function normalizeProjectForVideo(value) {
@@ -59,17 +74,39 @@ function normalizeProjectForVideo(value) {
         if (!isRecord(rawWord)) {
           throw new TypeError(`tracks[${trackIndex}].lines[${lineIndex}].words[${wordIndex}] is invalid`)
         }
+        const startMs = normalizeTiming(
+          rawWord.startMs,
+          `tracks[${trackIndex}].lines[${lineIndex}].words[${wordIndex}].startMs`,
+        )
+        const endMs = normalizeTiming(
+          rawWord.endMs,
+          `tracks[${trackIndex}].lines[${lineIndex}].words[${wordIndex}].endMs`,
+        )
+        validateTimingPair(
+          startMs,
+          endMs,
+          `tracks[${trackIndex}].lines[${lineIndex}].words[${wordIndex}]`,
+        )
         return {
           text: limitedText(rawWord.text, '', 250),
-          startMs: normalizeTiming(rawWord.startMs),
-          endMs: normalizeTiming(rawWord.endMs),
+          startMs,
+          endMs,
         }
       })
 
+      const startMs = normalizeTiming(
+        rawLine.startMs,
+        `tracks[${trackIndex}].lines[${lineIndex}].startMs`,
+      )
+      const endMs = normalizeTiming(
+        rawLine.endMs,
+        `tracks[${trackIndex}].lines[${lineIndex}].endMs`,
+      )
+      validateTimingPair(startMs, endMs, `tracks[${trackIndex}].lines[${lineIndex}]`)
       return {
         text: limitedText(rawLine.text, words.map((word) => word.text).join(' '), 2_000),
-        startMs: normalizeTiming(rawLine.startMs),
-        endMs: normalizeTiming(rawLine.endMs),
+        startMs,
+        endMs,
         words,
       }
     })
@@ -83,12 +120,23 @@ function normalizeProjectForVideo(value) {
     }
   })
 
+  const durationMs = value.durationMs === null || value.durationMs === undefined
+    ? 0
+    : finiteInteger(value.durationMs, Number.NaN)
+  if (!Number.isSafeInteger(durationMs) || durationMs < 0 || durationMs > MAX_VIDEO_DURATION_MS) {
+    throw new RangeError('Project duration must be between zero and thirty minutes')
+  }
+  const offsetMs = finiteInteger(value.offsetMs, Number.NaN)
+  if (!Number.isSafeInteger(offsetMs) || Math.abs(offsetMs) > MAX_VIDEO_DURATION_MS) {
+    throw new RangeError('Project offset must be within thirty minutes')
+  }
+
   return {
     title: limitedText(value.title, 'Untitled song', 300),
     artist: limitedText(value.artist, 'Unknown artist', 300),
     audioPath: limitedText(value.audioPath, '', 8_192),
-    durationMs: Math.max(0, finiteInteger(value.durationMs)),
-    offsetMs: Math.max(-MAX_VIDEO_DURATION_MS, Math.min(MAX_VIDEO_DURATION_MS, finiteInteger(value.offsetMs))),
+    durationMs,
+    offsetMs,
     tracks,
   }
 }
@@ -129,8 +177,8 @@ function visibleTracks(project) {
   return project.tracks.filter((track) => !track.muted && (!hasSolo || track.solo))
 }
 
-function effectiveVideoDuration(project, requestedDurationMs) {
-  const latestLyricMs = project.tracks.reduce((latestTrack, track) => {
+function effectiveVideoDurationForProject(project, requestedDurationMs) {
+  const latestLyricMs = visibleTracks(project).reduce((latestTrack, track) => {
     const latestLine = track.lines.reduce((latest, line) => {
       const range = adjustedLineRange(line, project.offsetMs)
       return range ? Math.max(latest, range.endMs) : latest
@@ -140,59 +188,52 @@ function effectiveVideoDuration(project, requestedDurationMs) {
   const requested = finiteInteger(requestedDurationMs)
   const durationMs = Math.max(project.durationMs, requested, latestLyricMs, 1_000)
   if (durationMs > MAX_VIDEO_DURATION_MS) {
-    throw new RangeError('Video export is limited to four hours')
+    throw new RangeError('Video export is limited to thirty minutes')
   }
   return durationMs
 }
 
-function firstTimedStart(project) {
-  return visibleTracks(project).reduce((firstTrack, track) => {
-    const firstLine = track.lines.reduce((first, line) => {
-      const range = adjustedLineRange(line, project.offsetMs)
-      return range ? Math.min(first, range.startMs) : first
-    }, Number.POSITIVE_INFINITY)
-    return Math.min(firstTrack, firstLine)
-  }, Number.POSITIVE_INFINITY)
+function effectiveVideoDuration(projectValue, requestedDurationMs) {
+  return effectiveVideoDurationForProject(normalizeProjectForVideo(projectValue), requestedDurationMs)
 }
 
-function addFrameTime(times, value, durationMs) {
-  const rounded = Math.max(0, Math.min(durationMs, Math.round(value)))
-  times.add(rounded)
+function createVideoIndex(project) {
+  const tracks = visibleTracks(project).map((track) => ({
+    track,
+    lines: track.lines
+      .map((line) => ({ line, range: adjustedLineRange(line, project.offsetMs) }))
+      .filter((entry) => entry.range)
+      .sort((left, right) => left.range.startMs - right.range.startMs),
+  }))
+  const upcomingLines = tracks
+    .flatMap(({ track, lines }) => lines.map((entry) => ({ ...entry, track })))
+    .sort((left, right) => left.range.startMs - right.range.startMs)
+  return {
+    project,
+    tracks,
+    upcomingLines,
+    firstStart: upcomingLines[0]?.range.startMs ?? Number.POSITIVE_INFINITY,
+  }
+}
+
+function buildFrameTimelineForProject(project, requestedDurationMs) {
+  const durationMs = effectiveVideoDurationForProject(project, requestedDurationMs)
+  const frameCount = Math.ceil(durationMs / FRAME_INTERVAL_MS)
+  if (frameCount > MAX_VIDEO_FRAMES) {
+    throw new RangeError(`Video export would require more than ${MAX_VIDEO_FRAMES} lyric frames`)
+  }
+  const times = Array.from(
+    { length: frameCount },
+    (_unused, index) => Math.round(index * FRAME_INTERVAL_MS),
+  )
+  return { project, durationMs, times }
 }
 
 function buildFrameTimeline(projectValue, requestedDurationMs) {
-  const project = normalizeProjectForVideo(projectValue)
-  const durationMs = effectiveVideoDuration(project, requestedDurationMs)
-  const times = new Set([0, durationMs])
-  const firstStart = firstTimedStart(project)
-  if (Number.isFinite(firstStart)) addFrameTime(times, Math.max(0, firstStart - 1_500), durationMs)
-
-  for (const track of visibleTracks(project)) {
-    for (const line of track.lines) {
-      const range = adjustedLineRange(line, project.offsetMs)
-      if (!range) continue
-      addFrameTime(times, range.startMs, durationMs)
-      addFrameTime(times, range.endMs, durationMs)
-
-      for (const word of line.words) {
-        if (word.startMs === null || word.endMs === null || word.endMs <= word.startMs) continue
-        const startMs = Math.max(range.startMs, word.startMs + project.offsetMs)
-        const endMs = Math.min(range.endMs, word.endMs + project.offsetMs)
-        if (endMs <= startMs) continue
-        addFrameTime(times, startMs, durationMs)
-        addFrameTime(times, startMs + (endMs - startMs) * 0.25, durationMs)
-        addFrameTime(times, startMs + (endMs - startMs) * 0.5, durationMs)
-        addFrameTime(times, startMs + (endMs - startMs) * 0.75, durationMs)
-        addFrameTime(times, endMs, durationMs)
-      }
-    }
-  }
-
-  const ordered = [...times].sort((left, right) => left - right)
-  if (ordered.length > MAX_VIDEO_FRAMES + 1) {
-    throw new RangeError(`Video export would require more than ${MAX_VIDEO_FRAMES} lyric frames`)
-  }
-  return { project, durationMs, times: ordered }
+  return buildFrameTimelineForProject(
+    normalizeProjectForVideo(projectValue),
+    requestedDurationMs,
+  )
 }
 
 function lineProgress(line, lyricMs) {
@@ -224,32 +265,69 @@ function lineProgress(line, lyricMs) {
   return 1
 }
 
-function frameStateAt(projectValue, playbackMs) {
-  const project = normalizeProjectForVideo(projectValue)
-  const lyricMs = playbackMs - project.offsetMs
-  const tracks = visibleTracks(project)
-  const firstStart = firstTimedStart(project)
-  const showTitle = Number.isFinite(firstStart) && playbackMs < Math.max(0, firstStart - 1_500)
-  const lines = []
+function createFrameCursor(index) {
+  return {
+    trackPositions: index.tracks.map(() => 0),
+    upcomingPosition: 0,
+  }
+}
 
-  for (const track of tracks) {
-    const activeLine = track.lines.find((line) => {
-      const range = adjustedLineRange(line, project.offsetMs)
-      return range && playbackMs >= range.startMs && playbackMs < range.endMs
-    })
-    if (!activeLine) continue
+function frameStateAtIndex(index, playbackMs, cursor) {
+  const { project } = index
+  const lyricMs = playbackMs - project.offsetMs
+  const showTitle = Number.isFinite(index.firstStart) && playbackMs < Math.max(0, index.firstStart - 1_500)
+  const lines = []
+  const activeLines = new Set()
+
+  index.tracks.forEach(({ track, lines: trackLines }, trackIndex) => {
+    let activeEntry
+    if (cursor) {
+      let position = cursor.trackPositions[trackIndex]
+      while (position < trackLines.length && playbackMs > trackLines[position].range.endMs + 500) {
+        position += 1
+      }
+      cursor.trackPositions[trackIndex] = position
+      const candidate = trackLines[position]
+      if (
+        candidate &&
+        ((playbackMs >= candidate.range.startMs - 120 && playbackMs <= candidate.range.endMs + 500) ||
+          (candidate.range.startMs > playbackMs && candidate.range.startMs - playbackMs < 1_800))
+      ) {
+        activeEntry = candidate
+      }
+    } else {
+      activeEntry = trackLines.find(
+        (entry) => playbackMs >= entry.range.startMs - 120 && playbackMs <= entry.range.endMs + 500,
+      )
+      activeEntry ||= trackLines.find(
+        (entry) => entry.range.startMs > playbackMs && entry.range.startMs - playbackMs < 1_800,
+      )
+    }
+    if (!activeEntry) return
+    activeLines.add(activeEntry.line)
     lines.push({
       track: track.name,
       color: track.color,
-      text: activeLine.text.replaceAll('/', '·'),
-      progress: lineProgress(activeLine, lyricMs),
+      text: activeEntry.line.text.replaceAll('/', '·'),
+      progress: lineProgress(activeEntry.line, lyricMs),
     })
-  }
+  })
 
-  const upcoming = tracks
-    .flatMap((track) => track.lines.map((line) => ({ track, line, range: adjustedLineRange(line, project.offsetMs) })))
-    .filter((entry) => entry.range && entry.range.startMs > playbackMs)
-    .sort((left, right) => left.range.startMs - right.range.startMs)[0]
+  let upcoming
+  if (cursor) {
+    while (
+      cursor.upcomingPosition < index.upcomingLines.length &&
+      (index.upcomingLines[cursor.upcomingPosition].range.startMs <= playbackMs ||
+        activeLines.has(index.upcomingLines[cursor.upcomingPosition].line))
+    ) {
+      cursor.upcomingPosition += 1
+    }
+    upcoming = index.upcomingLines[cursor.upcomingPosition]
+  } else {
+    upcoming = index.upcomingLines.find(
+      (entry) => entry.range.startMs > playbackMs && !activeLines.has(entry.line),
+    )
+  }
 
   return {
     title: project.title || 'Untitled song',
@@ -261,6 +339,11 @@ function frameStateAt(projectValue, playbackMs) {
     nextLine: !showTitle && upcoming ? upcoming.line.text.replaceAll('/', '·') : '',
     nextInMs: upcoming ? Math.max(0, upcoming.range.startMs - playbackMs) : null,
   }
+}
+
+function frameStateAt(projectValue, playbackMs) {
+  const project = normalizeProjectForVideo(projectValue)
+  return frameStateAtIndex(createVideoIndex(project), playbackMs)
 }
 
 function renderDocument() {
@@ -283,43 +366,119 @@ if(state.nextLine){const next=text('div','next','Next · '+state.nextLine);conte
 </script></body></html>`
 }
 
-function captureNextPaint(contents, update) {
+function createAbortError() {
+  const error = new Error('Video export canceled')
+  error.name = 'AbortError'
+  error.code = 'ABORT_ERR'
+  return error
+}
+
+function throwIfAborted(signal) {
+  if (signal?.aborted) throw createAbortError()
+}
+
+function captureNextPaint(contents, update, signal) {
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
+    let updateFinished = false
+    const cleanup = () => {
+      clearTimeout(timeout)
       contents.off('paint', onPaint)
-      reject(new Error('Timed out while rendering a video frame'))
+      signal?.removeEventListener('abort', onAbort)
+    }
+    const fail = (error) => {
+      cleanup()
+      reject(error)
+    }
+    const timeout = setTimeout(() => {
+      fail(new Error('Timed out while rendering a video frame'))
     }, 10_000)
     const onPaint = (_event, _dirtyRect, image) => {
-      if (image.isEmpty()) return
-      clearTimeout(timeout)
-      contents.off('paint', onPaint)
+      if (!updateFinished || image.isEmpty()) return
+      cleanup()
       resolve(image)
     }
+    const onAbort = () => fail(createAbortError())
+    if (signal?.aborted) {
+      fail(createAbortError())
+      return
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
     contents.on('paint', onPaint)
-    Promise.resolve(update()).then(() => contents.invalidate()).catch((error) => {
-      clearTimeout(timeout)
-      contents.off('paint', onPaint)
-      reject(error)
-    })
+    Promise.resolve()
+      .then(update)
+      .then(() => {
+        throwIfAborted(signal)
+        updateFinished = true
+        contents.invalidate()
+      })
+      .catch(fail)
   })
 }
 
-function runProcess(executable, args) {
+function terminateChild(child) {
+  if (child.exitCode !== null || child.signalCode !== null) return null
+  child.kill('SIGTERM')
+  const timeout = setTimeout(() => {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+  }, 2_000)
+  timeout.unref?.()
+  return timeout
+}
+
+function runProcess(executable, args, { signal, inputWriter } = {}) {
+  throwIfAborted(signal)
   return new Promise((resolve, reject) => {
-    const child = spawn(executable, args, { shell: false, windowsHide: true })
+    const child = spawn(executable, args, {
+      shell: false,
+      windowsHide: true,
+      stdio: [inputWriter ? 'pipe' : 'ignore', 'ignore', 'pipe'],
+    })
     let stderr = ''
+    let spawnError
+    let writerError
+    let killTimeout
+    const onAbort = () => {
+      writerError ||= createAbortError()
+      child.stdin?.destroy(writerError)
+      killTimeout ||= terminateChild(child)
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
     child.stderr.on('data', (chunk) => {
       if (stderr.length < 64_000) stderr += chunk.toString()
     })
-    child.once('error', reject)
-    child.once('close', (code, signal) => {
-      if (code === 0) resolve()
-      else reject(new Error(`FFmpeg failed${signal ? ` (${signal})` : ''}: ${stderr.trim() || `exit code ${code}`}`))
+    child.stdin?.on('error', (error) => {
+      writerError ||= error
     })
+    child.once('error', (error) => {
+      spawnError = error
+    })
+    child.once('close', (code, terminationSignal) => {
+      if (killTimeout) clearTimeout(killTimeout)
+      signal?.removeEventListener?.('abort', onAbort)
+      if (spawnError) reject(spawnError)
+      else if (writerError?.name === 'AbortError' || signal?.aborted) reject(createAbortError())
+      else if (code === 0 && !writerError) resolve()
+      else if (code === 0) reject(writerError)
+      else reject(new Error(`FFmpeg failed${terminationSignal ? ` (${terminationSignal})` : ''}: ${stderr.trim() || `exit code ${code}`}`))
+    })
+
+    if (inputWriter) {
+      Promise.resolve()
+        .then(() => inputWriter(child.stdin))
+        .then(() => {
+          throwIfAborted(signal)
+          child.stdin.end()
+        })
+        .catch((error) => {
+          writerError ||= error
+          child.stdin.destroy(error)
+          killTimeout ||= terminateChild(child)
+        })
+    }
   })
 }
 
-async function findFfmpeg(preferredPath) {
+async function findFfmpeg(preferredPath, signal) {
   const candidates = [
     preferredPath,
     process.env.OKAY_KARAOKE_FFMPEG,
@@ -330,20 +489,27 @@ async function findFfmpeg(preferredPath) {
 
   for (const candidate of [...new Set(candidates)]) {
     try {
-      await runProcess(candidate, ['-hide_banner', '-loglevel', 'error', '-version'])
+      await runProcess(candidate, ['-hide_banner', '-loglevel', 'error', '-version'], { signal })
       return candidate
-    } catch {
+    } catch (error) {
+      if (error?.name === 'AbortError') throw error
       // Try the next explicit or PATH-based candidate.
     }
   }
   throw new Error('FFmpeg was not found. Install FFmpeg or set OKAY_KARAOKE_FFMPEG to its path.')
 }
 
-function concatManifestEntry(fileName, durationMs) {
-  return `file '${fileName}'\nduration ${(durationMs / 1000).toFixed(3)}\n`
+async function writePngFrame(stream, image, signal) {
+  throwIfAborted(signal)
+  if (stream.destroyed) throw new Error('FFmpeg stopped accepting video frames')
+  if (!stream.write(image.toPNG())) {
+    await once(stream, 'drain', signal ? { signal } : undefined)
+  }
+  throwIfAborted(signal)
 }
 
-async function renderVideoFrames(BrowserWindow, project, timeline, temporaryDirectory, onProgress) {
+async function renderVideoFrames(BrowserWindow, index, timeline, stream, onProgress, signal) {
+  throwIfAborted(signal)
   const window = new BrowserWindow({
     show: false,
     width: VIDEO_WIDTH,
@@ -357,38 +523,58 @@ async function renderVideoFrames(BrowserWindow, project, timeline, temporaryDire
       webSecurity: true,
     },
   })
-  window.webContents.setFrameRate(30)
+  window.webContents.setFrameRate(VIDEO_RENDER_FPS)
+  const onAbort = () => {
+    if (!window.isDestroyed()) window.destroy()
+  }
+  signal?.addEventListener('abort', onAbort, { once: true })
 
   try {
     const documentUrl = `data:text/html;charset=utf-8,${encodeURIComponent(renderDocument())}`
     await window.loadURL(documentUrl)
-    const manifest = []
-    const frameTimes = timeline.times.slice(0, -1)
+    throwIfAborted(signal)
+    const cursor = createFrameCursor(index)
 
-    for (let index = 0; index < frameTimes.length; index += 1) {
-      const currentMs = frameTimes[index]
-      const nextMs = timeline.times[index + 1]
-      if (nextMs <= currentMs) continue
-      const state = frameStateAt(project, currentMs)
+    for (let frameIndex = 0; frameIndex < timeline.times.length; frameIndex += 1) {
+      throwIfAborted(signal)
+      const currentMs = timeline.times[frameIndex]
+      const state = frameStateAtIndex(index, currentMs, cursor)
       const stateJson = JSON.stringify(state)
       const image = await captureNextPaint(window.webContents, () =>
-        window.webContents.executeJavaScript(`window.renderKaraokeFrame(${stateJson},${index})`, true),
-      )
-      const fileName = `frame-${String(index).padStart(6, '0')}.png`
-      await fs.writeFile(path.join(temporaryDirectory, fileName), image.toPNG())
-      manifest.push(concatManifestEntry(fileName, nextMs - currentMs))
-      onProgress?.({ phase: 'frames', completed: index + 1, total: frameTimes.length })
+        window.webContents.executeJavaScript(`window.renderKaraokeFrame(${stateJson},${frameIndex})`),
+      signal)
+      await writePngFrame(stream, image, signal)
+      onProgress?.({ phase: 'frames', completed: frameIndex + 1, total: timeline.times.length })
     }
-
-    if (manifest.length === 0) throw new Error('No video frames could be rendered')
-    const finalFileName = `frame-${String(frameTimes.length - 1).padStart(6, '0')}.png`
-    manifest.push(`file '${finalFileName}'\n`)
-    const manifestPath = path.join(temporaryDirectory, 'frames.txt')
-    await fs.writeFile(manifestPath, manifest.join(''), 'utf8')
-    return manifestPath
   } finally {
+    signal?.removeEventListener('abort', onAbort)
     if (!window.isDestroyed()) window.destroy()
   }
+}
+
+function buildFfmpegArguments(audioPath, outputPath, durationMs) {
+  return [
+    '-y',
+    '-hide_banner',
+    '-loglevel', 'error',
+    '-f', 'image2pipe',
+    '-framerate', String(VIDEO_RENDER_FPS),
+    '-vcodec', 'png',
+    '-i', 'pipe:0',
+    '-i', audioPath,
+    '-map', '0:v:0',
+    '-map', '1:a:0',
+    '-vf', `fps=${VIDEO_OUTPUT_FPS},format=yuv420p`,
+    '-c:v', 'libx264',
+    '-preset', 'medium',
+    '-crf', '20',
+    '-c:a', 'aac',
+    '-b:a', '192k',
+    '-af', 'apad',
+    '-t', (durationMs / 1000).toFixed(3),
+    '-movflags', '+faststart',
+    outputPath,
+  ]
 }
 
 async function exportKaraokeVideo({
@@ -399,7 +585,9 @@ async function exportKaraokeVideo({
   outputPath,
   ffmpegPath,
   onProgress,
+  signal,
 }) {
+  throwIfAborted(signal)
   if (typeof BrowserWindow !== 'function') throw new TypeError('BrowserWindow is required')
   const project = parseProjectForVideo(projectJson)
   const requestedAudioPath = limitedText(audioPath || project.audioPath, '', 8_192).trim()
@@ -410,48 +598,40 @@ async function exportKaraokeVideo({
 
   const audioStats = await fs.stat(resolvedAudioPath).catch(() => null)
   if (!audioStats?.isFile()) throw new Error('The linked audio file could not be read')
-  const timeline = buildFrameTimeline(project, durationMs)
-  const executable = await findFfmpeg(ffmpegPath)
-  const temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'okay-karaoke-video-'))
+  const timeline = buildFrameTimelineForProject(project, durationMs)
+  const index = createVideoIndex(project)
+  const executable = await findFfmpeg(ffmpegPath, signal)
   const partialPath = `${resolvedOutputPath}.partial-${randomUUID()}.mp4`
 
   try {
+    throwIfAborted(signal)
     onProgress?.({ phase: 'preparing', completed: 0, total: 1 })
-    const manifestPath = await renderVideoFrames(BrowserWindow, project, timeline, temporaryDirectory, onProgress)
-    onProgress?.({ phase: 'encoding', completed: 0, total: 1 })
-    await runProcess(executable, [
-      '-y',
-      '-hide_banner',
-      '-loglevel', 'error',
-      '-f', 'concat',
-      '-safe', '0',
-      '-i', manifestPath,
-      '-i', resolvedAudioPath,
-      '-map', '0:v:0',
-      '-map', '1:a:0?',
-      '-vf', 'fps=30,format=yuv420p',
-      '-c:v', 'libx264',
-      '-preset', 'medium',
-      '-crf', '20',
-      '-c:a', 'aac',
-      '-b:a', '192k',
-      '-t', (timeline.durationMs / 1000).toFixed(3),
-      '-shortest',
-      '-movflags', '+faststart',
+    await runProcess(executable, buildFfmpegArguments(
+      resolvedAudioPath,
       partialPath,
-    ])
+      timeline.durationMs,
+    ), {
+      signal,
+      inputWriter: async (stream) => {
+        await renderVideoFrames(BrowserWindow, index, timeline, stream, onProgress, signal)
+        throwIfAborted(signal)
+        onProgress?.({ phase: 'encoding', completed: 0, total: 1 })
+      },
+    })
+    throwIfAborted(signal)
     await fs.rename(partialPath, resolvedOutputPath)
     onProgress?.({ phase: 'complete', completed: 1, total: 1 })
-    return { path: resolvedOutputPath, durationMs: timeline.durationMs, frameCount: timeline.times.length - 1 }
+    return { path: resolvedOutputPath, durationMs: timeline.durationMs, frameCount: timeline.times.length }
   } finally {
     await fs.rm(partialPath, { force: true }).catch(() => {})
-    await fs.rm(temporaryDirectory, { recursive: true, force: true }).catch(() => {})
   }
 }
 
 module.exports = {
   MAX_VIDEO_DURATION_MS,
   MAX_VIDEO_FRAMES,
+  VIDEO_RENDER_FPS,
+  buildFfmpegArguments,
   buildFrameTimeline,
   effectiveVideoDuration,
   exportKaraokeVideo,
