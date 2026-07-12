@@ -7,6 +7,10 @@
   "license": "MIT",
   "type": "module",
   "main": "electron/main.cjs",
+  "engines": {
+    "node": ">=24",
+    "npm": ">=11"
+  },
   "scripts": {
     "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && electron .\"",
     "dev:web": "vite --host 127.0.0.1",
@@ -18,21 +22,21 @@
     "dist:dir": "npm run build && electron-builder --dir"
   },
   "dependencies": {
-    "lucide-react": "latest",
-    "react": "latest",
-    "react-dom": "latest"
+    "lucide-react": "1.24.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
   },
   "devDependencies": {
-    "@types/react": "latest",
-    "@types/react-dom": "latest",
-    "@vitejs/plugin-react": "latest",
-    "concurrently": "latest",
-    "electron": "latest",
-    "electron-builder": "latest",
-    "typescript": "latest",
-    "vite": "latest",
-    "vitest": "latest",
-    "wait-on": "latest"
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.3",
+    "concurrently": "10.0.3",
+    "electron": "43.1.0",
+    "electron-builder": "26.15.3",
+    "typescript": "7.0.2",
+    "vite": "8.1.4",
+    "vitest": "4.1.10",
+    "wait-on": "9.0.10"
   },
   "build": {
     "appId": "studio.okay.karaoke",
@@ -47,6 +51,7 @@
     },
     "mac": {
       "category": "public.app-category.music",
+      "icon": "build/icon.png",
       "target": [
         "dmg",
         "zip"
