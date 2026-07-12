@@ -14,7 +14,7 @@ Okay Karaoke Studio is a single-window desktop application for editing and synch
 - Live karaoke preview with word-progress highlighting and simultaneous duet lines.
 - Draggable, resizable word blocks on a zoomable waveform TimeBoard.
 - Raw lyric editing with syllable separators and screen-fit guidance.
-- LRC import, enhanced LRC export, ASS karaoke export, and versioned `.oks` projects.
+- LRC import, enhanced LRC and ASS export, 1080p MP4 karaoke rendering, and versioned `.oks` projects.
 - Native open/save/import/export dialogs with secure linked-media streaming.
 - Command history, timing review, browser fallback, and a ready-to-explore demo project.
 
@@ -24,6 +24,10 @@ The exact version 0.1 contract is in [`docs/MVP.md`](docs/MVP.md). Additional id
 
 Requirements: Node.js 24 LTS or newer and Bun 1.3.14 or newer. The exact Bun
 version used for the lockfile is pinned in `package.json`.
+
+MP4 export additionally requires `ffmpeg` on `PATH`. macOS installations in
+`/opt/homebrew/bin` or `/usr/local/bin` are detected automatically. Set
+`OKAY_KARAOKE_FFMPEG` to use another executable. The MVP does not bundle FFmpeg.
 
 ```bash
 bun install --frozen-lockfile
@@ -60,7 +64,7 @@ bun run dist:dir
 5. Hold Space while each word is sung; release it at the word end. Press Escape to leave sync mode.
 6. Select words in the lyric map or TimeBoard. Drag blocks to move timing and drag either edge to resize.
 7. Add a duet track when needed and synchronize it independently.
-8. Review the timing status, save the `.oks` project, and export LRC or ASS.
+8. Review the timing status, save the `.oks` project, and export LRC, ASS, or a 1080p MP4 karaoke video. Video export requires attached audio.
 
 ## Keyboard controls
 
@@ -90,7 +94,7 @@ docs/MVP.md             Version 0.1 release contract
 docs/ROADMAP.md         Explicitly post-MVP capabilities
 ```
 
-The canonical model stores integer-millisecond word timings inside lines and vocal tracks. The renderer does not receive Node.js access. Electron exposes a small typed bridge for project dialogs, audio import, audio-path restoration, text export, and menu commands. Linked audio is streamed through a tokenized read-only custom protocol with byte-range support.
+The canonical model stores integer-millisecond word timings inside lines and vocal tracks. The renderer does not receive Node.js access. Electron exposes a small typed bridge for project dialogs, audio import, audio-path restoration, text/video export, and menu commands. Linked audio is streamed through a tokenized read-only custom protocol with byte-range support. MP4 export renders the stage in an isolated offscreen Electron surface, then invokes FFmpeg without a shell to encode H.264 and mux AAC audio; temporary frames and partial outputs are cleaned on success or failure.
 
 ## Reference boundaries
 

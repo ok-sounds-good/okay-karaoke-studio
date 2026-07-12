@@ -2096,6 +2096,16 @@ button:disabled {
   background: #1d271f;
 }
 
+.export-options > button:disabled {
+  cursor: not-allowed;
+  opacity: .5;
+}
+
+.export-options > button:disabled:hover {
+  border-color: #303c36;
+  background: #131a16;
+}
+
 .export-option__icon {
   display: grid;
   width: 42px;

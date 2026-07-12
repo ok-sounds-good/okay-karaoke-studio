@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { AlertTriangle, CheckCircle2, Download, FileJson2, FileText, Music, Sparkles } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Clapperboard, Download, FileJson2, FileText, Music, Sparkles } from 'lucide-react'
 import type { ValidationIssue, VocalTrack } from '../lib/model'
 import { Button, Modal } from './ui'
 
@@ -82,7 +82,10 @@ interface ExportDialogProps {
   onClose: () => void
   onExportLrc: () => void
   onExportAss: () => void
+  onExportVideo: () => void
   onExportProject: () => void
+  videoAvailable: boolean
+  videoProgress: StudioVideoExportProgress | null
 }
 
 export function ExportDialog({
@@ -92,8 +95,22 @@ export function ExportDialog({
   onClose,
   onExportLrc,
   onExportAss,
+  onExportVideo,
   onExportProject,
+  videoAvailable,
+  videoProgress,
 }: ExportDialogProps) {
+  const exportingVideo = videoProgress !== null
+  const videoStatus = videoProgress?.phase === 'frames'
+    ? `Rendering lyric frames · ${videoProgress.completed} / ${videoProgress.total}`
+    : videoProgress?.phase === 'encoding'
+      ? 'Encoding MP4 and mixing the backing track…'
+      : videoProgress
+        ? 'Preparing the video renderer…'
+        : videoAvailable
+          ? '1080p MP4 · both voices and linked audio'
+          : 'Attach audio in the desktop app to enable'
+
   return (
     <Modal title="Export karaoke" eyebrow={projectTitle} onClose={onClose}>
       <div className={`export-readiness ${issueCount ? 'export-readiness--warning' : ''}`}>
@@ -104,17 +121,26 @@ export function ExportDialog({
         </div>
       </div>
       <div className="export-options">
-        <button onClick={onExportLrc}>
+        <button onClick={onExportLrc} disabled={exportingVideo}>
           <span className="export-option__icon"><FileText size={21} /></span>
           <span><strong>Enhanced LRC</strong><small>{activeTrackName} · line and word timing</small></span>
           <Download size={16} />
         </button>
-        <button onClick={onExportAss}>
+        <button onClick={onExportAss} disabled={exportingVideo}>
           <span className="export-option__icon"><Music size={21} /></span>
           <span><strong>ASS karaoke subtitles</strong><small>Both voices · karaoke timing tags</small></span>
           <Download size={16} />
         </button>
-        <button onClick={onExportProject}>
+        <button
+          onClick={onExportVideo}
+          disabled={!videoAvailable || exportingVideo}
+          aria-busy={exportingVideo}
+        >
+          <span className="export-option__icon"><Clapperboard size={21} /></span>
+          <span><strong>Karaoke video</strong><small>{videoStatus}</small></span>
+          <Download size={16} />
+        </button>
+        <button onClick={onExportProject} disabled={exportingVideo}>
           <span className="export-option__icon"><FileJson2 size={21} /></span>
           <span><strong>Project JSON</strong><small>Portable editable timing document</small></span>
           <Download size={16} />

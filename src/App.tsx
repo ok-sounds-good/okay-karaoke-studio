@@ -132,6 +132,7 @@ export default function App() {
   const [heldWordId, setHeldWordId] = useState<string | null>(null)
   const [lyricsDialogOpen, setLyricsDialogOpen] = useState(false)
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
+  const [videoExportProgress, setVideoExportProgress] = useState<StudioVideoExportProgress | null>(null)
   const [validationDialogOpen, setValidationDialogOpen] = useState(false)
   const [toast, setToast] = useState<ToastState | null>(null)
   const projectInputRef = useRef<HTMLInputElement>(null)
@@ -157,6 +158,11 @@ export default function App() {
     const timer = window.setTimeout(() => setToast(null), 3200)
     return () => window.clearTimeout(timer)
   }, [toast])
+
+  useEffect(() => {
+    if (!window.studio?.onVideoExportProgress) return
+    return window.studio.onVideoExportProgress(setVideoExportProgress)
+  }, [])
 
   useEffect(() => {
     if (!activeTrack && project.tracks[0]) setActiveTrackId(project.tracks[0].id)
@@ -383,6 +389,35 @@ export default function App() {
       showToast(error instanceof Error ? error.message : 'Export failed.', 'warning')
     }
   }, [activeTrack, project, showToast])
+
+  const exportVideo = useCallback(async () => {
+    if (!window.studio?.exportVideo) {
+      showToast('Video export is available in the desktop app.', 'warning')
+      return
+    }
+    if (!project.audioPath || !playback.hasAudio) {
+      showToast('Attach a readable audio track before exporting video.', 'warning')
+      return
+    }
+
+    try {
+      playback.pause()
+      setVideoExportProgress({ phase: 'preparing', completed: 0, total: 1 })
+      const result = await window.studio.exportVideo({
+        suggestedName: `${slugify(`${project.artist}-${project.title}`)}.mp4`,
+        projectJson: serializeProject(project),
+        audioPath: project.audioPath,
+        durationMs: Math.max(1_000, Math.round(playback.durationMs)),
+      })
+      if (!result) return
+      setExportDialogOpen(false)
+      showToast(`Video export created with ${result.frameCount} lyric frames`, 'success')
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Video export failed.', 'warning')
+    } finally {
+      setVideoExportProgress(null)
+    }
+  }, [playback.durationMs, playback.hasAudio, playback.pause, project, showToast])
 
   const handleSelectWord = useCallback((word: LyricWord, add: boolean) => {
     setSelectedWordIds((current) => {
@@ -666,7 +701,10 @@ export default function App() {
           onClose={() => setExportDialogOpen(false)}
           onExportLrc={() => void exportText('lrc')}
           onExportAss={() => void exportText('ass')}
+          onExportVideo={() => void exportVideo()}
           onExportProject={() => void exportText('json')}
+          videoAvailable={Boolean(window.studio?.exportVideo && project.audioPath && playback.hasAudio)}
+          videoProgress={videoExportProgress}
         />
       )}
       {validationDialogOpen && <ValidationDialog issues={reviewIssues} onClose={() => setValidationDialogOpen(false)} />}

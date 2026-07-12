@@ -6,6 +6,7 @@ const { createReadStream } = require('node:fs')
 const fs = require('node:fs/promises')
 const path = require('node:path')
 const { Readable } = require('node:stream')
+const { exportKaraokeVideo, MAX_VIDEO_DURATION_MS } = require('./video-export.cjs')
 
 const APP_NAME = 'Okay Karaoke Studio'
 const APP_SCHEME = 'studio-app'
@@ -26,6 +27,8 @@ const CHANNELS = Object.freeze({
   releaseAudio: 'studio:release-audio',
   importLrc: 'studio:import-lrc',
   exportText: 'studio:export-text',
+  exportVideo: 'studio:export-video',
+  videoExportProgress: 'studio:video-export-progress',
   menuAction: 'studio:menu-action',
 })
 
@@ -108,6 +111,7 @@ const EXPORT_FILTERS = Object.freeze({
   ass: [{ name: 'Advanced SubStation Alpha', extensions: ['ass'] }],
   json: [{ name: 'JSON', extensions: ['json'] }],
 })
+const VIDEO_FILTERS = [{ name: 'MPEG-4 Karaoke Video', extensions: ['mp4'] }]
 
 const mediaFiles = new Map()
 const mediaTokensByOwner = new Map()
@@ -115,6 +119,7 @@ const writableProjectPaths = new Set()
 const projectSaveQueues = new Map()
 
 let mainWindow = null
+let videoExportInProgress = false
 
 app.setName(APP_NAME)
 
@@ -387,7 +392,7 @@ function ensureExportExtension(fileName, format) {
   const currentExtension = path.extname(fileName).toLowerCase()
   if (currentExtension === `.${format}`) return fileName
 
-  const knownExtensions = new Set(['.lrc', '.ass', '.json', '.txt'])
+  const knownExtensions = new Set(['.lrc', '.ass', '.json', '.mp4', '.txt'])
   if (!knownExtensions.has(currentExtension)) return `${fileName}.${format}`
 
   const stem = path.basename(fileName, currentExtension)
@@ -557,6 +562,33 @@ function normalizeExportRequest(value) {
   }
 }
 
+function normalizeVideoExportRequest(value) {
+  if (!isRecord(value)) throw new TypeError('exportVideo requires an options object')
+  const durationMs = value.durationMs
+  if (
+    !Number.isSafeInteger(durationMs) ||
+    durationMs < 1_000 ||
+    durationMs > MAX_VIDEO_DURATION_MS
+  ) {
+    throw new RangeError('durationMs must be an integer between one second and four hours')
+  }
+  const audioPath = path.resolve(requireString(value.audioPath, 'audioPath'))
+  if (!AUDIO_EXTENSIONS.has(path.extname(audioPath).toLowerCase())) {
+    throw new TypeError('audioPath must reference a supported audio file')
+  }
+
+  return {
+    audioPath,
+    durationMs,
+    projectJson: requireStringWithinBytes(
+      value.projectJson,
+      'projectJson',
+      MAX_PROJECT_FILE_BYTES,
+    ),
+    suggestedName: optionalString(value.suggestedName, 'suggestedName'),
+  }
+}
+
 function makeMediaResult(filePath, ownerContents) {
   if (!ownerContents || ownerContents.isDestroyed()) {
     throw new Error('Cannot create a media URL for a destroyed renderer')
@@ -705,6 +737,43 @@ function registerIpcHandlers() {
     const filePath = path.resolve(result.filePath)
     await writeUtf8FileAtomically(filePath, request.contents)
     return { path: filePath }
+  })
+
+  ipcMain.handle(CHANNELS.exportVideo, async (event, value) => {
+    const owner = assertTrustedSender(event)
+    if (videoExportInProgress) throw new Error('Another karaoke video export is already running')
+    const request = normalizeVideoExportRequest(value)
+    videoExportInProgress = true
+
+    try {
+      const defaultName = ensureExportExtension(
+        safeFileName(request.suggestedName, 'karaoke-video.mp4'),
+        'mp4',
+      )
+      const result = await dialog.showSaveDialog(owner, {
+        title: 'Export Karaoke Video',
+        buttonLabel: 'Render Video',
+        defaultPath: documentsPath(defaultName),
+        filters: VIDEO_FILTERS,
+      })
+      if (result.canceled || !result.filePath) return null
+
+      const sendProgress = (progress) => {
+        if (!event.sender.isDestroyed()) {
+          event.sender.send(CHANNELS.videoExportProgress, progress)
+        }
+      }
+      return await exportKaraokeVideo({
+        BrowserWindow,
+        projectJson: request.projectJson,
+        durationMs: request.durationMs,
+        audioPath: request.audioPath,
+        outputPath: path.resolve(result.filePath),
+        onProgress: sendProgress,
+      })
+    } finally {
+      videoExportInProgress = false
+    }
   })
 }
 

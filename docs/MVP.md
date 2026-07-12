@@ -14,7 +14,7 @@ This document is the release contract for version 0.1. Features that are not req
 4. Press and hold Space with the singer to time each word.
 5. Correct individual words by dragging and resizing them in the TimeBoard.
 6. Preview the result continuously without opening another window.
-7. Save the editable project and export LRC or ASS lyrics.
+7. Save the editable project and export LRC, ASS, or a finished MP4 karaoke video.
 
 ## Single-window layout invariant
 
@@ -72,6 +72,8 @@ Focused overlays are permitted for short, transactional tasks such as pasting ra
 - Save all lyric text, word timings, track styling, media linkage, and metadata in `.oks`.
 - Export the active vocal track as LRC.
 - Export the project as ASS with karaoke timing tags.
+- Render a 1080p MP4 from the built-in stage design and linked backing track through a locally installed FFmpeg executable.
+- Show frame-rendering and encoding progress, and fail without leaving a partial destination file when video requirements are unavailable.
 - Validate and report untimed, invalid, or overlapping timing before export.
 - Browser fallbacks for open/download when the React surface is run outside Electron.
 
@@ -81,6 +83,7 @@ Focused overlays are permitted for short, transactional tasks such as pasting ra
 - Responsive down to a 1280 × 720 application window; optimized for larger desktop displays.
 - Complete keyboard focus states, labels for icon-only actions, and adequate contrast.
 - Unit tests for project parsing, lyric parsing, timing validation, and LRC/ASS round trips.
+- Unit tests for video frame planning plus an end-to-end H.264/AAC export smoke check.
 - Clean TypeScript build, production Vite build, and launchable unpacked desktop package.
 
 ## Explicitly out of scope for 0.1
@@ -89,7 +92,6 @@ Focused overlays are permitted for short, transactional tasks such as pasting ra
 - Stem separation or vocal removal.
 - MIDI/KAR playback and lead-vocal-note mapping.
 - CDG authoring or MP3+G export.
-- Video rendering or subtitle burn-in.
 - Background image scheduling.
 - Automatic linguistic hyphenation.
 - Embedded audio, cloud sync, collaboration, show rotation, or a singer-facing second display.
@@ -104,6 +106,7 @@ Focused overlays are permitted for short, transactional tasks such as pasting ra
 - [x] Undo and redo cover lyric replacement and timing edits.
 - [x] Unit tests and production build pass.
 - [x] The unpacked desktop application launches on this Mac.
+- [x] A linked-audio project renders a 1920 × 1080 H.264/AAC MP4 with synchronized lyric frames.
 - [x] The final UI has been visually checked at desktop and minimum supported dimensions.
 
 ## Behavioral references

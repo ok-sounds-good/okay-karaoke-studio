@@ -48,6 +48,26 @@ declare global {
     format: StudioExportFormat
   }
 
+  type StudioVideoExportPhase = 'preparing' | 'frames' | 'encoding' | 'complete'
+
+  interface StudioVideoExportProgress {
+    phase: StudioVideoExportPhase
+    completed: number
+    total: number
+  }
+
+  interface StudioVideoExportOptions {
+    suggestedName: string
+    projectJson: string
+    audioPath: string
+    durationMs: number
+  }
+
+  interface StudioVideoExportResult extends StudioPathResult {
+    durationMs: number
+    frameCount: number
+  }
+
   interface StudioApi {
     openProject(): Promise<StudioOpenProjectResult | null>
     saveProject(options: StudioSaveProjectOptions): Promise<StudioPathResult | null>
@@ -56,6 +76,8 @@ declare global {
     releaseAudio(): Promise<void>
     importLrc(): Promise<StudioLrcImportResult | null>
     exportText(options: StudioExportTextOptions): Promise<StudioPathResult | null>
+    exportVideo(options: StudioVideoExportOptions): Promise<StudioVideoExportResult | null>
+    onVideoExportProgress(callback: (progress: StudioVideoExportProgress) => void): () => void
     onMenuAction(callback: (action: StudioMenuAction) => void): () => void
   }
 

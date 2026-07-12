@@ -28,7 +28,8 @@ This roadmap intentionally sits outside the 0.1 MVP contract in [`MVP.md`](./MVP
 - Standards-aware ASS import that preserves unknown sections and column formats.
 - Scheduled still images, animated backgrounds, and per-section scenes.
 - Aspect-ratio presets, title-safe/action-safe overlays, and multiple preview devices.
-- Render karaoke video through a pinned FFmpeg build with libass support.
+- Bundle or securely provision a pinned, license-audited media encoder so video export does not depend on a system FFmpeg installation.
+- Add advanced video controls for resolution, codec, frame rate, background scenes, and subtitle-safe-area presets.
 - Theme packs and reusable project templates.
 
 ## Karaoke formats
