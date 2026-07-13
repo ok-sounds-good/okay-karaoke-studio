@@ -5,6 +5,7 @@ const { once } = require('node:events')
 const fs = require('node:fs/promises')
 const path = require('node:path')
 const { randomUUID } = require('node:crypto')
+const { ffmpegExecutableCandidates } = require('./ffmpeg-setup.cjs')
 
 const VIDEO_WIDTH = 1920
 const VIDEO_HEIGHT = 1080
@@ -479,15 +480,7 @@ function runProcess(executable, args, { signal, inputWriter } = {}) {
 }
 
 async function findFfmpeg(preferredPath, signal) {
-  const candidates = [
-    preferredPath,
-    process.env.OKAY_KARAOKE_FFMPEG,
-    'ffmpeg',
-    process.platform === 'darwin' ? '/opt/homebrew/bin/ffmpeg' : null,
-    process.platform === 'darwin' ? '/usr/local/bin/ffmpeg' : null,
-  ].filter(Boolean)
-
-  for (const candidate of [...new Set(candidates)]) {
+  for (const candidate of ffmpegExecutableCandidates({ preferredPath })) {
     try {
       await runProcess(candidate, ['-hide_banner', '-loglevel', 'error', '-version'], { signal })
       return candidate

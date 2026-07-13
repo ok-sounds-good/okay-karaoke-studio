@@ -12,6 +12,7 @@ const {
   writeUtf8FileAtomically,
 } = require('./project-files.cjs')
 const { exportKaraokeVideo, MAX_VIDEO_DURATION_MS } = require('./video-export.cjs')
+const { ensureFfmpegForExport } = require('./ffmpeg-setup.cjs')
 const {
   EXPORT_FILTERS,
   ensureExportExtension,
@@ -741,6 +742,14 @@ function registerIpcHandlers() {
     event.sender.once('destroyed', abortWhenOwnerCloses)
 
     try {
+      const ffmpegPath = await ensureFfmpegForExport({
+        openExternal: openExternalUrl,
+        showMessageBox: (options) => dialog.showMessageBox(owner, options),
+        signal: operation.controller.signal,
+      })
+      if (!ffmpegPath) return null
+      if (operation.controller.signal.aborted) throw canceledVideoExportError()
+
       const defaultName = ensureExportExtension(
         safeFileName(request.suggestedName, 'karaoke-video.mp4'),
         'mp4',
@@ -770,6 +779,7 @@ function registerIpcHandlers() {
         durationMs: request.durationMs,
         audioPath: request.audioPath,
         outputPath: path.resolve(selectedOutputPath),
+        ffmpegPath,
         onProgress: sendProgress,
         signal: operation.controller.signal,
       })

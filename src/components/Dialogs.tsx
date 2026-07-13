@@ -220,7 +220,7 @@ export function ExportDialog({
     : videoProgress?.phase === 'encoding'
       ? 'Encoding MP4 and mixing the backing track…'
       : videoProgress
-        ? 'Preparing the video renderer…'
+        ? 'Preparing video export and checking FFmpeg…'
         : videoAvailable
           ? '1080p MP4 · both voices and linked audio'
           : 'Attach audio in the desktop app to enable'

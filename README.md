@@ -20,15 +20,23 @@ Okay Karaoke Studio is a single-window desktop application for editing and synch
 
 The exact version 0.1 contract is in [`docs/MVP.md`](docs/MVP.md). Additional ideas are deliberately separated into [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
+Changes follow the lightweight, green-`main` workflow in
+[`docs/SDLC.md`](docs/SDLC.md). Contribution setup and verification expectations
+are in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
 ## Run locally
 
 Requirements: Node.js 24 LTS or newer and Bun 1.3.14 or newer. The exact Bun
 version used for the lockfile is pinned in `package.json`.
 
-MP4 export additionally requires `ffmpeg` on `PATH`. macOS installations in
-`/opt/homebrew/bin` or `/usr/local/bin` are detected automatically. Set
-`OKAY_KARAOKE_FFMPEG` to use another executable. The MVP does not bundle FFmpeg;
-video rendering is currently limited to 30 minutes and the MVP's two vocal tracks.
+MP4 export additionally requires FFmpeg with the `libx264` and AAC encoders. The
+desktop app checks this before asking for an export destination. If FFmpeg is
+missing, it can install the Gyan FFmpeg package through an existing WinGet on
+Windows or the `ffmpeg` formula through an existing Homebrew on macOS, after
+explicit confirmation. It never installs Homebrew, runs Linux package managers,
+or bundles the FFmpeg command-line encoder. Manual and system installations remain
+supported; set `OKAY_KARAOKE_FFMPEG` to use a specific executable. Video rendering
+is currently limited to 30 minutes and the MVP's two vocal tracks.
 
 ```bash
 bun install --frozen-lockfile
@@ -95,7 +103,8 @@ src/
   App.tsx               Application state, commands, sync, and file workflows
 tests/                  Pure model and interchange tests
 docs/MVP.md             Version 0.1 release contract
-docs/ROADMAP.md         Explicitly post-MVP capabilities
+docs/ROADMAP.md         Prioritized post-MVP capabilities and product boundaries
+docs/SDLC.md            Pull-request, verification, ruleset, and release policy
 ```
 
 The canonical model stores integer-millisecond word timings inside lines and vocal tracks. The renderer does not receive Node.js access. Electron exposes a small typed bridge for project dialogs, audio import, project-authorized audio restoration, text/video export, and menu commands. Linked audio is streamed through an owner-scoped, tokenized read-only custom protocol with byte-range support. MP4 export renders the stage in an isolated offscreen Electron surface and streams backpressured PNG frames directly into a shell-free FFmpeg process for H.264/AAC encoding. Cancellation terminates the encoder and removes its partial output before close or quit continues.

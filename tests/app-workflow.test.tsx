@@ -10,6 +10,7 @@ import { createDemoProject, serializeProject } from '../src/lib/model'
 interface StudioHarness {
   studio: StudioApi
   exportText: ReturnType<typeof vi.fn>
+  exportVideo: ReturnType<typeof vi.fn>
   importAudio: ReturnType<typeof vi.fn>
   openProject: ReturnType<typeof vi.fn>
   saveProject: ReturnType<typeof vi.fn>
@@ -20,6 +21,7 @@ function createStudioHarness(): StudioHarness {
   const saveProject = vi.fn(async () => ({ path: '/saved/project.oks' }))
   const importAudio = vi.fn(async () => null)
   const exportText = vi.fn(async () => ({ path: '/exports/project.oks' }))
+  const exportVideo = vi.fn(async () => null)
   const studio = {
     openProject,
     saveProject,
@@ -28,13 +30,13 @@ function createStudioHarness(): StudioHarness {
     releaseAudio: vi.fn(async () => undefined),
     importLrc: vi.fn(async () => null),
     exportText,
-    exportVideo: vi.fn(async () => null),
+    exportVideo,
     cancelVideoExport: vi.fn(async () => undefined),
     onVideoExportProgress: vi.fn(() => () => undefined),
     onMenuAction: vi.fn(() => () => undefined),
   } as unknown as StudioApi
 
-  return { studio, exportText, importAudio, openProject, saveProject }
+  return { studio, exportText, exportVideo, importAudio, openProject, saveProject }
 }
 
 function deferred<T>() {
@@ -120,6 +122,7 @@ describe('mounted first-time workflow', () => {
     container.remove()
     Object.defineProperty(window, 'studio', { configurable: true, value: undefined })
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
   })
 
   it('opens the real guide from TopBar and enforces the lyrics-to-sync transition', async () => {
@@ -180,6 +183,36 @@ describe('mounted first-time workflow', () => {
       contents: expectedContents,
       format: 'oks',
     })
+  })
+
+  it('keeps export choices open when guided FFmpeg setup is postponed', async () => {
+    vi.stubGlobal('AudioContext', class {
+      async close() {}
+      async decodeAudioData() {
+        return { getChannelData: () => new Float32Array([0]) }
+      }
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      arrayBuffer: async () => new ArrayBuffer(0),
+    })))
+    harness.importAudio.mockResolvedValueOnce({
+      path: '/music/backing.mp3',
+      name: 'backing.mp3',
+      url: 'studio-media://asset/00000000-0000-0000-0000-000000000000/backing.mp3',
+    })
+
+    await clickButton('Workflow')
+    await clickButton('Attach audio')
+    await clickButton('Workflow')
+    await clickButton('Choose export')
+    await clickButton('Karaoke video')
+
+    expect(harness.exportVideo).toHaveBeenCalledOnce()
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Export karaoke')
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Karaoke video')
+    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain(
+      'Preparing video export and checking FFmpeg',
+    )
   })
 
   it('ignores a previous project save that completes after New project', async () => {

@@ -1,0 +1,59 @@
+name: Feature proposal
+description: Propose a scoped editor or distribution improvement.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Roadmap status is intentional. Proposals outside the core product boundary need an explicit scope decision before implementation.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Editing problem and evidence
+      description: What real workflow problem does this solve, and how do we know it matters?
+    validations:
+      required: true
+  - type: textarea
+    id: interaction
+    attributes:
+      label: Minimum useful interaction
+      description: Describe the smallest product change that solves the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: project-format
+    attributes:
+      label: Project-format and migration impact
+      description: Note new persisted data, compatibility, or state that must not be stored.
+    validations:
+      required: true
+  - type: textarea
+    id: export-rights
+    attributes:
+      label: Export, codec, rights, and licensing impact
+      description: Write "None identified" when it does not apply.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance checks
+      description: List automated tests and hands-on checks that would prove the feature works.
+    validations:
+      required: true
+  - type: textarea
+    id: maintenance
+    attributes:
+      label: Packaging, security, and maintenance burden
+      description: Include bundled tools, update responsibilities, new platforms, or ongoing data/service dependencies.
+    validations:
+      required: true
+  - type: textarea
+    id: exclusions
+    attributes:
+      label: Deliberate exclusions
+      description: What adjacent capability should remain out of scope?
+    validations:
+      required: true
