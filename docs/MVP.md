@@ -98,10 +98,11 @@ Focused overlays are permitted for short, transactional tasks such as pasting ra
 
 ## Release acceptance checklist
 
-- [ ] A first-time user can complete the primary journey without leaving the main window.
-- [ ] A saved project reopens with identical metadata, tracks, lyrics, and timings.
+- [x] A first-time user can complete the primary journey without leaving the main window.
+- [x] A saved project reopens with identical metadata, tracks, lyrics, and timings.
 - [x] Space press/release produces a visible timed word and advances the sync cursor.
-- [ ] Timeline movement and resize operations immediately affect the live preview.
+- [x] Timeline movement and resize operations immediately affect the live preview.
+- [x] CI green for Windows and Mac on github
 - [x] LRC and ASS exports contain monotonic, non-negative timing.
 - [x] Undo and redo cover lyric replacement and timing edits.
 - [x] Unit tests and production build pass.

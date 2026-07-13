@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import { AudioWaveform, ChevronLeft, ChevronRight, Focus, Minus, Plus, ZoomIn } from 'lucide-react'
 import type { KaraokeProject, LyricWord } from '../lib/model'
 import { formatTime } from '../lib/model'
-import { flattenTrack } from '../utils'
+import { flattenTrack, type ProjectTimingDraft } from '../utils'
 import { IconButton } from './ui'
 
 interface TimelineProps {
@@ -20,20 +20,233 @@ interface TimelineProps {
   onSelectWord: (wordId: string, add: boolean) => void
   onShiftWords: (wordIds: Set<string>, deltaMs: number) => void
   onResizeWord: (wordId: string, startMs: number, endMs: number) => void
+  onTimingDraftChange: (draft: ProjectTimingDraft | null) => void
 }
 
-interface DragState {
+export interface TimelineTimingGesture {
   wordId: string
   mode: 'move' | 'start' | 'end'
-  clientX: number
   originalStart: number
   originalEnd: number
   ids: Set<string>
   deltaMs: number
 }
 
+export interface TimelinePointerGesture extends TimelineTimingGesture {
+  clientX: number
+  pointerId: number
+  captureTarget: EventTarget
+}
+
+export interface TimelineGestureContext {
+  project: KaraokeProject
+  pixelsPerSecond: number
+  onTimingDraftChange: (draft: ProjectTimingDraft | null) => void
+  onShiftWords: (wordIds: Set<string>, deltaMs: number) => void
+  onResizeWord: (wordId: string, startMs: number, endMs: number) => void
+}
+
 export function timelineTime(rawTimingMs: number, offsetMs: number) {
   return rawTimingMs + offsetMs
+}
+
+export function timingDraftForGesture(
+  project: KaraokeProject,
+  gesture: TimelineTimingGesture,
+): ProjectTimingDraft {
+  const timingDraft = new Map<string, { startMs: number; endMs: number }>()
+
+  if (gesture.mode === 'move') {
+    project.tracks.forEach((track) => {
+      track.lines.forEach((line) => {
+        line.words.forEach((word) => {
+          if (!gesture.ids.has(word.id) || word.startMs === null) return
+          const duration = Math.max(80, (word.endMs ?? word.startMs + 300) - word.startMs)
+          const startMs = Math.max(0, Math.round(word.startMs + gesture.deltaMs))
+          timingDraft.set(word.id, { startMs, endMs: startMs + duration })
+        })
+      })
+    })
+    return timingDraft
+  }
+
+  const minDuration = 80
+  if (gesture.mode === 'start') {
+    timingDraft.set(gesture.wordId, {
+      startMs: Math.max(0, Math.min(gesture.originalEnd - minDuration, gesture.originalStart + gesture.deltaMs)),
+      endMs: gesture.originalEnd,
+    })
+  } else {
+    timingDraft.set(gesture.wordId, {
+      startMs: gesture.originalStart,
+      endMs: Math.max(gesture.originalStart + minDuration, gesture.originalEnd + gesture.deltaMs),
+    })
+  }
+  return timingDraft
+}
+
+export function createTimelineGestureSession(
+  getContext: () => TimelineGestureContext,
+) {
+  let active: TimelinePointerGesture | null = null
+  let activeProject: KaraokeProject | null = null
+  let affectedTimingSnapshot = new Map<string, { startMs: number; endMs: number | null }>()
+  let draftPublished = false
+
+  const snapshotAffectedTimings = (project: KaraokeProject, gesture: TimelinePointerGesture) => {
+    const affectedIds = gesture.mode === 'move' ? gesture.ids : new Set([gesture.wordId])
+    const snapshot = new Map<string, { startMs: number; endMs: number | null }>()
+    project.tracks.forEach((track) => {
+      track.lines.forEach((line) => {
+        line.words.forEach((word) => {
+          if (affectedIds.has(word.id) && word.startMs !== null) {
+            snapshot.set(word.id, { startMs: word.startMs, endMs: word.endMs })
+          }
+        })
+      })
+    })
+    return snapshot
+  }
+
+  const affectedTimingsUnchanged = (project: KaraokeProject) => {
+    if (!activeProject || project.id !== activeProject.id || affectedTimingSnapshot.size === 0) return false
+    const remaining = new Map(affectedTimingSnapshot)
+    project.tracks.forEach((track) => {
+      track.lines.forEach((line) => {
+        line.words.forEach((word) => {
+          const timing = remaining.get(word.id)
+          if (
+            timing &&
+            word.startMs === timing.startMs &&
+            word.endMs === timing.endMs
+          ) remaining.delete(word.id)
+        })
+      })
+    })
+    return remaining.size === 0
+  }
+
+  const clear = (pointerId: number, captureTarget: EventTarget) => {
+    if (active?.pointerId !== pointerId || active.captureTarget !== captureTarget) return null
+    const gesture = active
+    active = null
+    activeProject = null
+    affectedTimingSnapshot = new Map()
+    draftPublished = false
+    getContext().onTimingDraftChange(null)
+    return gesture
+  }
+
+  return {
+    begin(gesture: TimelinePointerGesture) {
+      if (active) return false
+      active = gesture
+      activeProject = getContext().project
+      affectedTimingSnapshot = snapshotAffectedTimings(activeProject, gesture)
+      draftPublished = false
+      return true
+    },
+    move(pointerId: number, captureTarget: EventTarget, clientX: number) {
+      if (active?.pointerId !== pointerId || active.captureTarget !== captureTarget) return false
+      const context = getContext()
+      if (context.project !== activeProject) {
+        if (!affectedTimingsUnchanged(context.project)) {
+          clear(pointerId, captureTarget)
+          return false
+        }
+        activeProject = context.project
+      }
+      const deltaMs = Math.round(((clientX - active.clientX) / context.pixelsPerSecond) * 1000)
+      active = { ...active, deltaMs }
+      context.onTimingDraftChange(timingDraftForGesture(context.project, active))
+      draftPublished = true
+      return true
+    },
+    finish(pointerId: number, captureTarget: EventTarget) {
+      const currentProject = getContext().project
+      if (
+        active?.pointerId === pointerId &&
+        active.captureTarget === captureTarget &&
+        currentProject !== activeProject
+      ) {
+        if (!affectedTimingsUnchanged(currentProject)) {
+          clear(pointerId, captureTarget)
+          return false
+        }
+        activeProject = currentProject
+      }
+      const gesture = clear(pointerId, captureTarget)
+      if (!gesture) return false
+
+      const context = getContext()
+      if (gesture.mode === 'move') {
+        if (gesture.deltaMs !== 0) context.onShiftWords(gesture.ids, gesture.deltaMs)
+        return true
+      }
+
+      if (gesture.deltaMs === 0) return true
+
+      const minDuration = 80
+      const startMs = gesture.mode === 'start'
+        ? Math.max(0, Math.min(gesture.originalEnd - minDuration, gesture.originalStart + gesture.deltaMs))
+        : gesture.originalStart
+      const endMs = gesture.mode === 'end'
+        ? Math.max(gesture.originalStart + minDuration, gesture.originalEnd + gesture.deltaMs)
+        : gesture.originalEnd
+      if (startMs !== gesture.originalStart || endMs !== gesture.originalEnd) {
+        context.onResizeWord(gesture.wordId, startMs, endMs)
+      }
+      return true
+    },
+    cancel(pointerId: number, captureTarget: EventTarget) {
+      return clear(pointerId, captureTarget) !== null
+    },
+    owns(pointerId: number, captureTarget: EventTarget) {
+      return active?.pointerId === pointerId && active.captureTarget === captureTarget
+    },
+    captureLost(pointerId: number, eventTarget: EventTarget | null) {
+      if (active?.pointerId !== pointerId) return false
+      const targetDisconnected = active.captureTarget instanceof Node && !active.captureTarget.isConnected
+      if (eventTarget !== active.captureTarget && !targetDisconnected) return false
+      return clear(pointerId, active.captureTarget) !== null
+    },
+    invalidateProject(project: KaraokeProject) {
+      if (!active) return false
+      if (project === activeProject) return false
+      if (!affectedTimingsUnchanged(project)) {
+        return clear(active.pointerId, active.captureTarget) !== null
+      }
+      activeProject = project
+      if (draftPublished) {
+        getContext().onTimingDraftChange(timingDraftForGesture(project, active))
+      }
+      return false
+    },
+    abandon() {
+      const hadActiveGesture = active !== null
+      active = null
+      activeProject = null
+      affectedTimingSnapshot = new Map()
+      draftPublished = false
+      return hadActiveGesture
+    },
+  }
+}
+
+function safelyHasPointerCapture(element: HTMLElement, pointerId: number) {
+  try {
+    return element.hasPointerCapture(pointerId)
+  } catch {
+    return false
+  }
+}
+
+function safelyReleasePointerCapture(element: HTMLElement, pointerId: number) {
+  try {
+    if (element.hasPointerCapture(pointerId)) element.releasePointerCapture(pointerId)
+  } catch {
+    // Capture may already have been released by the browser during cancellation.
+  }
 }
 
 export function Timeline({
@@ -51,15 +264,32 @@ export function Timeline({
   onSelectWord,
   onShiftWords,
   onResizeWord,
+  onTimingDraftChange,
 }: TimelineProps) {
   const viewportRef = useRef<HTMLDivElement>(null)
-  const dragRef = useRef<DragState | null>(null)
-  const [draft, setDraft] = useState<DragState | null>(null)
+  const [timingDraft, setTimingDraft] = useState<ProjectTimingDraft | null>(null)
   const pixelsPerSecond = 72 * zoom
   const width = Math.max(1040, (durationMs / 1000) * pixelsPerSecond)
   const playheadLeft = (currentMs / 1000) * pixelsPerSecond
   const tickStepSeconds = zoom < 0.8 ? 5 : zoom < 1.7 ? 2 : 1
   const labelStepSeconds = zoom < 0.8 ? 10 : zoom < 1.7 ? 5 : 2
+  const gestureContextRef = useRef<TimelineGestureContext | null>(null)
+  gestureContextRef.current = {
+    project,
+    pixelsPerSecond,
+    onTimingDraftChange: (nextDraft) => {
+      setTimingDraft(nextDraft)
+      onTimingDraftChange(nextDraft)
+    },
+    onShiftWords,
+    onResizeWord,
+  }
+  const gestureSessionRef = useRef<ReturnType<typeof createTimelineGestureSession> | null>(null)
+  if (!gestureSessionRef.current) {
+    gestureSessionRef.current = createTimelineGestureSession(() => gestureContextRef.current!)
+  }
+  const parentDraftCallbackRef = useRef(onTimingDraftChange)
+  parentDraftCallbackRef.current = onTimingDraftChange
   const ticks = useMemo(
     () => Array.from({ length: Math.ceil(durationMs / 1000 / tickStepSeconds) + 1 }, (_, index) => index * tickStepSeconds),
     [durationMs, tickStepSeconds],
@@ -81,6 +311,28 @@ export function Timeline({
     }
   }, [Math.floor(currentMs / 500), playheadLeft])
 
+  useEffect(() => () => {
+    if (gestureSessionRef.current?.abandon()) parentDraftCallbackRef.current(null)
+  }, [])
+
+  useLayoutEffect(() => {
+    gestureSessionRef.current!.invalidateProject(project)
+  }, [project])
+
+  useEffect(() => {
+    const captureEnded = (event: Event) => {
+      const pointerId = (event as PointerEvent).pointerId
+      if (typeof pointerId !== 'number') return
+      gestureSessionRef.current!.captureLost(pointerId, event.target)
+    }
+    document.addEventListener('lostpointercapture', captureEnded, true)
+    document.addEventListener('pointercancel', captureEnded, true)
+    return () => {
+      document.removeEventListener('lostpointercapture', captureEnded, true)
+      document.removeEventListener('pointercancel', captureEnded, true)
+    }
+  }, [])
+
   const seekFromPointer = (event: ReactPointerEvent<HTMLElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect()
     const x = event.clientX - bounds.left
@@ -90,46 +342,45 @@ export function Timeline({
   const pointerDown = (event: ReactPointerEvent<HTMLButtonElement>, word: LyricWord) => {
     if (word.startMs === null) return
     event.stopPropagation()
-    const mode = (event.target as HTMLElement).dataset.resize as DragState['mode'] | undefined
+    const mode = (event.target as HTMLElement).dataset.resize as TimelinePointerGesture['mode'] | undefined
     const activeIds = selectedWordIds.has(word.id) && !mode ? new Set(selectedWordIds) : new Set([word.id])
-    if (!selectedWordIds.has(word.id)) onSelectWord(word.id, event.shiftKey || event.metaKey)
-    const drag: DragState = {
+    const drag: TimelinePointerGesture = {
       wordId: word.id,
       mode: mode ?? 'move',
       clientX: event.clientX,
+      pointerId: event.pointerId,
+      captureTarget: event.currentTarget,
       originalStart: word.startMs,
       originalEnd: word.endMs ?? word.startMs + 360,
       ids: activeIds,
       deltaMs: 0,
     }
-    dragRef.current = drag
-    setDraft(drag)
-    event.currentTarget.setPointerCapture(event.pointerId)
+    if (!gestureSessionRef.current!.begin(drag)) return
+    if (!selectedWordIds.has(word.id)) onSelectWord(word.id, event.shiftKey || event.metaKey)
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId)
+    } catch {
+      gestureSessionRef.current!.cancel(event.pointerId, event.currentTarget)
+    }
   }
 
   const pointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    const drag = dragRef.current
-    if (!drag) return
-    const deltaMs = Math.round(((event.clientX - drag.clientX) / pixelsPerSecond) * 1000)
-    const next = { ...drag, deltaMs }
-    dragRef.current = next
-    setDraft(next)
+    gestureSessionRef.current!.move(event.pointerId, event.currentTarget, event.clientX)
   }
 
   const pointerUp = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    const drag = dragRef.current
-    if (!drag) return
-    event.currentTarget.releasePointerCapture(event.pointerId)
-    const minDuration = 80
-    if (drag.mode === 'move') {
-      onShiftWords(drag.ids, drag.deltaMs)
-    } else if (drag.mode === 'start') {
-      onResizeWord(drag.wordId, Math.max(0, Math.min(drag.originalEnd - minDuration, drag.originalStart + drag.deltaMs)), drag.originalEnd)
-    } else {
-      onResizeWord(drag.wordId, drag.originalStart, Math.max(drag.originalStart + minDuration, drag.originalEnd + drag.deltaMs))
-    }
-    dragRef.current = null
-    setDraft(null)
+    if (!gestureSessionRef.current!.finish(event.pointerId, event.currentTarget)) return
+    safelyReleasePointerCapture(event.currentTarget, event.pointerId)
+  }
+
+  const pointerCancel = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (!gestureSessionRef.current!.cancel(event.pointerId, event.currentTarget)) return
+    safelyReleasePointerCapture(event.currentTarget, event.pointerId)
+  }
+
+  const lostPointerCapture = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (safelyHasPointerCapture(event.currentTarget, event.pointerId)) return
+    gestureSessionRef.current!.captureLost(event.pointerId, event.currentTarget)
   }
 
   const untimedWords = project.tracks.flatMap((track) =>
@@ -235,19 +486,9 @@ export function Timeline({
                   {flattenTrack(track).map(({ word }) => {
                     if (word.startMs === null) return null
                     const endMs = word.endMs ?? word.startMs + 360
-                    const isDraftWord = draft?.mode === 'move' ? draft.ids.has(word.id) : draft?.wordId === word.id
-                    let draftStart = word.startMs
-                    let draftEnd = endMs
-                    if (isDraftWord && draft) {
-                      if (draft.mode === 'move') {
-                        draftStart = Math.max(0, word.startMs + draft.deltaMs)
-                        draftEnd = draftStart + (endMs - word.startMs)
-                      } else if (draft.mode === 'start') {
-                        draftStart = Math.max(0, Math.min(draft.originalEnd - 80, draft.originalStart + draft.deltaMs))
-                      } else {
-                        draftEnd = Math.max(draft.originalStart + 80, draft.originalEnd + draft.deltaMs)
-                      }
-                    }
+                    const draftTiming = timingDraft?.get(word.id)
+                    const draftStart = draftTiming?.startMs ?? word.startMs
+                    const draftEnd = draftTiming?.endMs ?? endMs
                     const adjustedStart = timelineTime(draftStart, project.offsetMs)
                     const adjustedEnd = timelineTime(draftEnd, project.offsetMs)
                     if (adjustedEnd <= 0) return null
@@ -264,6 +505,8 @@ export function Timeline({
                         onPointerDown={(event) => pointerDown(event, word)}
                         onPointerMove={pointerMove}
                         onPointerUp={pointerUp}
+                        onPointerCancel={pointerCancel}
+                        onLostPointerCapture={lostPointerCapture}
                         onDoubleClick={() => onSeek(Math.max(0, timelineTime(word.startMs ?? 0, project.offsetMs)))}
                       >
                         <i data-resize="start" className="timeline-word__handle timeline-word__handle--start" />

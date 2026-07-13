@@ -6,7 +6,24 @@ const { createReadStream } = require('node:fs')
 const fs = require('node:fs/promises')
 const path = require('node:path')
 const { Readable } = require('node:stream')
+const {
+  queueProjectWrite,
+  readUtf8FileWithinLimit,
+  writeUtf8FileAtomically,
+} = require('./project-files.cjs')
 const { exportKaraokeVideo, MAX_VIDEO_DURATION_MS } = require('./video-export.cjs')
+const {
+  EXPORT_FILTERS,
+  ensureExportExtension,
+  normalizeExportFormat,
+} = require('./text-export.cjs')
+const {
+  PROJECT_OPEN_FILTERS,
+  PROJECT_SAVE_FILTERS,
+  canonicalSavePath,
+  isCanonicalSavePath,
+  showCanonicalSaveDialog,
+} = require('./save-paths.cjs')
 
 const APP_NAME = 'Okay Karaoke Studio'
 const APP_SCHEME = 'studio-app'
@@ -88,11 +105,6 @@ const APP_MIME_TYPES = new Map([
   ['.woff2', 'font/woff2'],
 ])
 
-const PROJECT_FILTERS = [
-  { name: 'Okay Karaoke Studio Project', extensions: ['oks', 'okstudio', 'json'] },
-  { name: 'All Files', extensions: ['*'] },
-]
-
 const AUDIO_FILTERS = [
   {
     name: 'Audio',
@@ -107,11 +119,6 @@ const LRC_FILTERS = [
   { name: 'All Files', extensions: ['*'] },
 ]
 
-const EXPORT_FILTERS = Object.freeze({
-  lrc: [{ name: 'LRC Lyrics', extensions: ['lrc'] }],
-  ass: [{ name: 'Advanced SubStation Alpha', extensions: ['ass'] }],
-  json: [{ name: 'JSON', extensions: ['json'] }],
-})
 const VIDEO_FILTERS = [{ name: 'MPEG-4 Karaoke Video', extensions: ['mp4'] }]
 
 const mediaFiles = new Map()
@@ -119,7 +126,6 @@ const mediaTokensByOwner = new Map()
 const mediaRequestSequences = new Map()
 const restorableProjectAudioByOwner = new Map()
 const writableProjectPaths = new Set()
-const projectSaveQueues = new Map()
 
 let mainWindow = null
 let activeVideoExport = null
@@ -390,28 +396,8 @@ function safeFileName(value, fallback) {
   return name && name !== '.' && name !== '..' ? name : fallback
 }
 
-function ensureProjectExtension(fileName) {
-  const extension = path.extname(fileName).toLowerCase()
-  return ['.oks', '.okstudio', '.json'].includes(extension) ? fileName : `${fileName}.oks`
-}
-
-function ensureExportExtension(fileName, format) {
-  const currentExtension = path.extname(fileName).toLowerCase()
-  if (currentExtension === `.${format}`) return fileName
-
-  const knownExtensions = new Set(['.lrc', '.ass', '.json', '.mp4', '.txt'])
-  if (!knownExtensions.has(currentExtension)) return `${fileName}.${format}`
-
-  const stem = path.basename(fileName, currentExtension)
-  return `${stem || 'lyrics'}.${format}`
-}
-
 function documentsPath(fileName) {
   return path.join(app.getPath('documents'), fileName)
-}
-
-function isErrnoException(error, code) {
-  return error !== null && typeof error === 'object' && error.code === code
 }
 
 function requireStringWithinBytes(value, fieldName, maxBytes) {
@@ -420,99 +406,6 @@ function requireStringWithinBytes(value, fieldName, maxBytes) {
     throw new RangeError(`${fieldName} exceeds the ${Math.floor(maxBytes / (1024 * 1024))} MB limit`)
   }
   return text
-}
-
-async function readUtf8FileWithinLimit(filePath, maxBytes, label) {
-  const handle = await fs.open(filePath, 'r')
-  try {
-    const fileStats = await handle.stat()
-    if (!fileStats.isFile()) throw new TypeError(`${label} must be a regular file`)
-    if (fileStats.size > maxBytes) {
-      throw new RangeError(`${label} exceeds the ${Math.floor(maxBytes / (1024 * 1024))} MB limit`)
-    }
-
-    const chunks = []
-    const buffer = Buffer.allocUnsafe(Math.min(64 * 1024, maxBytes + 1))
-    let totalBytes = 0
-    while (totalBytes <= maxBytes) {
-      const readLength = Math.min(buffer.length, maxBytes + 1 - totalBytes)
-      const { bytesRead } = await handle.read(buffer, 0, readLength, null)
-      if (bytesRead === 0) break
-      chunks.push(Buffer.from(buffer.subarray(0, bytesRead)))
-      totalBytes += bytesRead
-    }
-
-    if (totalBytes > maxBytes) {
-      throw new RangeError(`${label} exceeds the ${Math.floor(maxBytes / (1024 * 1024))} MB limit`)
-    }
-    return Buffer.concat(chunks, totalBytes).toString('utf8')
-  } finally {
-    await handle.close()
-  }
-}
-
-async function existingFileMode(filePath) {
-  try {
-    return (await fs.stat(filePath)).mode & 0o777
-  } catch (error) {
-    if (isErrnoException(error, 'ENOENT')) return 0o666
-    throw error
-  }
-}
-
-async function syncDirectoryBestEffort(directoryPath) {
-  let handle
-  try {
-    handle = await fs.open(directoryPath, 'r')
-    await handle.sync()
-  } catch {
-    // Some platforms/filesystems do not support fsync on directory handles.
-  } finally {
-    await handle?.close().catch(() => {})
-  }
-}
-
-async function writeUtf8FileAtomically(filePath, contents) {
-  const directoryPath = path.dirname(filePath)
-  const temporaryPath = path.join(
-    directoryPath,
-    `.okay-karaoke-save-${process.pid}-${randomUUID()}.tmp`,
-  )
-  const mode = await existingFileMode(filePath)
-  let handle
-  let temporaryFileCreated = false
-
-  try {
-    handle = await fs.open(temporaryPath, 'wx', mode)
-    temporaryFileCreated = true
-    await handle.writeFile(contents, 'utf8')
-    await handle.sync()
-    await handle.close()
-    handle = undefined
-    await fs.rename(temporaryPath, filePath)
-    temporaryFileCreated = false
-    await syncDirectoryBestEffort(directoryPath)
-  } catch (error) {
-    await handle?.close().catch(() => {})
-    if (temporaryFileCreated) await fs.unlink(temporaryPath).catch(() => {})
-    throw error
-  }
-}
-
-async function queueProjectWrite(filePath, contents) {
-  const previousWrite = projectSaveQueues.get(filePath) || Promise.resolve()
-  const pendingWrite = previousWrite
-    .catch(() => {})
-    .then(() => writeUtf8FileAtomically(filePath, contents))
-  projectSaveQueues.set(filePath, pendingWrite)
-
-  try {
-    await pendingWrite
-  } finally {
-    if (projectSaveQueues.get(filePath) === pendingWrite) {
-      projectSaveQueues.delete(filePath)
-    }
-  }
 }
 
 function revokeMediaToken(token) {
@@ -590,10 +483,7 @@ function normalizeProjectRequest(value) {
 function normalizeExportRequest(value) {
   if (!isRecord(value)) throw new TypeError('exportText requires an options object')
 
-  const format = requireString(value.format, 'format').toLowerCase()
-  if (!Object.hasOwn(EXPORT_FILTERS, format)) {
-    throw new TypeError('format must be lrc, ass, or json')
-  }
+  const format = normalizeExportFormat(value.format)
 
   return {
     format,
@@ -702,7 +592,7 @@ function registerIpcHandlers() {
       title: 'Open Karaoke Project',
       buttonLabel: 'Open Project',
       properties: ['openFile'],
-      filters: PROJECT_FILTERS,
+      filters: PROJECT_OPEN_FILTERS,
     })
 
     if (result.canceled || result.filePaths.length === 0) return null
@@ -722,25 +612,31 @@ function registerIpcHandlers() {
     const owner = assertTrustedSender(event)
     const request = normalizeProjectRequest(value)
     const requestedPath = request.path ? path.resolve(request.path) : null
+    const requestedPathIsWritable = requestedPath
+      ? writableProjectPaths.has(requestedPath)
+      : false
 
-    let filePath = requestedPath && writableProjectPaths.has(requestedPath)
+    let filePath = requestedPath &&
+      isCanonicalSavePath(requestedPath, 'oks') &&
+      requestedPathIsWritable
       ? requestedPath
       : null
 
     if (!filePath) {
-      const defaultName = ensureProjectExtension(safeFileName(
-        request.suggestedName || requestedPath,
-        'Untitled Karaoke Project.oks',
-      ))
-      const result = await dialog.showSaveDialog(owner, {
+      const defaultName = ensureExportExtension(
+        safeFileName(request.suggestedName, 'Untitled Karaoke Project.oks'),
+        'oks',
+      )
+      const defaultPath = requestedPath && requestedPathIsWritable
+        ? canonicalSavePath(requestedPath, 'oks')
+        : documentsPath(defaultName)
+      filePath = await showCanonicalSaveDialog(dialog.showSaveDialog.bind(dialog), owner, {
         title: 'Save Karaoke Project',
         buttonLabel: 'Save Project',
-        defaultPath: documentsPath(defaultName),
-        filters: PROJECT_FILTERS.slice(0, 1),
-      })
-
-      if (result.canceled || !result.filePath) return null
-      filePath = path.resolve(result.filePath)
+        defaultPath,
+        filters: PROJECT_SAVE_FILTERS,
+      }, 'oks')
+      if (!filePath) return null
     }
 
     await queueProjectWrite(filePath, request.contents)
@@ -824,16 +720,14 @@ function registerIpcHandlers() {
       safeFileName(request.suggestedName, `lyrics.${request.format}`),
       request.format,
     )
-    const result = await dialog.showSaveDialog(owner, {
+    const filePath = await showCanonicalSaveDialog(dialog.showSaveDialog.bind(dialog), owner, {
       title: `Export ${request.format.toUpperCase()}`,
       buttonLabel: 'Export',
       defaultPath: documentsPath(defaultName),
       filters: EXPORT_FILTERS[request.format],
-    })
+    }, request.format)
 
-    if (result.canceled || !result.filePath) return null
-
-    const filePath = path.resolve(result.filePath)
+    if (!filePath) return null
     await writeUtf8FileAtomically(filePath, request.contents)
     return { path: filePath }
   })
@@ -851,17 +745,19 @@ function registerIpcHandlers() {
         safeFileName(request.suggestedName, 'karaoke-video.mp4'),
         'mp4',
       )
-      const result = await dialog.showSaveDialog(owner, {
-        title: 'Export Karaoke Video',
-        buttonLabel: 'Render Video',
-        defaultPath: documentsPath(defaultName),
-        filters: VIDEO_FILTERS,
-      })
-      if (result.canceled || !result.filePath) return null
+      const selectedOutputPath = await showCanonicalSaveDialog(
+        dialog.showSaveDialog.bind(dialog),
+        owner,
+        {
+          title: 'Export Karaoke Video',
+          buttonLabel: 'Render Video',
+          defaultPath: documentsPath(defaultName),
+          filters: VIDEO_FILTERS,
+        },
+        'mp4',
+      )
+      if (!selectedOutputPath) return null
       if (operation.controller.signal.aborted) throw canceledVideoExportError()
-      const selectedOutputPath = path.extname(result.filePath).toLowerCase() === '.mp4'
-        ? result.filePath
-        : `${result.filePath}.mp4`
 
       const sendProgress = (progress) => {
         if (!event.sender.isDestroyed()) {

@@ -14,6 +14,13 @@ export interface WordRef {
   lineIndex: number
 }
 
+export interface WordTimingDraft {
+  startMs: number
+  endMs: number
+}
+
+export type ProjectTimingDraft = ReadonlyMap<string, WordTimingDraft>
+
 export function flattenTrack(track: VocalTrack): WordRef[] {
   return track.lines.flatMap((line, lineIndex) =>
     line.words.map((word, wordIndex) => ({ word, line, track, wordIndex, lineIndex })),
@@ -85,42 +92,102 @@ export function patchWord(
   wordId: string,
   patch: Partial<Pick<LyricWord, 'text' | 'startMs' | 'endMs'>>,
 ): KaraokeProject {
-  return {
-    ...project,
-    updatedAt: new Date().toISOString(),
-    tracks: project.tracks.map((track) => ({
-      ...track,
-      lines: track.lines.map((line) => {
-        if (!line.words.some((word) => word.id === wordId)) return line
-        return recalculateLine({
-          ...line,
-          words: line.words.map((word) => (word.id === wordId ? { ...word, ...patch } : word)),
-        })
-      }),
-    })),
-  }
+  let projectChanged = false
+  const tracks = project.tracks.map((track) => {
+    let trackChanged = false
+    const lines = track.lines.map((line) => {
+      let lineChanged = false
+      const words = line.words.map((word) => {
+        if (word.id !== wordId) return word
+        const changed = Object.entries(patch).some(
+          ([key, value]) => word[key as keyof Pick<LyricWord, 'text' | 'startMs' | 'endMs'>] !== value,
+        )
+        if (!changed) return word
+        lineChanged = true
+        return { ...word, ...patch }
+      })
+      if (!lineChanged) return line
+      trackChanged = true
+      return recalculateLine({ ...line, words })
+    })
+    if (!trackChanged) return track
+    projectChanged = true
+    return { ...track, lines }
+  })
+
+  return projectChanged
+    ? { ...project, updatedAt: new Date().toISOString(), tracks }
+    : project
+}
+
+/**
+ * Produces a render-only view of a project with draft word timings applied.
+ * The project's persisted metadata and the source object are intentionally left
+ * untouched so an in-progress pointer gesture cannot enter history or a save.
+ */
+export function applyTimingDraft(
+  project: KaraokeProject,
+  draft: ProjectTimingDraft | null,
+): KaraokeProject {
+  if (!draft?.size) return project
+
+  let projectChanged = false
+  const tracks = project.tracks.map((track) => {
+    let trackChanged = false
+    const lines = track.lines.map((line) => {
+      let lineChanged = false
+      const words = line.words.map((word) => {
+        const timing = draft.get(word.id)
+        if (
+          !timing ||
+          (word.startMs === timing.startMs && word.endMs === timing.endMs)
+        ) return word
+
+        lineChanged = true
+        return { ...word, startMs: timing.startMs, endMs: timing.endMs }
+      })
+
+      if (!lineChanged) return line
+      trackChanged = true
+      return recalculateLine({ ...line, words })
+    })
+
+    if (!trackChanged) return track
+    projectChanged = true
+    return { ...track, lines }
+  })
+
+  return projectChanged ? { ...project, tracks } : project
 }
 
 export function shiftWords(project: KaraokeProject, wordIds: Set<string>, deltaMs: number): KaraokeProject {
   if (Math.abs(deltaMs) < 1) return project
-  return {
-    ...project,
-    updatedAt: new Date().toISOString(),
-    tracks: project.tracks.map((track) => ({
-      ...track,
-      lines: track.lines.map((line) =>
-        recalculateLine({
-          ...line,
-          words: line.words.map((word) => {
-            if (!wordIds.has(word.id) || word.startMs === null) return word
-            const duration = Math.max(80, (word.endMs ?? word.startMs + 300) - word.startMs)
-            const startMs = Math.max(0, Math.round(word.startMs + deltaMs))
-            return { ...word, startMs, endMs: startMs + duration }
-          }),
-        }),
-      ),
-    })),
-  }
+  let projectChanged = false
+  const tracks = project.tracks.map((track) => {
+    let trackChanged = false
+    const lines = track.lines.map((line) => {
+      let lineChanged = false
+      const words = line.words.map((word) => {
+        if (!wordIds.has(word.id) || word.startMs === null) return word
+        const duration = Math.max(80, (word.endMs ?? word.startMs + 300) - word.startMs)
+        const startMs = Math.max(0, Math.round(word.startMs + deltaMs))
+        const endMs = startMs + duration
+        if (startMs === word.startMs && endMs === word.endMs) return word
+        lineChanged = true
+        return { ...word, startMs, endMs }
+      })
+      if (!lineChanged) return line
+      trackChanged = true
+      return recalculateLine({ ...line, words })
+    })
+    if (!trackChanged) return track
+    projectChanged = true
+    return { ...track, lines }
+  })
+
+  return projectChanged
+    ? { ...project, updatedAt: new Date().toISOString(), tracks }
+    : project
 }
 
 export function downloadText(filename: string, contents: string, type = 'text/plain') {

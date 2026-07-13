@@ -1,4 +1,4 @@
-import { CheckCircle2, Download, FilePlus2, FolderOpen, Redo2, Save, Undo2 } from 'lucide-react'
+import { CheckCircle2, CircleHelp, Download, FilePlus2, FolderOpen, Redo2, Save, Undo2 } from 'lucide-react'
 import { Button, IconButton, LogoMark } from './ui'
 
 interface TopBarProps {
@@ -12,6 +12,7 @@ interface TopBarProps {
   onSave: () => void
   onUndo: () => void
   onRedo: () => void
+  onShowWorkflow: () => void
   onValidate: () => void
   onExport: () => void
 }
@@ -27,6 +28,7 @@ export function TopBar({
   onSave,
   onUndo,
   onRedo,
+  onShowWorkflow,
   onValidate,
   onExport,
 }: TopBarProps) {
@@ -58,6 +60,9 @@ export function TopBar({
           <IconButton aria-label="Redo" title="Redo (⇧⌘Z)" disabled={!canRedo} onClick={onRedo}><Redo2 size={17} /></IconButton>
         </div>
         <span className="toolbar-divider" />
+        <Button className="workflow-button" variant="ghost" onClick={onShowWorkflow}>
+          <CircleHelp size={15} /> Workflow
+        </Button>
         <button className={`validation-button ${issueCount ? 'has-issues' : ''}`} onClick={onValidate}>
           <CheckCircle2 size={15} />
           {issueCount ? `${issueCount} to review` : 'Timing clean'}

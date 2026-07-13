@@ -1,7 +1,7 @@
 export {}
 
 declare global {
-  type StudioExportFormat = 'lrc' | 'ass' | 'json'
+  type StudioExportFormat = 'lrc' | 'ass' | 'oks'
 
   type StudioMenuAction =
     | 'new'

@@ -18,7 +18,7 @@ import { KaraokePreview } from './components/KaraokePreview'
 import { LyricsPanel } from './components/LyricsPanel'
 import { Timeline } from './components/Timeline'
 import { TransportBar } from './components/TransportBar'
-import { ExportDialog, LyricsEditorDialog, ValidationDialog } from './components/Dialogs'
+import { ExportDialog, LyricsEditorDialog, ValidationDialog, WorkflowGuideDialog } from './components/Dialogs'
 import { usePlayback } from './hooks/usePlayback'
 import { useWaveform } from './hooks/useWaveform'
 import {
@@ -26,10 +26,12 @@ import {
   effectiveDuration,
   flattenProject,
   flattenTrack,
+  applyTimingDraft,
   patchWord,
   recalculateLine,
   shiftWords,
   slugify,
+  type ProjectTimingDraft,
 } from './utils'
 
 interface HistoryEntry {
@@ -97,7 +99,7 @@ function useProjectHistory(initialProject: KaraokeProject) {
     })
   }, [])
 
-  const markSaved = useCallback(() => setSavedRevision(entry.revision), [entry.revision])
+  const markSaved = useCallback((revision: number) => setSavedRevision(revision), [])
 
   return {
     project: entry.project,
@@ -118,6 +120,71 @@ function useProjectHistory(initialProject: KaraokeProject) {
 interface ToastState {
   message: string
   tone: 'success' | 'warning' | 'neutral'
+}
+
+interface WorkflowGuideActionDependencies {
+  canStartSync: boolean
+  close: () => void
+  startNew: () => void
+  open: () => void
+  attachAudio: () => void
+  editLyrics: () => void
+  importLrc: () => void
+  startSync: () => void
+  save: () => void
+  exportProject: () => void
+}
+
+export const EDITABLE_PROJECT_EXPORT_FORMAT: StudioExportFormat = 'oks'
+
+export function createWorkflowGuideActions({
+  canStartSync,
+  close,
+  startNew,
+  open,
+  attachAudio,
+  editLyrics,
+  importLrc,
+  startSync,
+  save,
+  exportProject,
+}: WorkflowGuideActionDependencies) {
+  const closeThen = (action: () => void) => () => {
+    close()
+    action()
+  }
+
+  return {
+    canStartSync,
+    onClose: close,
+    onNew: closeThen(startNew),
+    onOpen: closeThen(open),
+    onAttachAudio: closeThen(attachAudio),
+    onEditLyrics: closeThen(editLyrics),
+    onImportLrc: closeThen(importLrc),
+    onStartSync: () => {
+      if (!canStartSync) return
+      close()
+      startSync()
+    },
+    onSave: closeThen(save),
+    onExport: closeThen(exportProject),
+  }
+}
+
+export interface ActiveTimingDraft {
+  revision: number
+  timings: ProjectTimingDraft
+}
+
+export function projectForTimingPreview(
+  project: KaraokeProject,
+  revision: number,
+  timingDraft: ActiveTimingDraft | null,
+) {
+  return timingDraft?.revision === revision
+    ? applyTimingDraft(project, timingDraft.timings)
+    : project
 }
 
 function inputHasTypingFocus() {
@@ -144,13 +211,17 @@ export default function App() {
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const [videoExportProgress, setVideoExportProgress] = useState<StudioVideoExportProgress | null>(null)
   const [validationDialogOpen, setValidationDialogOpen] = useState(false)
+  const [workflowGuideOpen, setWorkflowGuideOpen] = useState(false)
   const [toast, setToast] = useState<ToastState | null>(null)
+  const [timingDraft, setTimingDraft] = useState<ActiveTimingDraft | null>(null)
   const projectInputRef = useRef<HTMLInputElement>(null)
   const audioInputRef = useRef<HTMLInputElement>(null)
   const lrcInputRef = useRef<HTMLInputElement>(null)
   const currentTimeRef = useRef(0)
   const syncHeldRef = useRef<{ wordId: string; startMs: number } | null>(null)
   const projectRestoreSequenceRef = useRef(0)
+  const projectLifecycleSequenceRef = useRef(0)
+  const saveRequestSequenceRef = useRef(0)
   const videoExportActiveRef = useRef(false)
 
   const persistAudioDuration = useCallback((nextDurationMs: number) => {
@@ -165,6 +236,14 @@ export default function App() {
   const playback = usePlayback({ durationMs, audioUrl, onDuration: persistAudioDuration })
   const waveform = useWaveform(audioUrl)
   const lyricTimeMs = lyricTimeAtPlayback(playback.currentMs, project.offsetMs)
+  const previewProject = useMemo(
+    () => projectForTimingPreview(project, history.revision, timingDraft),
+    [history.revision, project, timingDraft],
+  )
+
+  const updateTimingDraft = useCallback((timings: ProjectTimingDraft | null) => {
+    setTimingDraft(timings ? { revision: history.revision, timings } : null)
+  }, [history.revision])
 
   useEffect(() => {
     currentTimeRef.current = playback.currentMs
@@ -255,6 +334,7 @@ export default function App() {
 
     const restoreSequence = projectRestoreSequenceRef.current + 1
     projectRestoreSequenceRef.current = restoreSequence
+    projectLifecycleSequenceRef.current += 1
     history.reset(next, true)
     setProjectPath(path)
     setActiveTrackId(next.tracks[0]?.id ?? '')
@@ -300,6 +380,7 @@ export default function App() {
   const handleNew = useCallback(() => {
     if (!confirmDiscardChanges('Discard the unsaved changes and start a new project?')) return
     projectRestoreSequenceRef.current += 1
+    projectLifecycleSequenceRef.current += 1
     const next = createProject({ title: 'Untitled Song', artist: 'Unknown Artist' })
     history.reset(next, true)
     setProjectPath(null)
@@ -325,6 +406,15 @@ export default function App() {
   }, [openProjectContents])
 
   const handleSave = useCallback(async (saveAs = false) => {
+    const saveRequestSequence = saveRequestSequenceRef.current + 1
+    saveRequestSequenceRef.current = saveRequestSequence
+    const projectLifecycleSequence = projectLifecycleSequenceRef.current
+    const savedRevision = history.revision
+    const saveIsCurrent = () => (
+      saveRequestSequence === saveRequestSequenceRef.current &&
+      projectLifecycleSequence === projectLifecycleSequenceRef.current
+    )
+
     try {
       const contents = serializeProject(project)
       const suggestedName = `${slugify(project.title)}.oks`
@@ -335,17 +425,20 @@ export default function App() {
           contents,
         })
         if (!result) return
+        if (!saveIsCurrent()) return
         setProjectPath(result.path)
       } else {
         downloadText(suggestedName, contents, 'application/json')
       }
-      history.markSaved()
+      if (!saveIsCurrent()) return
+      history.markSaved(savedRevision)
       showToast('Project saved', 'success')
     } catch (error) {
+      if (!saveIsCurrent()) return
       setValidationDialogOpen(true)
       showToast(error instanceof Error ? error.message : 'Project could not be saved.', 'warning')
     }
-  }, [history.markSaved, project, projectPath, showToast])
+  }, [history.markSaved, history.revision, project, projectPath, showToast])
 
   const applyAudio = useCallback((path: string, url: string, name?: string) => {
     projectRestoreSequenceRef.current += 1
@@ -397,12 +490,12 @@ export default function App() {
         : format === 'ass'
           ? exportAss(project)
           : serializeProject(project)
-      const suggestedName = `${base}.${format === 'json' ? 'oks' : format}`
+      const suggestedName = `${base}.${format}`
       if (window.studio) {
         const result = await window.studio.exportText({ suggestedName, contents, format })
         if (!result) return
       } else {
-        downloadText(suggestedName, contents, format === 'json' ? 'application/json' : 'text/plain')
+        downloadText(suggestedName, contents, format === 'oks' ? 'application/json' : 'text/plain')
       }
       setExportDialogOpen(false)
       showToast(`${format.toUpperCase()} export created`, 'success')
@@ -599,6 +692,19 @@ export default function App() {
     })
   }, [handleImportAudio, handleImportLrc, handleNew, handleOpen, handleSave, history.redo, history.undo, playback.toggle, showToast])
 
+  const workflowGuideActions = createWorkflowGuideActions({
+    canStartSync: syncWords.length > 0,
+    close: () => setWorkflowGuideOpen(false),
+    startNew: handleNew,
+    open: () => void handleOpen(),
+    attachAudio: () => void handleImportAudio(),
+    editLyrics: () => setLyricsDialogOpen(true),
+    importLrc: () => void handleImportLrc(),
+    startSync: toggleSyncMode,
+    save: () => void handleSave(false),
+    exportProject: () => setExportDialogOpen(true),
+  })
+
   const syncWordId = heldWordId ?? (syncMode ? syncWords[syncCursor]?.id ?? null : null)
 
   return (
@@ -614,6 +720,7 @@ export default function App() {
         onSave={() => void handleSave(false)}
         onUndo={history.undo}
         onRedo={history.redo}
+        onShowWorkflow={() => setWorkflowGuideOpen(true)}
         onValidate={() => setValidationDialogOpen(true)}
         onExport={() => setExportDialogOpen(true)}
       />
@@ -649,7 +756,7 @@ export default function App() {
         <div className="unified-workspace">
           <div className="workspace-top">
             <KaraokePreview
-              project={project}
+              project={previewProject}
               playbackMs={playback.currentMs}
               lyricMs={lyricTimeMs}
               selectedWordIds={selectedWordIds}
@@ -681,6 +788,7 @@ export default function App() {
             onSelectWord={handleSelectWordId}
             onShiftWords={(ids, deltaMs) => commit((current) => shiftWords(current, ids, deltaMs))}
             onResizeWord={(wordId, startMs, endMs) => commit((current) => patchWord(current, wordId, { startMs, endMs }))}
+            onTimingDraftChange={updateTimingDraft}
           />
         </div>
       </main>
@@ -747,6 +855,9 @@ export default function App() {
           }}
         />
       )}
+      {workflowGuideOpen && activeTrack && (
+        <WorkflowGuideDialog {...workflowGuideActions} />
+      )}
       {exportDialogOpen && activeTrack && (
         <ExportDialog
           projectTitle={project.title}
@@ -757,7 +868,7 @@ export default function App() {
           onExportAss={() => void exportText('ass')}
           onExportVideo={() => void exportVideo()}
           onCancelVideo={cancelVideoExport}
-          onExportProject={() => void exportText('json')}
+          onExportProject={() => void exportText(EDITABLE_PROJECT_EXPORT_FORMAT)}
           videoAvailable={Boolean(window.studio?.exportVideo && project.audioPath && playback.hasAudio)}
           videoProgress={videoExportProgress}
         />
