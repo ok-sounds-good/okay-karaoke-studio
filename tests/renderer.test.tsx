@@ -118,14 +118,14 @@ describe('offset-aware renderer state', () => {
   it('matches video export by showing only soloed preview tracks', () => {
     const lead = createVocalTrack({
       id: 'lead',
-      name: 'Lead',
-      lines: [retimeLine(createLyricLine('Hidden lead'), 1_000, 2_000)],
+      name: 'Hidden track label',
+      lines: [retimeLine(createLyricLine('Hidden lyric'), 1_000, 2_000)],
     })
     const solo = createVocalTrack({
       id: 'duet',
-      name: 'Solo duet',
+      name: 'Solo track label',
       solo: true,
-      lines: [retimeLine(createLyricLine('Visible duet'), 1_000, 2_000)],
+      lines: [retimeLine(createLyricLine('Visible lyric'), 1_000, 2_000)],
     })
     const project = createProject({ tracks: [lead, solo] })
     const markup = renderToStaticMarkup(
@@ -137,8 +137,27 @@ describe('offset-aware renderer state', () => {
       />,
     )
 
-    expect(markup).toContain('Solo duet')
-    expect(markup).not.toContain('>Lead<')
+    expect(markup).toContain('Visible lyric')
+    expect(markup).not.toContain('Hidden lyric')
+    expect(markup).not.toContain('Solo track label')
+    expect(markup).not.toContain('Hidden track label')
+    expect(markup).not.toContain('stage-voice')
+  })
+
+  it('leaves lyric breaks visually empty instead of inserting an instrumental graphic', () => {
+    const project = createProject({
+      tracks: [createVocalTrack({ id: 'lead', name: 'Lead', lines: [] })],
+    })
+    const markup = renderToStaticMarkup(
+      <KaraokePreview
+        project={project}
+        playbackMs={5_000}
+        lyricMs={5_000}
+        selectedWordIds={new Set()}
+      />,
+    )
+
+    expect(markup).not.toMatch(/instrumental/iu)
   })
 })
 

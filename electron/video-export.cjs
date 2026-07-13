@@ -7,19 +7,39 @@ const path = require('node:path')
 const { randomUUID } = require('node:crypto')
 const { ffmpegExecutableCandidates } = require('./ffmpeg-setup.cjs')
 
-const VIDEO_WIDTH = 1920
-const VIDEO_HEIGHT = 1080
-const VIDEO_RENDER_FPS = 10
-const VIDEO_OUTPUT_FPS = 30
-const FRAME_INTERVAL_MS = 1_000 / VIDEO_RENDER_FPS
+const VIDEO_RESOLUTION_PRESETS = Object.freeze({
+  '240p': Object.freeze({ width: 426, height: 240 }),
+  '360p': Object.freeze({ width: 640, height: 360 }),
+  '480p': Object.freeze({ width: 854, height: 480 }),
+  '720p': Object.freeze({ width: 1280, height: 720 }),
+  '1080p': Object.freeze({ width: 1920, height: 1080 }),
+  '1440p': Object.freeze({ width: 2560, height: 1440 }),
+  '2160p': Object.freeze({ width: 3840, height: 2160 }),
+})
+const VIDEO_FRAME_RATES = Object.freeze([30, 60])
+const DEFAULT_VIDEO_RESOLUTION = '720p'
+const DEFAULT_VIDEO_FPS = 30
+const VIDEO_RENDER_FPS = DEFAULT_VIDEO_FPS
 const MAX_VIDEO_DURATION_MS = 30 * 60 * 1000
-const MAX_VIDEO_FRAMES = Math.ceil(MAX_VIDEO_DURATION_MS / FRAME_INTERVAL_MS)
+const MAX_VIDEO_FRAMES = Math.ceil(MAX_VIDEO_DURATION_MS * Math.max(...VIDEO_FRAME_RATES) / 1_000)
 const MAX_TRACKS = 2
 const MAX_LINES = 20_000
 const MAX_WORDS = 150_000
 const MIN_LYRIC_DISPLAY_LINES = 1
 const MAX_LYRIC_DISPLAY_LINES = 5
 const DEFAULT_LYRIC_DISPLAY = Object.freeze({ lineCount: 3, advanceMode: 'clear' })
+
+function normalizeVideoSettings(value = {}) {
+  if (!isRecord(value)) throw new TypeError('Video settings must be an object')
+  const resolution = value.resolution ?? DEFAULT_VIDEO_RESOLUTION
+  const fps = value.fps ?? DEFAULT_VIDEO_FPS
+  if (typeof resolution !== 'string' || !Object.hasOwn(VIDEO_RESOLUTION_PRESETS, resolution)) {
+    throw new RangeError('Video resolution preset is not supported')
+  }
+  const dimensions = VIDEO_RESOLUTION_PRESETS[resolution]
+  if (!VIDEO_FRAME_RATES.includes(fps)) throw new RangeError('Video frame rate must be 30 or 60 fps')
+  return { resolution, fps, ...dimensions }
+}
 
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -263,59 +283,41 @@ function createVideoIndex(project) {
   }
 }
 
-function buildFrameTimelineForProject(project, requestedDurationMs) {
+function buildFrameTimelineForProject(project, requestedDurationMs, fps = DEFAULT_VIDEO_FPS) {
+  if (!VIDEO_FRAME_RATES.includes(fps)) {
+    throw new RangeError('Video frame rate must be 30 or 60 fps')
+  }
   const durationMs = effectiveVideoDurationForProject(project, requestedDurationMs)
-  const frameCount = Math.ceil(durationMs / FRAME_INTERVAL_MS)
+  const frameCount = Math.ceil(durationMs * fps / 1_000)
   if (frameCount > MAX_VIDEO_FRAMES) {
     throw new RangeError(`Video export would require more than ${MAX_VIDEO_FRAMES} lyric frames`)
   }
   const times = Array.from(
     { length: frameCount },
-    (_unused, index) => Math.round(index * FRAME_INTERVAL_MS),
+    (_unused, index) => Math.round(index * 1_000 / fps),
   )
-  return { project, durationMs, times }
+  return { project, durationMs, fps, times }
 }
 
-function buildFrameTimeline(projectValue, requestedDurationMs) {
+function buildFrameTimeline(projectValue, requestedDurationMs, settings = {}) {
+  const { fps } = normalizeVideoSettings(settings)
   return buildFrameTimelineForProject(
     normalizeProjectForVideo(projectValue),
     requestedDurationMs,
+    fps,
   )
 }
 
-function lineProgress(line, lyricMs) {
-  const displayWords = line.words.filter((word) => word.text)
-  const totalCharacters = Math.max(
-    1,
-    displayWords.reduce((total, word) => total + word.text.replaceAll('/', '·').length, 0) + Math.max(0, displayWords.length - 1),
-  )
-  let charactersBefore = 0
-
-  for (const word of displayWords) {
-    const length = word.text.replaceAll('/', '·').length
-    if (word.startMs === null || word.endMs === null) {
-      charactersBefore += length + 1
-      continue
-    }
-    if (lyricMs <= word.startMs) return Math.max(0, Math.min(1, charactersBefore / totalCharacters))
-    if (lyricMs < word.endMs) {
-      const progress = (lyricMs - word.startMs) / Math.max(1, word.endMs - word.startMs)
-      return Math.max(0, Math.min(1, (charactersBefore + length * progress) / totalCharacters))
-    }
-    charactersBefore += length + 1
-  }
-
-  const range = rawLineRange(line)
-  if (!displayWords.some((word) => word.startMs !== null && word.endMs !== null) && range) {
-    return Math.max(0, Math.min(1, (lyricMs - range.startMs) / Math.max(1, range.endMs - range.startMs)))
-  }
-  return 1
+function wordProgress(word, lyricMs) {
+  if (word.startMs === null || word.endMs === null) return 0
+  if (lyricMs <= word.startMs) return 0
+  if (lyricMs >= word.endMs) return 1
+  return Math.max(0, Math.min(1, (lyricMs - word.startMs) / Math.max(1, word.endMs - word.startMs)))
 }
 
 function createFrameCursor(index) {
   return {
     trackPositions: index.tracks.map(() => 0),
-    upcomingPosition: 0,
   }
 }
 
@@ -366,28 +368,17 @@ function frameStateAtIndex(index, playbackMs, cursor) {
       const line = trackLines[lineIndex]
       if (line && lines.length < project.lyricDisplay.lineCount) {
         lines.push({
-          track: track.name,
           color: track.color,
           text: line.text.replaceAll('/', '·'),
-          progress: lineProgress(line, lyricMs),
+          words: line.words
+            .filter((word) => word.text)
+            .map((word) => ({
+              text: word.text.replaceAll('/', '·'),
+              progress: wordProgress(word, lyricMs),
+            })),
         })
       }
     })
-  }
-
-  let upcoming
-  if (cursor) {
-    while (
-      cursor.upcomingPosition < index.upcomingLines.length &&
-      index.upcomingLines[cursor.upcomingPosition].range.startMs <= playbackMs
-    ) {
-      cursor.upcomingPosition += 1
-    }
-    upcoming = index.upcomingLines[cursor.upcomingPosition]
-  } else {
-    upcoming = index.upcomingLines.find(
-      (entry) => entry.range.startMs > playbackMs,
-    )
   }
 
   return {
@@ -395,9 +386,7 @@ function frameStateAtIndex(index, playbackMs, cursor) {
     artist: project.artist || 'Unknown artist',
     playbackMs,
     showTitle,
-    instrumental: !showTitle && lines.length === 0,
     lines,
-    nextInMs: upcoming ? Math.max(0, upcoming.range.startMs - playbackMs) : null,
   }
 }
 
@@ -406,22 +395,26 @@ function frameStateAt(projectValue, playbackMs) {
   return frameStateAtIndex(createVideoIndex(project), playbackMs)
 }
 
-function renderDocument() {
+function renderDocument(settings = {}) {
+  const { width, height } = normalizeVideoSettings(settings)
+  const scaleX = width / 1920
+  const scaleY = height / 1080
   return `<!doctype html>
 <html><head><meta charset="utf-8"><style>
 *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#080a0e;color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}
-body{position:relative;background:radial-gradient(circle at 18% 20%,rgba(215,250,74,.18),transparent 34%),radial-gradient(circle at 82% 35%,rgba(88,214,222,.16),transparent 38%),linear-gradient(155deg,#171e1b 0%,#0e1217 52%,#171119 100%)}
+.scene{position:absolute;width:1920px;height:1080px;overflow:hidden;transform:scale(${scaleX},${scaleY});transform-origin:0 0;background:radial-gradient(circle at 18% 20%,rgba(215,250,74,.18),transparent 34%),radial-gradient(circle at 82% 35%,rgba(88,214,222,.16),transparent 38%),linear-gradient(155deg,#171e1b 0%,#0e1217 52%,#171119 100%)}
 .grain{position:absolute;inset:0;opacity:.12;background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.018) 1px,transparent 1px);background-size:5px 5px}.safe{position:absolute;inset:64px 96px;border:2px solid rgba(255,255,255,.08);border-radius:30px}
 .brand{position:absolute;left:86px;top:58px;font-size:25px;font-weight:800;letter-spacing:.22em;color:#d7fa4a}.clock{position:absolute;right:86px;top:56px;font:600 27px ui-monospace,SFMono-Regular,Menlo,monospace;color:rgba(255,255,255,.58)}
 .content{position:absolute;inset:140px 130px 120px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}.title-card span{font-size:25px;letter-spacing:.2em;text-transform:uppercase;color:#d7fa4a}.title-card h1{margin:34px 0 14px;font-size:104px;line-height:1.04;max-width:1500px}.title-card p{margin:0;font-size:42px;color:rgba(255,255,255,.68)}
-.lines{width:100%;display:flex;flex-direction:column;gap:18px}.line-label{margin-bottom:4px;font-size:18px;font-weight:750;letter-spacing:.14em;text-transform:uppercase}.lyric{position:relative;width:100%;height:1.18em;font-size:82px;line-height:1.12;font-weight:850;letter-spacing:.01em;white-space:nowrap}.lyric span{position:absolute;inset:0;text-align:center}.lyric .base{color:rgba(255,255,255,.46);text-shadow:0 5px 8px rgba(0,0,0,.8),0 0 4px #000}.lyric .fill{color:var(--accent);clip-path:inset(0 calc(100% - var(--progress)) 0 0);text-shadow:0 5px 8px rgba(0,0,0,.8),0 0 16px color-mix(in srgb,var(--accent) 42%,transparent)}
-.instrumental{font-size:64px;font-weight:760;letter-spacing:.08em}.instrumental small{display:block;margin-top:25px;font-size:27px;font-weight:500;color:rgba(255,255,255,.55)}
+.lines{width:100%;display:flex;flex-direction:column;gap:18px}.lyric{width:100%;height:1.18em;font-size:82px;line-height:1.12;font-weight:850;letter-spacing:.01em;white-space:nowrap}.word{position:relative;display:inline-block;color:rgba(255,255,255,.46);filter:drop-shadow(0 5px 5px rgba(0,0,0,.8))}.word-fill{position:absolute;inset:0 auto 0 0;width:0;overflow:hidden;color:var(--accent);white-space:nowrap}
 .footer{position:absolute;left:86px;right:86px;bottom:53px;display:flex;justify-content:space-between;font-size:24px;color:rgba(255,255,255,.48)}
-</style></head><body><div class="grain"></div><div class="safe"></div><div class="brand">OKAY / STUDIO</div><div id="clock" class="clock"></div><main id="content" class="content"></main><footer class="footer"><span id="footer-song"></span><span>Okay Karaoke Studio</span></footer><script>
+</style></head><body><div class="scene"><div class="grain"></div><div class="safe"></div><div class="brand">OKAY / STUDIO</div><div id="clock" class="clock"></div><main id="content" class="content"></main><footer class="footer"><span id="footer-song"></span><span>Okay Karaoke Studio</span></footer></div><script>
 const text=(tag,className,value)=>{const node=document.createElement(tag);if(className)node.className=className;node.textContent=value;return node}
 const fitSize=(value,count)=>Math.max(28,Math.min(88,Math.floor(1520/Math.max(12,value.length)*1.28),Math.floor(610/Math.max(1,count))))
-window.renderKaraokeFrame=(state,sequence)=>{document.body.dataset.frame=String(sequence);document.querySelector('#clock').textContent=new Date(Math.max(0,state.playbackMs)).toISOString().slice(11,19);document.querySelector('#footer-song').textContent=state.artist+' · '+state.title;const content=document.querySelector('#content');content.replaceChildren();
-if(state.showTitle){const card=text('div','title-card','');card.append(text('span','',"Tonight's performance"),text('h1','',state.title),text('p','',state.artist));content.append(card)}else if(state.lines.length){const group=text('div','lines','');group.style.gap=Math.max(8,38-state.lines.length*3)+'px';for(const item of state.lines){const line=text('div','line','');const label=text('div','line-label',item.track);label.style.color=item.color;const lyric=text('div','lyric','');lyric.style.setProperty('--accent',item.color);lyric.style.setProperty('--progress',(item.progress*100).toFixed(3)+'%');lyric.style.fontSize=fitSize(item.text,state.lines.length)+'px';lyric.append(text('span','base',item.text),text('span','fill',item.text));line.append(label,lyric);group.append(line)}content.append(group)}else{const detail=state.nextInMs!==null&&state.nextInMs<=10000?'Lyrics resume in '+Math.max(1,Math.ceil(state.nextInMs/1000))+' seconds':'';const block=text('div','instrumental','Instrumental');if(detail)block.append(text('small','',detail));content.append(block)}
+let layoutKey='';let wordNodes=[];let lastClock='';let lastFooter='';
+window.renderKaraokeFrame=(state,sequence)=>{document.body.dataset.frame=String(sequence);const clock=new Date(Math.max(0,state.playbackMs)).toISOString().slice(11,19);if(clock!==lastClock){document.querySelector('#clock').textContent=clock;lastClock=clock}const footer=state.artist+' · '+state.title;if(footer!==lastFooter){document.querySelector('#footer-song').textContent=footer;lastFooter=footer}const content=document.querySelector('#content');const nextKey=state.showTitle?'title:'+state.title+'|'+state.artist:'lines:'+JSON.stringify(state.lines.map((item)=>[item.color,item.text,item.words.map((word)=>word.text)]));
+if(nextKey!==layoutKey){layoutKey=nextKey;wordNodes=[];content.replaceChildren();if(state.showTitle){const card=text('div','title-card','');card.append(text('span','',"Tonight's performance"),text('h1','',state.title),text('p','',state.artist));content.append(card)}else if(state.lines.length){const group=text('div','lines','');group.style.gap=Math.max(8,38-state.lines.length*3)+'px';for(const item of state.lines){const line=text('div','line','');const lyric=text('div','lyric','');lyric.style.setProperty('--accent',item.color);lyric.style.fontSize=fitSize(item.text,state.lines.length)+'px';item.words.forEach((word,index)=>{const node=text('span','word','');const fill=text('span','word-fill',word.text);node.append(text('span','word-base',word.text),fill);lyric.append(node);wordNodes.push(fill);if(index<item.words.length-1)lyric.append(document.createTextNode(' '))});line.append(lyric);group.append(line)}content.append(group)}}
+let wordIndex=0;for(const item of state.lines){for(const word of item.words){wordNodes[wordIndex]?.style.setProperty('width',(word.progress*100).toFixed(3)+'%');wordIndex+=1}}
 return true}
 </script></body></html>`
 }
@@ -437,7 +430,7 @@ function throwIfAborted(signal) {
   if (signal?.aborted) throw createAbortError()
 }
 
-function captureNextPaint(contents, update, signal) {
+function waitForNextPaint(contents, update, signal) {
   return new Promise((resolve, reject) => {
     let updateFinished = false
     const cleanup = () => {
@@ -455,7 +448,7 @@ function captureNextPaint(contents, update, signal) {
     const onPaint = (_event, _dirtyRect, image) => {
       if (!updateFinished || image.isEmpty()) return
       cleanup()
-      resolve(image)
+      resolve()
     }
     const onAbort = () => fail(createAbortError())
     if (signal?.aborted) {
@@ -469,15 +462,33 @@ function captureNextPaint(contents, update, signal) {
       .then(() => {
         throwIfAborted(signal)
         updateFinished = true
+        // Offscreen rendering does not promise that capturePage observes the
+        // compositor state produced by the immediately preceding DOM update.
+        // Invalidate and consume the following paint so every encoded frame is
+        // tied to the requested lyric state.
         contents.invalidate()
       })
       .catch(fail)
   })
 }
 
+async function captureRenderedPage(contents, update, signal) {
+  await waitForNextPaint(contents, update, signal)
+  throwIfAborted(signal)
+  // The paint event is the presentation barrier. capturePage then copies the
+  // fully composed surface instead of reusing Electron's offscreen paint image,
+  // whose backing storage may be recycled by a later frame.
+  const image = await contents.capturePage()
+  throwIfAborted(signal)
+  if (image.isEmpty()) throw new Error('Electron returned an empty video frame')
+  return image
+}
+
 function terminateChild(child) {
   if (child.exitCode !== null || child.signalCode !== null) return null
-  child.kill('SIGTERM')
+  // FFmpeg handles SIGINT by finalizing the container trailer before exiting,
+  // which leaves a useful partial artifact after an explicit cancellation.
+  child.kill('SIGINT')
   const timeout = setTimeout(() => {
     if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
   }, 2_000)
@@ -497,10 +508,26 @@ function runProcess(executable, args, { signal, inputWriter } = {}) {
     let spawnError
     let writerError
     let killTimeout
+    let abortGraceTimer
+    const finishAbort = () => {
+      if (child.exitCode === null && child.signalCode === null) {
+        killTimeout ||= terminateChild(child)
+      }
+    }
+    const requestAbort = () => {
+      if (inputWriter && child.stdin && !child.stdin.destroyed) {
+        child.stdin.end()
+        if (!abortGraceTimer) {
+          abortGraceTimer = setTimeout(finishAbort, 350)
+          abortGraceTimer.unref?.()
+        }
+      } else {
+        finishAbort()
+      }
+    }
     const onAbort = () => {
       writerError ||= createAbortError()
-      child.stdin?.destroy(writerError)
-      killTimeout ||= terminateChild(child)
+      requestAbort()
     }
     signal?.addEventListener('abort', onAbort, { once: true })
     child.stderr.on('data', (chunk) => {
@@ -513,6 +540,7 @@ function runProcess(executable, args, { signal, inputWriter } = {}) {
       spawnError = error
     })
     child.once('close', (code, terminationSignal) => {
+      if (abortGraceTimer) clearTimeout(abortGraceTimer)
       if (killTimeout) clearTimeout(killTimeout)
       signal?.removeEventListener?.('abort', onAbort)
       if (spawnError) reject(spawnError)
@@ -531,8 +559,11 @@ function runProcess(executable, args, { signal, inputWriter } = {}) {
         })
         .catch((error) => {
           writerError ||= error
-          child.stdin.destroy(error)
-          killTimeout ||= terminateChild(child)
+          if (error?.name === 'AbortError' || signal?.aborted) requestAbort()
+          else {
+            child.stdin.destroy(error)
+            finishAbort()
+          }
         })
     }
   })
@@ -551,52 +582,65 @@ async function findFfmpeg(preferredPath, signal) {
   throw new Error('FFmpeg was not found. Install FFmpeg or set OKAY_KARAOKE_FFMPEG to its path.')
 }
 
-async function writePngFrame(stream, image, signal) {
+async function writeJpegFrame(stream, image, settings, signal) {
   throwIfAborted(signal)
   if (stream.destroyed) throw new Error('FFmpeg stopped accepting video frames')
-  if (!stream.write(image.toPNG())) {
+  const size = image.getSize()
+  const frame = size.width === settings.width && size.height === settings.height
+    ? image
+    : image.resize({ width: settings.width, height: settings.height, quality: 'best' })
+  if (!stream.write(frame.toJPEG(95))) {
     await once(stream, 'drain', signal ? { signal } : undefined)
   }
   throwIfAborted(signal)
 }
 
-async function renderVideoFrames(BrowserWindow, index, timeline, stream, onProgress, signal) {
+async function renderVideoFrames(BrowserWindow, index, timeline, stream, settings, onProgress, signal) {
   throwIfAborted(signal)
   const window = new BrowserWindow({
     show: false,
-    width: VIDEO_WIDTH,
-    height: VIDEO_HEIGHT,
+    width: settings.width,
+    height: settings.height,
     useContentSize: true,
     webPreferences: {
       offscreen: true,
+      backgroundThrottling: false,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
       webSecurity: true,
     },
   })
-  window.webContents.setFrameRate(VIDEO_RENDER_FPS)
+  window.webContents.setFrameRate(settings.fps)
   const onAbort = () => {
     if (!window.isDestroyed()) window.destroy()
   }
   signal?.addEventListener('abort', onAbort, { once: true })
 
   try {
-    const documentUrl = `data:text/html;charset=utf-8,${encodeURIComponent(renderDocument())}`
+    const documentUrl = `data:text/html;charset=utf-8,${encodeURIComponent(renderDocument(settings))}`
     await window.loadURL(documentUrl)
     throwIfAborted(signal)
     const cursor = createFrameCursor(index)
+    let lastProgressMs = Number.NEGATIVE_INFINITY
 
     for (let frameIndex = 0; frameIndex < timeline.times.length; frameIndex += 1) {
       throwIfAborted(signal)
       const currentMs = timeline.times[frameIndex]
       const state = frameStateAtIndex(index, currentMs, cursor)
       const stateJson = JSON.stringify(state)
-      const image = await captureNextPaint(window.webContents, () =>
+      const image = await captureRenderedPage(window.webContents, () =>
         window.webContents.executeJavaScript(`window.renderKaraokeFrame(${stateJson},${frameIndex})`),
       signal)
-      await writePngFrame(stream, image, signal)
-      onProgress?.({ phase: 'frames', completed: frameIndex + 1, total: timeline.times.length })
+      await writeJpegFrame(stream, image, settings, signal)
+      if (
+        frameIndex === 0 ||
+        frameIndex === timeline.times.length - 1 ||
+        currentMs - lastProgressMs >= 100
+      ) {
+        lastProgressMs = currentMs
+        onProgress?.({ phase: 'frames', completed: frameIndex + 1, total: timeline.times.length })
+      }
     }
   } finally {
     signal?.removeEventListener('abort', onAbort)
@@ -604,21 +648,25 @@ async function renderVideoFrames(BrowserWindow, index, timeline, stream, onProgr
   }
 }
 
-function buildFfmpegArguments(audioPath, outputPath, durationMs) {
+function buildFfmpegArguments(audioPath, outputPath, durationMs, settings = {}) {
+  const { fps } = normalizeVideoSettings(settings)
   return [
     '-y',
     '-hide_banner',
     '-loglevel', 'error',
+    '-probesize', '32768',
+    '-analyzeduration', '0',
     '-f', 'image2pipe',
-    '-framerate', String(VIDEO_RENDER_FPS),
-    '-vcodec', 'png',
+    '-framerate', String(fps),
+    '-vcodec', 'mjpeg',
     '-i', 'pipe:0',
     '-i', audioPath,
     '-map', '0:v:0',
     '-map', '1:a:0',
-    '-vf', `fps=${VIDEO_OUTPUT_FPS},format=yuv420p`,
+    '-vf', 'format=yuv420p',
     '-c:v', 'libx264',
-    '-preset', 'medium',
+    '-preset', 'veryfast',
+    '-bf', '0',
     '-crf', '20',
     '-c:a', 'aac',
     '-b:a', '192k',
@@ -636,6 +684,8 @@ async function exportKaraokeVideo({
   audioPath,
   outputPath,
   ffmpegPath,
+  resolution = DEFAULT_VIDEO_RESOLUTION,
+  fps = DEFAULT_VIDEO_FPS,
   onProgress,
   signal,
 }) {
@@ -647,13 +697,19 @@ async function exportKaraokeVideo({
   if (!requestedAudioPath || !requestedOutputPath) throw new TypeError('Audio and output paths are required')
   const resolvedAudioPath = path.resolve(requestedAudioPath)
   const resolvedOutputPath = path.resolve(requestedOutputPath)
+  const settings = normalizeVideoSettings({ resolution, fps })
 
   const audioStats = await fs.stat(resolvedAudioPath).catch(() => null)
   if (!audioStats?.isFile()) throw new Error('The linked audio file could not be read')
-  const timeline = buildFrameTimelineForProject(project, durationMs)
+  const timeline = buildFrameTimelineForProject(project, durationMs, settings.fps)
   const index = createVideoIndex(project)
-  const executable = await findFfmpeg(ffmpegPath, signal)
-  const partialPath = `${resolvedOutputPath}.partial-${randomUUID()}.mp4`
+  const executable = ffmpegPath || await findFfmpeg(undefined, signal)
+  const parsedOutput = path.parse(resolvedOutputPath)
+  const partialPath = path.join(
+    parsedOutput.dir,
+    `${parsedOutput.name}.partial-${randomUUID()}${parsedOutput.ext || '.mp4'}`,
+  )
+  let preservePartial = false
 
   try {
     throwIfAborted(signal)
@@ -662,10 +718,11 @@ async function exportKaraokeVideo({
       resolvedAudioPath,
       partialPath,
       timeline.durationMs,
+      settings,
     ), {
       signal,
       inputWriter: async (stream) => {
-        await renderVideoFrames(BrowserWindow, index, timeline, stream, onProgress, signal)
+        await renderVideoFrames(BrowserWindow, index, timeline, stream, settings, onProgress, signal)
         throwIfAborted(signal)
         onProgress?.({ phase: 'encoding', completed: 0, total: 1 })
       },
@@ -673,15 +730,31 @@ async function exportKaraokeVideo({
     throwIfAborted(signal)
     await fs.rename(partialPath, resolvedOutputPath)
     onProgress?.({ phase: 'complete', completed: 1, total: 1 })
-    return { path: resolvedOutputPath, durationMs: timeline.durationMs, frameCount: timeline.times.length }
+    return {
+      path: resolvedOutputPath,
+      durationMs: timeline.durationMs,
+      frameCount: timeline.times.length,
+      resolution: settings.resolution,
+      width: settings.width,
+      height: settings.height,
+      fps: settings.fps,
+    }
+  } catch (error) {
+    preservePartial = error?.name === 'AbortError' || signal?.aborted === true
+    if (preservePartial && error instanceof Error) {
+      error.message = `Video export canceled. Partial output was kept beside the destination as ${path.basename(partialPath)}`
+    }
+    throw error
   } finally {
-    await fs.rm(partialPath, { force: true }).catch(() => {})
+    if (!preservePartial) await fs.rm(partialPath, { force: true }).catch(() => {})
   }
 }
 
 module.exports = {
   MAX_VIDEO_DURATION_MS,
   MAX_VIDEO_FRAMES,
+  VIDEO_FRAME_RATES,
+  VIDEO_RESOLUTION_PRESETS,
   VIDEO_RENDER_FPS,
   buildFfmpegArguments,
   buildFrameTimeline,
@@ -690,6 +763,7 @@ module.exports = {
   findFfmpeg,
   frameStateAt,
   normalizeProjectForVideo,
+  normalizeVideoSettings,
   parseProjectForVideo,
   renderDocument,
 }

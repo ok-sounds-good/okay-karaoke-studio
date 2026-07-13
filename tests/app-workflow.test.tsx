@@ -9,6 +9,7 @@ import { createDemoProject, parseProject, serializeProject } from '../src/lib/mo
 
 interface StudioHarness {
   studio: StudioApi
+  cancelVideoExport: ReturnType<typeof vi.fn>
   exportText: ReturnType<typeof vi.fn>
   exportVideo: ReturnType<typeof vi.fn>
   importAudio: ReturnType<typeof vi.fn>
@@ -23,6 +24,7 @@ function createStudioHarness(): StudioHarness {
   const importAudio = vi.fn(async () => null)
   const exportText = vi.fn(async () => ({ path: '/exports/project.oks' }))
   const exportVideo = vi.fn(async () => null)
+  const cancelVideoExport = vi.fn(async () => true)
   let menuActionListener: ((action: StudioMenuAction) => void) | null = null
   const onMenuAction = vi.fn((callback: (action: StudioMenuAction) => void) => {
     menuActionListener = callback
@@ -39,13 +41,14 @@ function createStudioHarness(): StudioHarness {
     importLrc: vi.fn(async () => null),
     exportText,
     exportVideo,
-    cancelVideoExport: vi.fn(async () => undefined),
+    cancelVideoExport,
     onVideoExportProgress: vi.fn(() => () => undefined),
     onMenuAction,
   } as unknown as StudioApi
 
   return {
     studio,
+    cancelVideoExport,
     exportText,
     exportVideo,
     importAudio,
@@ -53,6 +56,15 @@ function createStudioHarness(): StudioHarness {
     saveProject,
     sendMenuAction: (action) => menuActionListener?.(action),
   }
+}
+
+async function selectValue(ariaLabel: string, value: string) {
+  const select = document.querySelector<HTMLSelectElement>(`[aria-label="${ariaLabel}"]`)
+  if (!select) throw new Error(`Could not find select: ${ariaLabel}`)
+  await act(async () => {
+    select.value = value
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+  })
 }
 
 function deferred<T>() {
@@ -170,6 +182,31 @@ describe('mounted first-time workflow', () => {
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
+
+  async function prepareVideoExportProject() {
+    vi.stubGlobal('AudioContext', class {
+      async close() {}
+      async decodeAudioData() {
+        return { getChannelData: () => new Float32Array([0]) }
+      }
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      arrayBuffer: async () => new ArrayBuffer(0),
+    })))
+    harness.importAudio.mockResolvedValueOnce({
+      path: '/music/backing.mp3',
+      name: 'backing.mp3',
+      url: 'studio-media://asset/00000000-0000-0000-0000-000000000000/backing.mp3',
+    })
+
+    await clickButton('Edit text')
+    await replaceTextarea('Ready to export')
+    await clickButton('Apply lyrics')
+    await clickButton('Workflow')
+    await clickButton('Attach audio')
+    await clickButton('Workflow')
+    await clickButton('Choose export')
+  }
 
   it('opens the real guide from TopBar and enforces the lyrics-to-sync transition', async () => {
     await clickButton('Workflow')
@@ -883,37 +920,132 @@ describe('mounted first-time workflow', () => {
     expect(option('ASS karaoke subtitles')?.disabled).toBe(false)
   })
 
-  it('keeps export choices open when guided FFmpeg setup is postponed', async () => {
-    vi.stubGlobal('AudioContext', class {
-      async close() {}
-      async decodeAudioData() {
-        return { getChannelData: () => new Float32Array([0]) }
-      }
-    })
-    vi.stubGlobal('fetch', vi.fn(async () => ({
-      arrayBuffer: async () => new ArrayBuffer(0),
-    })))
-    harness.importAudio.mockResolvedValueOnce({
-      path: '/music/backing.mp3',
-      name: 'backing.mp3',
-      url: 'studio-media://asset/00000000-0000-0000-0000-000000000000/backing.mp3',
-    })
+  it('forwards the default and selected video resolution and frame rate', async () => {
+    await prepareVideoExportProject()
 
-    await clickButton('Edit text')
-    await replaceTextarea('Ready to export')
-    await clickButton('Apply lyrics')
-    await clickButton('Workflow')
-    await clickButton('Attach audio')
-    await clickButton('Workflow')
-    await clickButton('Choose export')
+    expect(document.querySelector<HTMLSelectElement>('[aria-label="Video resolution"]')?.value)
+      .toBe('720p')
+    expect(document.querySelector<HTMLSelectElement>('[aria-label="Video frame rate"]')?.value)
+      .toBe('30')
     await clickButton('Karaoke video')
 
     expect(harness.exportVideo).toHaveBeenCalledOnce()
+    expect(harness.exportVideo).toHaveBeenLastCalledWith(expect.objectContaining({
+      resolution: '720p',
+      fps: 30,
+    }))
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Export karaoke')
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Karaoke video')
     expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain(
       'Preparing video export and checking FFmpeg',
     )
+
+    await selectValue('Video resolution', '2160p')
+    await selectValue('Video frame rate', '60')
+    await clickButton('Karaoke video')
+    expect(harness.exportVideo).toHaveBeenCalledTimes(2)
+    expect(harness.exportVideo).toHaveBeenLastCalledWith(expect.objectContaining({
+      resolution: '2160p',
+      fps: 60,
+    }))
+  })
+
+  it('confirms cancellation from both the cancel action and the export-dialog close action', async () => {
+    const videoExport = deferred<StudioVideoExportResult | null>()
+    harness.exportVideo.mockImplementationOnce(() => videoExport.promise)
+    await prepareVideoExportProject()
+    await clickButton('Karaoke video')
+
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Cancel video export')
+    await clickButton('Cancel video export')
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1)
+    expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain(
+      'Cancel video export?',
+    )
+
+    await clickButton('Keep exporting')
+    expect(harness.cancelVideoExport).not.toHaveBeenCalled()
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1)
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull()
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Export karaoke')
+
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[aria-label="Close dialog"]')?.click()
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1)
+    expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain(
+      'Cancel video export?',
+    )
+
+    await clickButton('Cancel export')
+    expect(harness.cancelVideoExport).toHaveBeenCalledOnce()
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+
+    await act(async () => {
+      videoExport.reject(new Error('Video export canceled'))
+      await videoExport.promise.catch(() => undefined)
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+  })
+
+  it('keeps the progress surface open until cancellation is accepted', async () => {
+    const videoExport = deferred<StudioVideoExportResult | null>()
+    const cancellation = deferred<boolean>()
+    harness.exportVideo.mockImplementationOnce(() => videoExport.promise)
+    harness.cancelVideoExport.mockImplementationOnce(() => cancellation.promise)
+    await prepareVideoExportProject()
+    await clickButton('Karaoke video')
+    await clickButton('Cancel video export')
+    await clickButton('Cancel export')
+
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+    expect(buttonContaining('Canceling…').disabled).toBe(true)
+    expect(document.querySelector<HTMLButtonElement>('[aria-label="Close dialog"]')?.disabled).toBe(true)
+
+    await act(async () => {
+      cancellation.resolve(true)
+      await cancellation.promise
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+
+    await act(async () => {
+      videoExport.reject(new Error('Video export canceled'))
+      await videoExport.promise.catch(() => undefined)
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+  })
+
+  it.each([
+    {
+      label: 'a declined cancellation request',
+      cancel: () => Promise.resolve(false),
+      message: 'The export could not be canceled. If it is still running, try again.',
+    },
+    {
+      label: 'a failed cancellation request',
+      cancel: () => Promise.reject(new Error('Cancellation IPC failed')),
+      message: 'Cancellation IPC failed',
+    },
+  ])('restores the export UI after $label', async ({ cancel, message }) => {
+    const videoExport = deferred<StudioVideoExportResult | null>()
+    harness.exportVideo.mockImplementationOnce(() => videoExport.promise)
+    harness.cancelVideoExport.mockImplementationOnce(cancel)
+    await prepareVideoExportProject()
+    await clickButton('Karaoke video')
+    await clickButton('Cancel video export')
+    await clickButton('Cancel export')
+
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull()
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Cancel video export')
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain(message)
+
+    await act(async () => {
+      videoExport.reject(new Error('Video export canceled'))
+      await videoExport.promise.catch(() => undefined)
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
   })
 
   it('ignores a previous project save that completes after New project', async () => {

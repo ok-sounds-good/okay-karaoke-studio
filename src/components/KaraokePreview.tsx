@@ -35,7 +35,6 @@ function PreviewLine({
 }) {
   return (
     <div className="stage-line" style={{ '--track-color': track.color } as CSSProperties}>
-      <span className="stage-line__artist">{track.name}</span>
       <p>
         {line.words.map((word) => {
           const progress = wordProgress(word, lyricMs)
@@ -172,12 +171,7 @@ export function KaraokePreview({
                 />
               ))}
             </div>
-          ) : (
-            <div className="instrumental-break">
-              <span>Instrumental</span>
-              <i /><i /><i /><i />
-            </div>
-          )}
+          ) : null}
 
         </div>
 

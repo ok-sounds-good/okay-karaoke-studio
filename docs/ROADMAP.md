@@ -66,8 +66,8 @@ decision.
 - Scheduled still images, animated backgrounds, and per-section scenes.
 - Aspect-ratio presets, title-safe/action-safe overlays, and multiple preview
   devices.
-- Advanced video controls for resolution, codec, frame rate, background scenes,
-  and subtitle-safe-area presets.
+- Advanced video controls for codec, background scenes, and subtitle-safe-area
+  presets. Resolution and frame-rate presets are part of the active MVP contract.
 
 ## Later: additional interchange formats
 
@@ -132,6 +132,13 @@ at a time, and the project retains one authoritative clock.
 - Shared review links or timestamped comments.
 - Cloud sync, team roles, change attribution, or approval states.
 - Project bundles designed for collaboration between machines.
+
+### Creator-driven stage elements
+
+- Automatic Instrumental words, countdowns, or graphics between lyric sections.
+- Creator-authored placement of optional stage elements, including the retained
+  dormant instrumental-break graphic source. The source remains available for
+  future exploration, but no stage-element authoring workflow is planned.
 
 ## Decision gates
 

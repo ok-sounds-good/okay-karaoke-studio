@@ -1,19 +1,38 @@
 import { createRequire } from 'node:module'
+import { Script } from 'node:vm'
 import { describe, expect, it } from 'vitest'
 
 const require = createRequire(import.meta.url)
 const videoExport = require('../electron/video-export.cjs') as {
-  buildFfmpegArguments(audioPath: string, outputPath: string, durationMs: number): string[]
-  buildFrameTimeline(project: unknown, durationMs?: number): { durationMs: number; times: number[] }
+  VIDEO_RESOLUTION_PRESETS: Record<string, { width: number; height: number }>
+  buildFfmpegArguments(
+    audioPath: string,
+    outputPath: string,
+    durationMs: number,
+    settings?: { resolution?: string; fps?: number },
+  ): string[]
+  buildFrameTimeline(
+    project: unknown,
+    durationMs?: number,
+    settings?: { resolution?: string; fps?: number },
+  ): { durationMs: number; times: number[] }
   effectiveVideoDuration(project: unknown, durationMs?: number): number
   frameStateAt(project: unknown, playbackMs: number): {
     showTitle: boolean
-    instrumental: boolean
-    lines: Array<{ track: string; text: string; progress: number }>
-    nextInMs: number | null
+    lines: Array<{
+      color: string
+      text: string
+      words: Array<{ text: string; progress: number }>
+    }>
+  }
+  normalizeVideoSettings(value?: unknown): {
+    resolution: string
+    width: number
+    height: number
+    fps: 30 | 60
   }
   parseProjectForVideo(json: string): unknown
-  renderDocument(): string
+  renderDocument(settings?: { resolution?: string; fps?: number }): string
 }
 
 function videoProject() {
@@ -65,28 +84,82 @@ function blankVideoLine() {
 }
 
 describe('karaoke video frame planning', () => {
-  it('builds progressive word frames on the offset-adjusted playback clock', () => {
-    const timeline = videoExport.buildFrameTimeline(videoProject(), 6_000)
+  it('maps every supported resolution exactly and accepts only 30 or 60 fps', () => {
+    expect(videoExport.VIDEO_RESOLUTION_PRESETS).toEqual({
+      '240p': { width: 426, height: 240 },
+      '360p': { width: 640, height: 360 },
+      '480p': { width: 854, height: 480 },
+      '720p': { width: 1280, height: 720 },
+      '1080p': { width: 1920, height: 1080 },
+      '1440p': { width: 2560, height: 1440 },
+      '2160p': { width: 3840, height: 2160 },
+    })
 
-    expect(timeline.durationMs).toBe(6_000)
-    expect(timeline.times).toHaveLength(60)
-    expect(timeline.times[0]).toBe(0)
-    expect(timeline.times.at(-1)).toBe(5_900)
-    expect(timeline.times.every((time, index) => index === 0 || time - timeline.times[index - 1] === 100)).toBe(true)
+    for (const [resolution, dimensions] of Object.entries(videoExport.VIDEO_RESOLUTION_PRESETS)) {
+      for (const fps of [30, 60] as const) {
+        expect(videoExport.normalizeVideoSettings({ resolution, fps })).toEqual({
+          resolution,
+          ...dimensions,
+          fps,
+        })
+      }
+    }
+    expect(videoExport.normalizeVideoSettings()).toEqual({
+      resolution: '720p',
+      width: 1280,
+      height: 720,
+      fps: 30,
+    })
+    expect(() => videoExport.normalizeVideoSettings({ resolution: '4320p', fps: 30 })).toThrow()
+    expect(() => videoExport.normalizeVideoSettings({ resolution: '__proto__', fps: 30 })).toThrow()
+    expect(() => videoExport.normalizeVideoSettings({ resolution: '720p', fps: 24 })).toThrow()
   })
 
-  it('renders title, active lyric progress, and instrumental states', () => {
+  it('builds frames at the selected output rate on the offset-adjusted playback clock', () => {
+    const timeline30 = videoExport.buildFrameTimeline(videoProject(), 6_000, { fps: 30 })
+    const timeline60 = videoExport.buildFrameTimeline(videoProject(), 6_000, { fps: 60 })
+
+    expect(timeline30.durationMs).toBe(6_000)
+    expect(timeline30.times).toHaveLength(180)
+    expect(timeline30.times.every(
+      (time, index) => time === Math.round(index * 1_000 / 30),
+    )).toBe(true)
+    expect(timeline60.durationMs).toBe(6_000)
+    expect(timeline60.times).toHaveLength(360)
+    expect(timeline60.times.every(
+      (time, index) => time === Math.round(index * 1_000 / 60),
+    )).toBe(true)
+  })
+
+  it('renders title and per-word progress aligned to word starts and ends', () => {
     expect(videoExport.frameStateAt(videoProject(), 0).showTitle).toBe(true)
 
-    const active = videoExport.frameStateAt(videoProject(), 2_500)
-    expect(active.showTitle).toBe(false)
-    expect(active.lines[0].text).toBe('Hello world')
-    expect(active.lines[0].progress).toBeGreaterThan(0.2)
-    expect(active.lines[0].progress).toBeLessThan(0.3)
+    const firstStart = videoExport.frameStateAt(videoProject(), 2_000)
+    expect(firstStart.showTitle).toBe(false)
+    expect(firstStart.lines[0].text).toBe('Hello world')
+    expect(firstStart.lines[0].words).toEqual([
+      { text: 'Hello', progress: 0 },
+      { text: 'world', progress: 0 },
+    ])
+
+    const firstMiddle = videoExport.frameStateAt(videoProject(), 2_500)
+    expect(firstMiddle.lines[0].words[0].progress).toBeCloseTo(0.5)
+    expect(firstMiddle.lines[0].words[1].progress).toBe(0)
+
+    const secondStart = videoExport.frameStateAt(videoProject(), 3_000)
+    expect(secondStart.lines[0].words).toEqual([
+      { text: 'Hello', progress: 1 },
+      { text: 'world', progress: 0 },
+    ])
+
+    const secondMiddle = videoExport.frameStateAt(videoProject(), 3_500)
+    expect(secondMiddle.lines[0].words[0].progress).toBe(1)
+    expect(secondMiddle.lines[0].words[1].progress).toBeCloseTo(0.5)
 
     const finished = videoExport.frameStateAt(videoProject(), 4_600)
-    expect(finished.instrumental).toBe(true)
     expect(finished.lines).toEqual([])
+    expect(finished).not.toHaveProperty('instrumental')
+    expect(finished).not.toHaveProperty('nextInMs')
   })
 
   it('renders clear-mode lyric groups without crossing blank separators', () => {
@@ -191,7 +264,9 @@ describe('karaoke video frame planning', () => {
 
     const state = videoExport.frameStateAt(project, 0)
     expect(state.lines).toHaveLength(3)
-    expect(new Set(state.lines.map((line) => line.track))).toEqual(new Set(['Lead', 'Harmony']))
+    expect(new Set(state.lines.map((line) => line.text.split(' ')[0]))).toEqual(
+      new Set(['Lead', 'Harmony']),
+    )
   })
 
   it('rejects malformed and unbounded project payloads', () => {
@@ -218,10 +293,16 @@ describe('karaoke video frame planning', () => {
     }))).toThrow('lineCount must be between 1 and 5')
   })
 
-  it('does not render a mini upcoming-line element', () => {
+  it('renders neither track labels, mini upcoming lines, nor an instrumental fallback', () => {
     const document = videoExport.renderDocument()
     expect(document).not.toContain('state.nextLine')
     expect(document).not.toContain('Next ·')
+    expect(document).not.toContain('line-label')
+    expect(document).not.toContain('item.track')
+    expect(document).not.toMatch(/instrumental/iu)
+    const script = document.match(/<script>([\s\S]*)<\/script>/u)?.[1]
+    expect(script).toBeTruthy()
+    expect(() => new Script(script)).not.toThrow()
   })
 
   it('uses only visible tracks when extending duration', () => {
@@ -243,7 +324,7 @@ describe('karaoke video frame planning', () => {
     expect(videoExport.effectiveVideoDuration(project, 1_000)).toBe(4_000)
   })
 
-  it('renders smooth line-timed progress and upcoming-line countdowns', () => {
+  it('leaves untimed words unfilled even when the containing line has timing', () => {
     const project = videoProject()
     project.offsetMs = 0
     project.durationMs = 23_000
@@ -257,21 +338,30 @@ describe('karaoke video frame planning', () => {
       { text: 'After the break', startMs: 20_000, endMs: 22_000, words: untimedWords },
     ]
 
-    expect(videoExport.frameStateAt(project, 12_000).nextInMs).toBe(8_000)
-    expect(videoExport.frameStateAt(project, 1_000).lines[0].progress).toBeCloseTo(0.5)
+    expect(videoExport.frameStateAt(project, 1_000).lines[0].words).toEqual([
+      { text: 'Line', progress: 0 },
+      { text: 'timed', progress: 0 },
+      { text: 'only', progress: 0 },
+    ])
   })
 
-  it('streams PNG frames and pads audio to the explicit timeline duration', () => {
-    const args = videoExport.buildFfmpegArguments('/music/source.wav', '/exports/video.mp4', 5_000)
+  it('streams JPEG frames at the selected output rate without a duplicate-frame filter', () => {
+    const args = videoExport.buildFfmpegArguments(
+      '/music/source.wav',
+      '/exports/video.mp4',
+      5_000,
+      { resolution: '1440p', fps: 60 },
+    )
 
     expect(args).toEqual(expect.arrayContaining([
       '-f', 'image2pipe',
-      '-framerate', '10',
+      '-framerate', '60',
+      '-vcodec', 'mjpeg',
       '-i', 'pipe:0',
       '-af', 'apad',
       '-t', '5.000',
-      '-vf', 'fps=30,format=yuv420p',
     ]))
+    expect(args.some((argument) => /(?:^|,)fps=/u.test(argument))).toBe(false)
     expect(args).not.toContain('concat')
     expect(args).not.toContain('-shortest')
     expect(args.at(-1)).toBe('/exports/video.mp4')

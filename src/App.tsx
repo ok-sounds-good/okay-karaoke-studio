@@ -619,7 +619,10 @@ export default function App() {
     }
   }, [activeTrack, project, showToast])
 
-  const exportVideo = useCallback(async () => {
+  const exportVideo = useCallback(async ({
+    resolution,
+    fps,
+  }: Pick<StudioVideoExportOptions, 'resolution' | 'fps'>) => {
     if (!window.studio?.exportVideo) {
       showToast('Video export is available in the desktop app.', 'warning')
       return
@@ -638,15 +641,18 @@ export default function App() {
         projectJson: serializeProject(project),
         audioPath: project.audioPath,
         durationMs: Math.max(1_000, Math.round(playback.durationMs)),
+        resolution,
+        fps,
       })
       if (!result) return
       setExportDialogOpen(false)
       showToast(`Video export created with ${result.frameCount} lyric frames`, 'success')
     } catch (error) {
       const detail = error instanceof Error ? error.message : 'Video export failed.'
+      const canceled = /cancel(?:led|ed|ing)/iu.test(detail)
       showToast(
-        /cancel(?:led|ed|ing)/iu.test(detail) ? 'Video export cancelled' : detail,
-        /cancel(?:led|ed|ing)/iu.test(detail) ? 'neutral' : 'warning',
+        canceled ? 'Video export cancelled; any partial MP4 was kept beside the destination' : detail,
+        canceled ? 'neutral' : 'warning',
       )
     } finally {
       videoExportActiveRef.current = false
@@ -654,12 +660,10 @@ export default function App() {
     }
   }, [playback.durationMs, playback.hasAudio, playback.pause, project, showToast])
 
-  const cancelVideoExport = useCallback(() => {
-    if (!window.studio?.cancelVideoExport) return
-    void window.studio.cancelVideoExport().catch((error: unknown) => {
-      showToast(error instanceof Error ? error.message : 'Could not cancel video export.', 'warning')
-    })
-  }, [showToast])
+  const cancelVideoExport = useCallback(async () => {
+    if (!window.studio?.cancelVideoExport) return false
+    return window.studio.cancelVideoExport()
+  }, [])
 
   const handleSelectWord = useCallback((word: LyricWord, add: boolean) => {
     setSelectedWordIds((current) => {
@@ -1140,7 +1144,7 @@ export default function App() {
           onClose={() => setExportDialogOpen(false)}
           onExportLrc={() => void exportText('lrc')}
           onExportAss={() => void exportText('ass')}
-          onExportVideo={() => void exportVideo()}
+          onExportVideo={(settings) => void exportVideo(settings)}
           onCancelVideo={cancelVideoExport}
           onExportProject={() => void exportText(EDITABLE_PROJECT_EXPORT_FORMAT)}
           videoAvailable={Boolean(window.studio?.exportVideo && project.audioPath && playback.hasAudio)}

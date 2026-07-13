@@ -18,7 +18,9 @@ Okay Karaoke Studio is a single-window desktop application for editing and synch
   previous word, while holding the final word of a line extends it. Shift+Space
   controls playback.
 - Live karaoke preview and MP4 output share a persisted 1-to-5 line count and
-  Clear/Scroll advance mode, with blank lyric rows separating sections.
+  Clear/Scroll advance mode, blank lyric rows separating sections, and the same
+  per-word timing. Stage lyric lines do not repeat the singer or track name, and
+  section gaps do not inject an automatic Instrumental graphic.
 - Draggable, resizable word blocks on a common chronological baseline, readable
   staggered label lanes, range selection, and timing controls on a zoomable
   waveform TimeBoard. Timing edits cannot cross the preceding or following
@@ -26,7 +28,8 @@ Okay Karaoke Studio is a single-window desktop application for editing and synch
 - An **Edit text** action opens raw lyric editing with syllable separators,
   preserved blank-row section breaks, and screen-fit guidance; no Word Map is
   persistently rendered in the main workspace.
-- LRC import, enhanced LRC and ASS export, 1080p MP4 karaoke rendering, and versioned `.oks` projects.
+- LRC import, enhanced LRC and ASS export, configurable 240p-through-2160p MP4
+  karaoke rendering at 30 or 60 fps, and versioned `.oks` projects.
 - Native open/save/import/export dialogs with secure linked-media streaming.
 - Command history, timing review, hover help, playback Stop, and browser fallback.
 
@@ -84,7 +87,7 @@ bun run test:video
 - `bun run build` performs a strict TypeScript check and production renderer build.
 - `bun run dist:dir` creates an unpacked desktop application in `release/`.
 - `bun run dist` creates distributable macOS artifacts. Public distribution still requires signing and notarization credentials.
-- `bun run test:video` performs the gated end-to-end 1080p H.264/AAC render and stream inspection.
+- `bun run test:video` performs the gated end-to-end H.264/AAC render and stream inspection.
 
 ## Editing workflow
 
@@ -115,7 +118,13 @@ bun run test:video
 8. Use the TimeBoard's **Clear Timing** or **Clear Timing After Cursor** controls
    when resynchronizing. Use transport **Stop** to pause and return to `0:00`.
 9. Review the timing status, save the schema-v3 `.oks` project, and export LRC,
-   ASS, or a 1080p MP4 karaoke video. Video export requires attached audio.
+   ASS, or an MP4 karaoke video. Video export requires attached audio and offers
+   240p (426 x 240), 360p (640 x 360), 480p (854 x 480), 720p (1280 x 720),
+   1080p (1920 x 1080), 1440p (2560 x 1440), and 2160p (3840 x 2160), each at
+   30 or 60 fps. It defaults to 720p at 30 fps for faster iteration. Closing the
+   export dialog, closing the application, quitting, or choosing Cancel during an
+   active export asks for confirmation; a confirmed cancellation preserves a
+   UUID-named partial file beside the destination.
    Schema-v1 and schema-v2 projects open with the 3-line/Clear display defaults.
 
 ## Keyboard controls
@@ -158,10 +167,13 @@ exposes a small typed bridge for project dialogs, audio import,
 project-authorized audio restoration, text/video export, and menu commands.
 Linked audio is streamed through an owner-scoped, tokenized read-only custom
 protocol with byte-range support. MP4 export renders the same line-selection
-plan as Live Preview in an isolated offscreen Electron surface and streams
-backpressured PNG frames directly into a shell-free FFmpeg process for H.264/AAC
-encoding. Cancellation terminates the encoder and removes its partial output
-before close or quit continues.
+plan and per-word timing as Live Preview in an isolated offscreen Electron
+surface. It renders target-resolution, selected-rate unique frames, waits for
+each requested compositor paint, streams backpressured JPEGs into a shell-free
+FFmpeg process, and uses a faster `libx264` preset for H.264/AAC encoding.
+Ordinary failures leave the chosen destination safe. Confirmed cancellation
+terminates the encoder and preserves any partial output under a UUID-based
+filename beside that destination.
 
 ## License
 

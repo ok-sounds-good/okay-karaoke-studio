@@ -50,6 +50,8 @@ declare global {
   }
 
   type StudioVideoExportPhase = 'preparing' | 'frames' | 'encoding' | 'complete'
+  type StudioVideoResolution = '240p' | '360p' | '480p' | '720p' | '1080p' | '1440p' | '2160p'
+  type StudioVideoFps = 30 | 60
 
   interface StudioVideoExportProgress {
     phase: StudioVideoExportPhase
@@ -62,11 +64,17 @@ declare global {
     projectJson: string
     audioPath: string
     durationMs: number
+    resolution: StudioVideoResolution
+    fps: StudioVideoFps
   }
 
   interface StudioVideoExportResult extends StudioPathResult {
     durationMs: number
     frameCount: number
+    resolution: StudioVideoResolution
+    width: number
+    height: number
+    fps: StudioVideoFps
   }
 
   interface StudioApi {
@@ -78,7 +86,7 @@ declare global {
     importLrc(): Promise<StudioLrcImportResult | null>
     exportText(options: StudioExportTextOptions): Promise<StudioPathResult | null>
     exportVideo(options: StudioVideoExportOptions): Promise<StudioVideoExportResult | null>
-    cancelVideoExport(): Promise<void>
+    cancelVideoExport(): Promise<boolean>
     onVideoExportProgress(callback: (progress: StudioVideoExportProgress) => void): () => void
     onMenuAction(callback: (action: StudioMenuAction) => void): () => void
   }

@@ -137,7 +137,8 @@ transport must never become separate application windows.
 ### Preview and transport
 
 - Progressive word highlighting driven by the same authoritative playback clock as the editor.
-- Display the active lead-vocal track.
+- Render full lyric lines without repeating the singer or track name above each
+  line. The authored lead track still supplies the lyrics and color.
 - A project-persisted visible-line count from 1 through 5 governs both Live
   Preview and MP4 output. The stage renders only those full lines, with no
   miniature upcoming-line treatment.
@@ -148,7 +149,9 @@ transport must never become separate application windows.
 - Internal blank lyric rows split sections. Neither advance mode blends lines
   across a separator: after one section passes, the next section loads as its
   own group.
-- Title card, instrumental state, safe-area guide, and current time.
+- Do not automatically insert an Instrumental word, graphic, or countdown in
+  gaps between lyric sections.
+- Title card, safe-area guide, and current time.
 - Live Preview is primarily a timing-verification surface. It is suspended
   during armed synchronization and restored on exit.
 - Play/pause, Stop, short skip backward/forward, playback speed, volume, playhead
@@ -169,10 +172,24 @@ transport must never become separate application windows.
   and blank separators must round trip without loss.
 - Export the active vocal track as LRC.
 - Export the project as ASS with karaoke timing tags.
-- Render a 1080p MP4 up to 30 minutes from the built-in stage design, persisted
-  lyric line count and advance mode, the authored lead track, and linked backing
-  track through a locally installed FFmpeg executable.
-- Show frame-rendering and encoding progress, and fail without leaving a partial destination file when video requirements are unavailable.
+- Render an MP4 up to 30 minutes from the built-in stage design, persisted lyric
+  line count and advance mode, per-word timing, the authored lead track, and
+  linked backing track through a locally installed FFmpeg executable.
+- Offer the exact resolution presets 240p (426 x 240), 360p (640 x 360), 480p
+  (854 x 480), 720p (1280 x 720), 1080p (1920 x 1080), 1440p (2560 x 1440),
+  and 2160p (3840 x 2160), with 30 fps and 60 fps choices. Default to 720p at
+  30 fps for faster iteration.
+- Render target-resolution, selected-rate unique frames rather than duplicating
+  a 10 fps render, stream backpressured JPEG frames to FFmpeg, and use a faster
+  `libx264` encoding preset.
+- Show frame-rendering and encoding progress. Closing the export dialog, closing
+  the application, quitting, or choosing Cancel during an active export asks for
+  confirmation. Keep the progress and cancellation surface available until the
+  cancellation request is accepted. A confirmed cancellation stops the export
+  and preserves any partial output as a UUID-named file beside the chosen
+  destination; it does not publish that partial file as the requested result.
+- Keep the chosen destination safe and remove staging output after ordinary
+  errors, including unavailable video requirements.
 - Validate and report untimed, invalid, or overlapping timing before export.
 - Browser fallbacks for open/download when the React surface is run outside Electron.
 
@@ -237,13 +254,21 @@ transport must never become separate application windows.
 - [ ] Live Preview and MP4 show the persisted 1-to-5 line count with matching
   Clear/Scroll behavior, no miniature upcoming line, and no blending across
   blank-row section boundaries.
+- [ ] Live Preview and MP4 use the same per-word timing, show no repeated singer
+  or track label above lyric lines, and add no automatic Instrumental treatment
+  between sections.
 - [ ] Timeline movement and resize operations immediately affect the Live Preview
   when it is mounted outside armed synchronization.
 - [ ] LRC and ASS exports contain monotonic, non-negative timing.
 - [ ] Undo and redo cover lyric replacement, timing edits, and timing clears.
 - [ ] Required tests, builds, packages, and platform CI are green for the final
   acceptance candidate.
-- [ ] A linked-audio project renders a 1920 × 1080 H.264/AAC MP4 with synchronized
-  lyric frames.
+- [ ] A linked-audio project renders synchronized H.264/AAC MP4 lyric frames at
+  every supported resolution and at 30 or 60 fps; a new export defaults to
+  720p/30.
+- [ ] Cancelling an active MP4 export from its dialog, application close, or quit
+  requires confirmation and preserves a UUID-named partial file beside the
+  chosen destination, while an ordinary export failure leaves the destination
+  safe.
 - [ ] The final UI is visually checked at the working desktop size and the minimum
   supported 1280 × 720 window.

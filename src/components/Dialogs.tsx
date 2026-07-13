@@ -196,12 +196,26 @@ interface ExportDialogProps {
   onClose: () => void
   onExportLrc: () => void
   onExportAss: () => void
-  onExportVideo: () => void
-  onCancelVideo: () => void
+  onExportVideo: (settings: Pick<StudioVideoExportOptions, 'resolution' | 'fps'>) => void
+  onCancelVideo: () => Promise<boolean>
   onExportProject: () => void
   videoAvailable: boolean
   videoProgress: StudioVideoExportProgress | null
 }
+
+const VIDEO_RESOLUTION_OPTIONS: Array<{
+  value: StudioVideoResolution
+  label: string
+  dimensions: string
+}> = [
+  { value: '240p', label: '240p', dimensions: '426 × 240' },
+  { value: '360p', label: '360p', dimensions: '640 × 360' },
+  { value: '480p', label: '480p', dimensions: '854 × 480' },
+  { value: '720p', label: '720p', dimensions: '1280 × 720' },
+  { value: '1080p', label: '1080p', dimensions: '1920 × 1080' },
+  { value: '1440p', label: '1440p', dimensions: '2560 × 1440' },
+  { value: '2160p', label: '2160p', dimensions: '3840 × 2160' },
+]
 
 export function ExportDialog({
   projectTitle,
@@ -218,7 +232,13 @@ export function ExportDialog({
   videoAvailable,
   videoProgress,
 }: ExportDialogProps) {
+  const [resolution, setResolution] = useState<StudioVideoResolution>('720p')
+  const [fps, setFps] = useState<StudioVideoFps>(30)
+  const [cancelConfirmationOpen, setCancelConfirmationOpen] = useState(false)
+  const [cancellationPending, setCancellationPending] = useState(false)
+  const [cancelError, setCancelError] = useState<string | null>(null)
   const exportingVideo = videoProgress !== null
+  const resolutionOption = VIDEO_RESOLUTION_OPTIONS.find((option) => option.value === resolution)
   const videoStatus = videoProgress?.phase === 'frames'
     ? `Rendering lyric frames · ${videoProgress.completed} / ${videoProgress.total}`
     : videoProgress?.phase === 'encoding'
@@ -228,16 +248,78 @@ export function ExportDialog({
         : !hasLyrics
           ? 'Add lyrics to enable karaoke video export'
           : videoAvailable
-            ? '1080p MP4 · lead vocal and linked audio'
+            ? `${resolutionOption?.dimensions} · ${fps} fps MP4 · linked audio`
             : 'Attach audio in the desktop app to enable'
+
+  const handleClose = () => {
+    if (cancellationPending) return
+    if (cancelConfirmationOpen) {
+      setCancelConfirmationOpen(false)
+    } else if (exportingVideo) {
+      setCancelError(null)
+      setCancelConfirmationOpen(true)
+    } else {
+      onClose()
+    }
+  }
+
+  const requestCancellation = () => {
+    setCancelError(null)
+    setCancelConfirmationOpen(true)
+  }
+
+  const confirmCancellation = async () => {
+    setCancellationPending(true)
+    setCancelError(null)
+    try {
+      const accepted = await onCancelVideo()
+      if (!accepted) {
+        setCancellationPending(false)
+        setCancelConfirmationOpen(false)
+        setCancelError('The export could not be canceled. If it is still running, try again.')
+        return
+      }
+      setCancellationPending(false)
+      onClose()
+    } catch (error) {
+      setCancellationPending(false)
+      setCancelConfirmationOpen(false)
+      setCancelError(error instanceof Error ? error.message : 'The export could not be canceled.')
+    }
+  }
 
   return (
     <Modal
       title="Export karaoke"
       eyebrow={projectTitle}
-      onClose={onClose}
-      closeDisabled={exportingVideo}
+      onClose={handleClose}
+      closeDisabled={cancellationPending}
     >
+      {cancelConfirmationOpen ? (
+        <div className="video-export-cancel-confirmation" role="alertdialog" aria-labelledby="video-export-cancel-title">
+          <CircleStop size={28} />
+          <h3 id="video-export-cancel-title">Cancel video export?</h3>
+          <p>The encoder will stop. Any partial MP4 will remain beside the destination you chose.</p>
+          <div>
+            <Button
+              autoFocus
+              variant="secondary"
+              disabled={cancellationPending}
+              onClick={() => setCancelConfirmationOpen(false)}
+            >
+              Keep exporting
+            </Button>
+            <Button
+              variant="danger"
+              disabled={cancellationPending}
+              aria-busy={cancellationPending}
+              onClick={() => void confirmCancellation()}
+            >
+              {cancellationPending ? 'Canceling…' : 'Cancel export'}
+            </Button>
+          </div>
+        </div>
+      ) : <>
       <div className={`export-readiness ${!hasLyrics || issueCount ? 'export-readiness--warning' : ''}`}>
         {!hasLyrics || issueCount ? <AlertTriangle size={18} /> : <CheckCircle2 size={18} />}
         <div>
@@ -263,6 +345,35 @@ export function ExportDialog({
           />
         </div>
       )}
+      {cancelError && <p className="video-export-cancel-error" role="alert">{cancelError}</p>}
+      <fieldset className="video-export-settings" disabled={exportingVideo}>
+        <legend>Video settings</legend>
+        <label>
+          <span>Resolution</span>
+          <select
+            aria-label="Video resolution"
+            value={resolution}
+            onChange={(event) => setResolution(event.target.value as StudioVideoResolution)}
+          >
+            {VIDEO_RESOLUTION_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label} · {option.dimensions}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Frame rate</span>
+          <select
+            aria-label="Video frame rate"
+            value={fps}
+            onChange={(event) => setFps(Number(event.target.value) as StudioVideoFps)}
+          >
+            <option value={30}>30 fps</option>
+            <option value={60}>60 fps</option>
+          </select>
+        </label>
+      </fieldset>
       <div className="export-options">
         <button onClick={onExportLrc} disabled={exportingVideo || !activeTrackHasLyrics}>
           <span className="export-option__icon"><FileText size={21} /></span>
@@ -278,7 +389,9 @@ export function ExportDialog({
           <Download size={16} />
         </button>
         <button
-          onClick={exportingVideo ? onCancelVideo : onExportVideo}
+          onClick={exportingVideo
+            ? requestCancellation
+            : () => onExportVideo({ resolution, fps })}
           disabled={!exportingVideo && (!hasLyrics || !videoAvailable)}
           aria-busy={exportingVideo}
         >
@@ -297,6 +410,7 @@ export function ExportDialog({
           <Download size={16} />
         </button>
       </div>
+      </>}
     </Modal>
   )
 }

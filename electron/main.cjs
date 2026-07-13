@@ -11,8 +11,16 @@ const {
   readUtf8FileWithinLimit,
   writeUtf8FileAtomically,
 } = require('./project-files.cjs')
-const { exportKaraokeVideo, MAX_VIDEO_DURATION_MS } = require('./video-export.cjs')
+const {
+  exportKaraokeVideo,
+  MAX_VIDEO_DURATION_MS,
+  normalizeVideoSettings,
+} = require('./video-export.cjs')
 const { ensureFfmpegForExport } = require('./ffmpeg-setup.cjs')
+const {
+  VIDEO_EXPORT_CANCEL_DIALOG_OPTIONS,
+  createVideoExportLifecycleGuard,
+} = require('./video-export-lifecycle.cjs')
 const {
   EXPORT_FILTERS,
   ensureExportExtension,
@@ -131,10 +139,6 @@ const writableProjectPaths = new Set()
 
 let mainWindow = null
 let activeVideoExport = null
-let pendingWindowClose = false
-let pendingAppQuit = false
-let allowWindowCloseOnce = false
-let allowAppQuitOnce = false
 
 app.setName(APP_NAME)
 
@@ -496,6 +500,10 @@ function normalizeExportRequest(value) {
 
 function normalizeVideoExportRequest(value) {
   if (!isRecord(value)) throw new TypeError('exportVideo requires an options object')
+  const videoSettings = normalizeVideoSettings({
+    resolution: value.resolution,
+    fps: value.fps,
+  })
   const durationMs = value.durationMs
   if (
     !Number.isSafeInteger(durationMs) ||
@@ -517,6 +525,8 @@ function normalizeVideoExportRequest(value) {
       'projectJson',
       MAX_PROJECT_FILE_BYTES,
     ),
+    resolution: videoSettings.resolution,
+    fps: videoSettings.fps,
     suggestedName: optionalString(value.suggestedName, 'suggestedName'),
   }
 }
@@ -557,35 +567,37 @@ function canceledVideoExportError() {
   return error
 }
 
-function retryPendingLifecycleAction() {
-  if (pendingAppQuit) {
-    pendingAppQuit = false
-    pendingWindowClose = false
-    allowAppQuitOnce = true
-    setImmediate(() => app.quit())
-    return
-  }
-  if (pendingWindowClose) {
-    pendingWindowClose = false
-    setImmediate(() => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        allowWindowCloseOnce = true
-        mainWindow.close()
-      }
-    })
-  }
-}
-
 function finishVideoExport(operation) {
   if (activeVideoExport === operation) activeVideoExport = null
   operation.resolveFinished()
-  retryPendingLifecycleAction()
 }
 
 function abortActiveVideoExport() {
   activeVideoExport?.controller.abort()
   return activeVideoExport?.finished || Promise.resolve()
 }
+
+async function confirmLifecycleVideoExportCancellation() {
+  const owner = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null
+  const options = {
+    ...VIDEO_EXPORT_CANCEL_DIALOG_OPTIONS,
+    buttons: [...VIDEO_EXPORT_CANCEL_DIALOG_OPTIONS.buttons],
+  }
+  const result = owner
+    ? await dialog.showMessageBox(owner, options)
+    : await dialog.showMessageBox(options)
+  return result.response === 1
+}
+
+const videoExportLifecycleGuard = createVideoExportLifecycleGuard({
+  confirmCancellation: confirmLifecycleVideoExportCancellation,
+  abortActiveExport: abortActiveVideoExport,
+  closeWindow: () => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close()
+  },
+  quitApp: () => app.quit(),
+  onError: (error) => console.error('Unable to confirm video export cancellation:', error),
+})
 
 function registerIpcHandlers() {
   ipcMain.handle(CHANNELS.openProject, async (event) => {
@@ -781,6 +793,8 @@ function registerIpcHandlers() {
         audioPath: request.audioPath,
         outputPath: path.resolve(selectedOutputPath),
         ffmpegPath,
+        resolution: request.resolution,
+        fps: request.fps,
         onProgress: sendProgress,
         signal: operation.controller.signal,
       })
@@ -1007,14 +1021,9 @@ async function createMainWindow() {
     if (!window.isDestroyed()) window.show()
   })
   window.on('close', (event) => {
-    if (allowWindowCloseOnce) {
-      allowWindowCloseOnce = false
-      return
-    }
     if (!activeVideoExport) return
     event.preventDefault()
-    pendingWindowClose = true
-    void abortActiveVideoExport()
+    void videoExportLifecycleGuard.requestWindowClose()
   })
   window.on('closed', () => {
     if (mainWindow === window) mainWindow = null
@@ -1052,15 +1061,9 @@ if (!hasSingleInstanceLock) {
 } else {
   app.on('second-instance', focusMainWindow)
   app.on('before-quit', (event) => {
-    if (allowAppQuitOnce) {
-      allowAppQuitOnce = false
-      return
-    }
     if (!activeVideoExport) return
     event.preventDefault()
-    pendingAppQuit = true
-    pendingWindowClose = false
-    void abortActiveVideoExport()
+    void videoExportLifecycleGuard.requestAppQuit()
   })
 
   app.whenReady().then(async () => {
