@@ -12,14 +12,17 @@ Okay Karaoke Studio is a single-window desktop application for editing and synch
   production windows. Armed synchronization replaces the stage with a
   lightweight current/next-line Sync Focus, then restores it for verification.
 - Clean-slate startup with one empty lead-vocal track and no implicit example content.
-- One lead vocal plus an optional independently timed duet track.
+- One lead-vocal authoring track for the active MVP; adding singer tracks is
+  deferred.
 - Low-latency Spacebar onset synchronization: each same-line onset closes the
   previous word, while holding the final word of a line extends it. Shift+Space
   controls playback.
 - Live karaoke preview and MP4 output share a persisted 1-to-5 line count and
   Clear/Scroll advance mode, with blank lyric rows separating sections.
-- Draggable, resizable word blocks, readable label lanes, range selection, and
-  timing controls on a zoomable waveform TimeBoard.
+- Draggable, resizable word blocks on a common chronological baseline, readable
+  staggered label lanes, range selection, and timing controls on a zoomable
+  waveform TimeBoard. Timing edits cannot cross the preceding or following
+  timed word in lyric order, including across line boundaries.
 - An **Edit text** action opens raw lyric editing with syllable separators,
   preserved blank-row section breaks, and screen-fit guidance; no Word Map is
   persistently rendered in the main workspace.
@@ -50,7 +53,7 @@ Windows or the `ffmpeg` formula through an existing Homebrew on macOS, after
 explicit confirmation. It never installs Homebrew, runs Linux package managers,
 or bundles the FFmpeg command-line encoder. Manual and system installations remain
 supported; set `OKAY_KARAOKE_FFMPEG` to use a specific executable. Video rendering
-is currently limited to 30 minutes and the MVP's two vocal tracks.
+is currently limited to 30 minutes and the active lead-vocal track.
 
 ```bash
 bun install --frozen-lockfile
@@ -98,20 +101,22 @@ bun run test:video
    current and next lyric lines in cursor order.
 6. Press Space at each word onset. A new onset on the same line backfills the
    preceding word's end; hold the final word of a line until its sung end. The
-   authoritative playback clock supplies timestamps, and taps before lyric time
-   `0:00` are ignored. Press Escape to finish the synchronization session and
-   restore Live Preview.
+   resulting timing remains bounded by the preceding and following timed words
+   in lyric order, even across line boundaries. The authoritative playback
+   clock supplies timestamps, and taps before lyric time `0:00` are ignored.
+   Press Escape to finish the synchronization session and restore Live Preview.
 7. Verify timing in Live Preview, then select words in the TimeBoard.
    Command/Ctrl+A selects the active track outside text fields; dragging across
    empty TimeBoard space creates a marquee selection. Drag blocks to move timing
-   and drag either edge to resize. A synchronization session is one undoable
-   history step; individual TimeBoard corrections remain undoable edits.
-8. Add a duet track when needed and synchronize it independently.
-9. Use the TimeBoard's **Clear Timing** or **Clear Timing After Cursor** controls
+   and drag either edge to resize; moves and resizes stop at the adjacent timed
+   words in lyric order, including across line boundaries. A synchronization
+   session is one undoable history step; individual TimeBoard corrections remain
+   undoable edits.
+8. Use the TimeBoard's **Clear Timing** or **Clear Timing After Cursor** controls
    when resynchronizing. Use transport **Stop** to pause and return to `0:00`.
-10. Review the timing status, save the schema-v3 `.oks` project, and export LRC,
-    ASS, or a 1080p MP4 karaoke video. Video export requires attached audio.
-    Schema-v1 and schema-v2 projects open with the 3-line/Clear display defaults.
+9. Review the timing status, save the schema-v3 `.oks` project, and export LRC,
+   ASS, or a 1080p MP4 karaoke video. Video export requires attached audio.
+   Schema-v1 and schema-v2 projects open with the 3-line/Clear display defaults.
 
 ## Keyboard controls
 
@@ -147,7 +152,8 @@ docs/SDLC.md            Pull-request, verification, ruleset, and release policy
 The canonical schema-v3 model stores integer-millisecond word timings, blank-row
 section separators, and shared Live Preview/MP4 lyric-display settings inside
 the project. Schema-v1 and schema-v2 projects migrate to 3 visible lines and
-Clear advance mode. The renderer does not receive Node.js access. Electron
+Clear advance mode. The active MVP authors one lead track; adding new singer
+tracks remains deferred. The renderer does not receive Node.js access. Electron
 exposes a small typed bridge for project dialogs, audio import,
 project-authorized audio restoration, text/video export, and menu commands.
 Linked audio is streamed through an owner-scoped, tokenized read-only custom

@@ -228,7 +228,7 @@ export function ExportDialog({
         : !hasLyrics
           ? 'Add lyrics to enable karaoke video export'
           : videoAvailable
-            ? '1080p MP4 · both voices and linked audio'
+            ? '1080p MP4 · lead vocal and linked audio'
             : 'Attach audio in the desktop app to enable'
 
   return (
@@ -274,7 +274,7 @@ export function ExportDialog({
         </button>
         <button onClick={onExportAss} disabled={exportingVideo || !hasLyrics}>
           <span className="export-option__icon"><Music size={21} /></span>
-          <span><strong>ASS karaoke subtitles</strong><small>Both voices · karaoke timing tags</small></span>
+          <span><strong>ASS karaoke subtitles</strong><small>Lead vocal · karaoke timing tags</small></span>
           <Download size={16} />
         </button>
         <button

@@ -20,8 +20,11 @@ no such integration is currently planned.
 ## Next: safer and faster editing
 
 - Crash-safe autosave snapshots and project recovery.
-- Ripple timing, range retime, quantize, nudge presets, and copy/move to the other
-  voice.
+- Ripple timing, range retime, quantize, and nudge presets.
+- Additional independently timed singer-track authoring, including track naming,
+  styling, synchronization, and editing. Separate tracks are the mechanism for
+  intentional overlapping vocals; timing within each track remains ordered and
+  non-overlapping.
 - Line, phrase, and arbitrary group dragging with magnetic snapping.
 - Loop ranges, markers, count-in, metronome, and configurable keyboard shortcuts.
 - Separate **reference audio** for lyric synchronization from **export audio**

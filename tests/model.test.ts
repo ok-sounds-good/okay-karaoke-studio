@@ -156,6 +156,51 @@ describe('karaoke project model', () => {
     expect(validateProject(plain).filter((issue) => issue.severity === 'error')).toEqual([])
   })
 
+  it('validates word overlap across line boundaries while allowing edge-touching timing', () => {
+    const timedLine = (
+      lineId: string,
+      wordId: string,
+      text: string,
+      startMs: number,
+      endMs: number,
+    ) => createLyricLine(text, {
+      id: lineId,
+      startMs,
+      endMs,
+      words: [createLyricWord(text, { id: wordId, startMs, endMs })],
+    })
+
+    const overlapping = createProject({
+      tracks: [createVocalTrack({
+        id: 'lead',
+        lines: [
+          timedLine('first-line', 'first-word', 'First', 1_000, 1_500),
+          timedLine('second-line', 'second-word', 'Second', 1_400, 1_900),
+        ],
+      })],
+    })
+    expect(validateProject(overlapping)).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: 'word-overlap',
+        path: 'tracks[0].lines[1].words[0]',
+        trackId: 'lead',
+        lineId: 'second-line',
+        wordId: 'second-word',
+      }),
+    ]))
+
+    const edgeTouching = createProject({
+      tracks: [createVocalTrack({
+        id: 'lead',
+        lines: [
+          timedLine('first-line', 'first-word', 'First', 1_000, 1_500),
+          timedLine('second-line', 'second-word', 'Second', 1_500, 1_900),
+        ],
+      })],
+    })
+    expect(validateProject(edgeTouching).map((issue) => issue.code)).not.toContain('word-overlap')
+  })
+
   it('rejects unsafe, over-limit, and over-cardinality project state', () => {
     const project = createProject({
       durationMs: MAX_PROJECT_DURATION_MS + 1,

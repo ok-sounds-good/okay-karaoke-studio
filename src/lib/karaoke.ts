@@ -833,6 +833,7 @@ export function validateProject(project: KaraokeProject): ValidationIssue[] {
     const trackContext = { trackId: track.id }
     registerId(track.id, `${trackPath}.id`, trackContext)
     let priorTimedLine: LyricLine | undefined
+    let priorTimedWord: LyricWord | undefined
 
     track.lines.forEach((line, lineIndex) => {
       wordCount += line.words.length
@@ -923,7 +924,6 @@ export function validateProject(project: KaraokeProject): ValidationIssue[] {
       }
       if (lineIsTimed) priorTimedLine = line
 
-      let priorTimedWord: LyricWord | undefined
       line.words.forEach((word, wordIndex) => {
         const wordPath = `${linePath}.words[${wordIndex}]`
         const wordContext = { ...lineContext, wordId: word.id }

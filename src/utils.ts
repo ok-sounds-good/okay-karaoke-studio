@@ -21,6 +21,10 @@ export interface WordTimingDraft {
 
 export type ProjectTimingDraft = ReadonlyMap<string, WordTimingDraft>
 
+export type WordResizeEdge = 'start' | 'end'
+
+export const MIN_EDITED_WORD_DURATION_MS = 80
+
 export function motionAwareScrollBehavior(): ScrollBehavior {
   return globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches
     ? 'auto'
@@ -212,8 +216,169 @@ export function applyTimingDraft(
   return projectChanged ? { ...project, tracks } : project
 }
 
+function effectiveWordEnd(word: LyricWord): number | null {
+  if (word.startMs === null) return null
+  return Math.max(word.startMs + 1, word.endMs ?? word.startMs + 300)
+}
+
+function projectRawTimingCeiling(project: KaraokeProject): number {
+  const offsetLimit = Math.max(0, MAX_PROJECT_DURATION_MS - Math.max(0, project.offsetMs))
+  const durationLimit = project.durationMs === null
+    ? MAX_PROJECT_DURATION_MS
+    : Math.max(0, project.durationMs - project.offsetMs)
+  return Math.min(MAX_PROJECT_DURATION_MS, offsetLimit, durationLimit)
+}
+
+function previousTimedWord(
+  words: WordRef[],
+  index: number,
+  excludedIds: ReadonlySet<string> = new Set(),
+): LyricWord | null {
+  for (let candidateIndex = index - 1; candidateIndex >= 0; candidateIndex -= 1) {
+    const candidate = words[candidateIndex].word
+    if (!excludedIds.has(candidate.id) && candidate.startMs !== null) return candidate
+  }
+  return null
+}
+
+function nextTimedWord(
+  words: WordRef[],
+  index: number,
+  excludedIds: ReadonlySet<string> = new Set(),
+): LyricWord | null {
+  for (let candidateIndex = index + 1; candidateIndex < words.length; candidateIndex += 1) {
+    const candidate = words[candidateIndex].word
+    if (!excludedIds.has(candidate.id) && candidate.startMs !== null) return candidate
+  }
+  return null
+}
+
+/**
+ * Keeps a moved selection inside the project and between its nearest unselected
+ * lyric-order neighbors on each singer track. Selected words move as a rigid
+ * group, so their internal timing relationships are preserved.
+ */
+export function constrainWordShiftDelta(
+  project: KaraokeProject,
+  wordIds: ReadonlySet<string>,
+  requestedDeltaMs: number,
+): number {
+  const requested = Math.round(requestedDeltaMs)
+  if (!Number.isFinite(requested) || wordIds.size === 0) return 0
+
+  let minimumDelta = Number.NEGATIVE_INFINITY
+  let maximumDelta = Number.POSITIVE_INFINITY
+  let foundTimedWord = false
+  const timingCeiling = projectRawTimingCeiling(project)
+
+  project.tracks.forEach((track) => {
+    const words = flattenTrack(track)
+    words.forEach(({ word }, index) => {
+      if (!wordIds.has(word.id) || word.startMs === null) return
+      foundTimedWord = true
+      const endMs = effectiveWordEnd(word) ?? word.startMs + 1
+      minimumDelta = Math.max(minimumDelta, -word.startMs)
+      maximumDelta = Math.min(maximumDelta, timingCeiling - endMs)
+
+      const previous = previousTimedWord(words, index, wordIds)
+      const previousEndMs = previous ? effectiveWordEnd(previous) : null
+      if (previousEndMs !== null) {
+        minimumDelta = Math.max(minimumDelta, previousEndMs - word.startMs)
+      }
+
+      const next = nextTimedWord(words, index, wordIds)
+      if (next?.startMs !== null && next?.startMs !== undefined) {
+        maximumDelta = Math.min(maximumDelta, next.startMs - endMs)
+      }
+    })
+  })
+
+  if (!foundTimedWord || minimumDelta > maximumDelta) return 0
+
+  // An older project may already contain an overlap. Do not make a drag in the
+  // wrong direction jump to the far side of the invalid range; leave it alone
+  // until the user drags toward the valid boundary.
+  if (minimumDelta > 0 && requested <= 0) return 0
+  if (maximumDelta < 0 && requested >= 0) return 0
+  return Math.max(minimumDelta, Math.min(maximumDelta, requested))
+}
+
+/** Constrains one edge without moving the opposite edge. */
+export function constrainWordResizeTiming(
+  project: KaraokeProject,
+  wordId: string,
+  edge: WordResizeEdge,
+  requestedStartMs: number,
+  requestedEndMs: number,
+): WordTimingDraft | null {
+  for (const track of project.tracks) {
+    const words = flattenTrack(track)
+    const index = words.findIndex(({ word }) => word.id === wordId)
+    if (index < 0) continue
+    const word = words[index].word
+    if (word.startMs === null) return null
+
+    const originalStartMs = word.startMs
+    const originalEndMs = effectiveWordEnd(word) ?? originalStartMs + 1
+    if (edge === 'start') {
+      const previous = previousTimedWord(words, index)
+      const minimumStartMs = Math.max(0, previous ? effectiveWordEnd(previous) ?? 0 : 0)
+      const maximumStartMs = originalEndMs - MIN_EDITED_WORD_DURATION_MS
+      if (minimumStartMs > maximumStartMs) {
+        return { startMs: originalStartMs, endMs: originalEndMs }
+      }
+      const requested = Math.round(requestedStartMs)
+      if (!Number.isFinite(requested)) {
+        return { startMs: originalStartMs, endMs: originalEndMs }
+      }
+      if (
+        (originalStartMs < minimumStartMs && requested <= originalStartMs) ||
+        (originalStartMs > maximumStartMs && requested >= originalStartMs)
+      ) {
+        return { startMs: originalStartMs, endMs: originalEndMs }
+      }
+      return {
+        startMs: Math.max(
+          minimumStartMs,
+          Math.min(maximumStartMs, requested),
+        ),
+        endMs: originalEndMs,
+      }
+    }
+
+    const next = nextTimedWord(words, index)
+    const maximumEndMs = Math.min(
+      projectRawTimingCeiling(project),
+      next?.startMs ?? Number.POSITIVE_INFINITY,
+    )
+    const minimumEndMs = originalStartMs + MIN_EDITED_WORD_DURATION_MS
+    if (minimumEndMs > maximumEndMs) {
+      return { startMs: originalStartMs, endMs: originalEndMs }
+    }
+    const requested = Math.round(requestedEndMs)
+    if (!Number.isFinite(requested)) {
+      return { startMs: originalStartMs, endMs: originalEndMs }
+    }
+    if (
+      (originalEndMs < minimumEndMs && requested <= originalEndMs) ||
+      (originalEndMs > maximumEndMs && requested >= originalEndMs)
+    ) {
+      return { startMs: originalStartMs, endMs: originalEndMs }
+    }
+    return {
+      startMs: originalStartMs,
+      endMs: Math.max(
+        minimumEndMs,
+        Math.min(maximumEndMs, requested),
+      ),
+    }
+  }
+  return null
+}
+
 export function shiftWords(project: KaraokeProject, wordIds: Set<string>, deltaMs: number): KaraokeProject {
-  if (Math.abs(deltaMs) < 1) return project
+  const constrainedDeltaMs = constrainWordShiftDelta(project, wordIds, deltaMs)
+  if (Math.abs(constrainedDeltaMs) < 1) return project
   let projectChanged = false
   const tracks = project.tracks.map((track) => {
     let trackChanged = false
@@ -221,8 +386,8 @@ export function shiftWords(project: KaraokeProject, wordIds: Set<string>, deltaM
       let lineChanged = false
       const words = line.words.map((word) => {
         if (!wordIds.has(word.id) || word.startMs === null) return word
-        const duration = Math.max(80, (word.endMs ?? word.startMs + 300) - word.startMs)
-        const startMs = Math.max(0, Math.round(word.startMs + deltaMs))
+        const duration = Math.max(1, (word.endMs ?? word.startMs + 300) - word.startMs)
+        const startMs = Math.max(0, Math.round(word.startMs + constrainedDeltaMs))
         const endMs = startMs + duration
         if (startMs === word.startMs && endMs === word.endMs) return word
         lineChanged = true

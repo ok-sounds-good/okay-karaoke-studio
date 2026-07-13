@@ -1,5 +1,5 @@
 import { memo, useMemo } from 'react'
-import { FileAudio2, Import, Mic2, Music2, Plus, SlidersHorizontal, UsersRound } from 'lucide-react'
+import { FileAudio2, Import, Mic2, Music2, SlidersHorizontal, UsersRound } from 'lucide-react'
 import type { KaraokeProject, VocalTrack } from '../lib/model'
 import { formatTime } from '../lib/model'
 import { effectiveDuration, flattenProject, flattenTrack } from '../utils'
@@ -11,7 +11,6 @@ interface InspectorPanelProps {
   onSelectTrack: (trackId: string) => void
   onUpdateProject: (patch: Partial<Pick<KaraokeProject, 'title' | 'artist' | 'offsetMs'>>) => void
   onUpdateTrack: (trackId: string, patch: Partial<Pick<VocalTrack, 'name' | 'color' | 'muted' | 'solo'>>) => void
-  onAddTrack: () => void
   onImportAudio: () => void
   onImportLrc: () => void
 }
@@ -22,7 +21,6 @@ export const InspectorPanel = memo(function InspectorPanel({
   onSelectTrack,
   onUpdateProject,
   onUpdateTrack,
-  onAddTrack,
   onImportAudio,
   onImportLrc,
 }: InspectorPanelProps) {
@@ -100,7 +98,7 @@ export const InspectorPanel = memo(function InspectorPanel({
 
         <section className="inspector-section">
           <div className="inspector-section__title">
-            <span>Vocal tracks</span>
+            <span>{project.tracks.length === 1 ? 'Vocal track' : 'Vocal tracks'}</span>
             <UsersRound size={13} />
           </div>
           <div className="vocal-track-list">
@@ -134,30 +132,27 @@ export const InspectorPanel = memo(function InspectorPanel({
                   </div>
                   <div className="vocal-track-card__status">
                     <span>{complete}/{total} timed</span>
-                    <div>
-                      <button
-                        className={track.muted ? 'is-on' : ''}
-                        aria-label={`${track.muted ? 'Unmute' : 'Mute'} ${track.name}`}
-                        title={`${track.muted ? 'Unmute' : 'Mute'} ${track.name}`}
-                        onClick={(event) => { event.stopPropagation(); onUpdateTrack(track.id, { muted: !track.muted }) }}
-                      >M</button>
-                      <button
-                        className={track.solo ? 'is-on' : ''}
-                        aria-label={`${track.solo ? 'Disable solo for' : 'Solo'} ${track.name}`}
-                        title={`${track.solo ? 'Disable solo for' : 'Solo'} ${track.name}`}
-                        onClick={(event) => { event.stopPropagation(); onUpdateTrack(track.id, { solo: !track.solo }) }}
-                      >S</button>
-                    </div>
+                    {project.tracks.length > 1 && (
+                      <div>
+                        <button
+                          className={track.muted ? 'is-on' : ''}
+                          aria-label={`${track.muted ? 'Unmute' : 'Mute'} ${track.name}`}
+                          title={`${track.muted ? 'Unmute' : 'Mute'} ${track.name}`}
+                          onClick={(event) => { event.stopPropagation(); onUpdateTrack(track.id, { muted: !track.muted }) }}
+                        >M</button>
+                        <button
+                          className={track.solo ? 'is-on' : ''}
+                          aria-label={`${track.solo ? 'Disable solo for' : 'Solo'} ${track.name}`}
+                          title={`${track.solo ? 'Disable solo for' : 'Solo'} ${track.name}`}
+                          onClick={(event) => { event.stopPropagation(); onUpdateTrack(track.id, { solo: !track.solo }) }}
+                        >S</button>
+                      </div>
+                    )}
                   </div>
                 </article>
               )
             })}
           </div>
-          {project.tracks.length < 2 && (
-            <Button className="full-width" size="sm" variant="ghost" onClick={onAddTrack}>
-              <Plus size={14} /> Add duet track
-            </Button>
-          )}
         </section>
 
         <section className="inspector-section">

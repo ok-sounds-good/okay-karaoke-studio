@@ -2,7 +2,11 @@
 
 ## Product promise
 
-Okay Karaoke Studio is a desktop editor for turning a backing track and plain lyrics into precisely timed karaoke lyrics. Project settings, lyric editing, the TimeBoard, stage verification, and playback stay in **one unified window**, with a focused low-latency surface replacing the stage while synchronization is armed.
+Okay Karaoke Studio is a desktop editor for turning a backing track and plain
+lyrics into precisely timed karaoke lyrics on one lead-vocal authoring track.
+Project settings, lyric editing, the TimeBoard, stage verification, and playback
+stay in **one unified window**, with a focused low-latency surface replacing the
+stage while synchronization is armed.
 
 This document is the active product-acceptance contract for version 0.1. The
 supporting criteria below may change as real editing work exposes blockers;
@@ -31,8 +35,11 @@ capabilities that are deliberately deferred belong in
 3. Open **Edit text** to paste lyrics, preserving internal blank rows as section
    separators, or import an LRC file.
 4. Press Space at each word onset. Each same-line onset closes the preceding
-   word; hold Space on the final word of a line to extend its duration.
-5. Correct individual words by dragging and resizing them in the TimeBoard.
+   word; hold Space on the final word of a line to extend its duration. The
+   resulting timing cannot cross the preceding or following timed word in lyric
+   order, including across line boundaries.
+5. Correct individual words by dragging and resizing them in the TimeBoard;
+   edits stop at those same lyric-order boundaries.
 6. Exit synchronization and verify the result in the restored Live Preview,
    choosing its line count and Clear or Scroll advance behavior as needed.
 7. Save the editable project and export LRC, ASS, or a finished MP4 karaoke video.
@@ -41,7 +48,7 @@ capabilities that are deliberately deferred belong in
 
 The main window must provide access to:
 
-- Project metadata and vocal-track controls.
+- Project metadata and lead-track controls.
 - An **Edit text** action that opens the transactional lyric editor; the main
   workspace does not persistently render a Word Map or lyric list.
 - A scrollable waveform TimeBoard.
@@ -72,9 +79,10 @@ transport must never become separate application windows.
   Project** action, a packaged user workflow, or fallback data after a load
   failure.
 
-### Lyrics and vocal tracks
+### Lyrics and vocal track
 
-- One lead track and one optional duet track with independent names and colors.
+- One lead-vocal authoring track with its own name and color.
+- Creating additional independently timed singer tracks is deferred.
 - **Edit text** opens a transactional plain-text lyric editor rather than a
   persistent Word Map or lyric panel in the main workspace.
 - Preserve internal blank lyric rows as section separators through edits and
@@ -88,7 +96,9 @@ transport must never become separate application windows.
 
 - Tap-sync mode in which bare Space key-down starts the current word. The next
   same-line key-down backfills the preceding word's end to that new onset;
-  key-up duration extends the final word of a line.
+  key-up duration extends the final word of a line. The resulting start and end
+  remain bounded by the preceding and following timed words in lyric order,
+  including when either adjacent word is on another lyric line.
 - Sample synchronization timestamps from the authoritative playback clock.
   Convert them to lyric time with the project offset, and ignore taps that occur
   before lyric time `0:00` when a positive offset delays the lyrics.
@@ -100,16 +110,20 @@ transport must never become separate application windows.
   Timing After Cursor**. Clear operations affect timing in the active track,
   preserve lyric text, and participate in undo/redo.
 - Click the ruler or waveform to seek.
-- Drag timed words or a multi-word selection to move them.
-- Drag word edges to change start or end times.
+- Drag timed words or a multi-word selection to move them without crossing the
+  preceding or following timed lyric-order word, including across line
+  boundaries.
+- Drag word edges to change start or end times within those same lyric-order
+  bounds.
 - Select words from the TimeBoard, including its untimed-word tray.
 - Outside a text-editing field, Command/Ctrl+A selects every word in the active
   track instead of selecting page text.
 - Dragging across empty TimeBoard space draws a visible marquee and selects the
   active track's intersecting word blocks.
-- Word text is rendered separately from duration-sized timing blocks. Full
-  labels remain readable without ellipses, and deterministic vertical lanes keep
-  adjacent labels and timing blocks from overlapping.
+- Word text is rendered separately from duration-sized timing blocks. Timing
+  blocks for non-overlapping words in the single lead track share a common
+  chronological baseline; label lanes may stagger vertically so full labels
+  remain readable without ellipses.
 - The timeline navigation group is ordered **Jump to start (`|<`)**, **Scroll
   backward (`<`)**, **Scroll forward (`>`)**. Each action has an unambiguous
   accessible name and hover description.
@@ -123,7 +137,7 @@ transport must never become separate application windows.
 ### Preview and transport
 
 - Progressive word highlighting driven by the same authoritative playback clock as the editor.
-- Display both active voices during duet passages.
+- Display the active lead-vocal track.
 - A project-persisted visible-line count from 1 through 5 governs both Live
   Preview and MP4 output. The stage renders only those full lines, with no
   miniature upcoming-line treatment.
@@ -156,7 +170,7 @@ transport must never become separate application windows.
 - Export the active vocal track as LRC.
 - Export the project as ASS with karaoke timing tags.
 - Render a 1080p MP4 up to 30 minutes from the built-in stage design, persisted
-  lyric line count and advance mode, up to two vocal tracks, and linked backing
+  lyric line count and advance mode, the authored lead track, and linked backing
   track through a locally installed FFmpeg executable.
 - Show frame-rendering and encoding progress, and fail without leaving a partial destination file when video requirements are unavailable.
 - Validate and report untimed, invalid, or overlapping timing before export.
@@ -186,6 +200,9 @@ transport must never become separate application windows.
 - CDG authoring or MP3+G export.
 - Background image scheduling.
 - Automatic linguistic hyphenation.
+- Authoring additional independently timed singer tracks. Those tracks are the
+  future mechanism for intentional overlapping vocals; timing within the active
+  single-track workflow remains chronological and non-overlapping.
 - Embedded audio, cloud sync, collaboration, show rotation, or a singer-facing second display.
 
 ## Product acceptance checklist
@@ -211,8 +228,10 @@ transport must never become separate application windows.
   selection and correction behaviors remain available afterward.
 - [ ] Command/Ctrl+A and marquee selection select the intended active-track words
   without selecting page text.
-- [ ] Full word labels and duration blocks remain readable and non-overlapping in
-  deterministic TimeBoard lanes.
+- [ ] Non-overlapping lead-track timing blocks share one chronological baseline;
+  label lanes may stagger while full word labels remain readable.
+- [ ] Sync capture, block movement, and edge resizing cannot cross the preceding
+  or following timed word in lyric order, including across line boundaries.
 - [ ] Timeline navigation, transport Stop, and hover help are discoverable and
   behave as labeled.
 - [ ] Live Preview and MP4 show the persisted 1-to-5 line count with matching

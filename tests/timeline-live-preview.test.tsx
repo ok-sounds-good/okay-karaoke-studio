@@ -136,6 +136,55 @@ function Harness() {
   )
 }
 
+function ShortBlockHarness() {
+  const [project, setProject] = useState<KaraokeProject>(() => createProject({
+    durationMs: 30_000,
+    tracks: [createVocalTrack({
+      id: 'lead',
+      lines: [createLyricLine('Short Next', {
+        id: 'short-line',
+        startMs: 1_000,
+        endMs: 2_100,
+        words: [
+          createLyricWord('Short', { id: 'short', startMs: 1_000, endMs: 1_050 }),
+          createLyricWord('Next', { id: 'short-next', startMs: 2_000, endMs: 2_100 }),
+        ],
+      })],
+    })],
+  }))
+  const shortWord = project.tracks[0].lines[0].words[0]
+
+  return (
+    <>
+      <Timeline
+        project={project}
+        peaks={[]}
+        isAnalyzing={false}
+        durationMs={30_000}
+        currentMs={1_000}
+        zoom={3.5}
+        activeTrackId="lead"
+        selectedWordIds={new Set(['short'])}
+        syncWordId={null}
+        syncMode={false}
+        onSeek={() => undefined}
+        onZoom={() => undefined}
+        onSelectWord={() => undefined}
+        onSelectWords={() => undefined}
+        onShiftWords={(ids, deltaMs) => setProject((current) => shiftWords(current, ids, deltaMs))}
+        onResizeWord={(wordId, startMs, endMs) => (
+          setProject((current) => patchWord(current, wordId, { startMs, endMs }))
+        )}
+        onTimingDraftChange={() => undefined}
+        onToggleSync={() => undefined}
+        onClearTiming={() => undefined}
+        onClearTimingAfterCursor={() => undefined}
+      />
+      <output data-testid="short-saved-timing">{`${shortWord.startMs}:${shortWord.endMs}`}</output>
+    </>
+  )
+}
+
 function MarqueeHarness() {
   const [selectedWordIds, setSelectedWordIds] = useState(new Set(['hold']))
   return (
@@ -172,6 +221,14 @@ function renderHarness() {
   document.body.append(container)
   root = createRoot(container)
   act(() => root!.render(<Harness />))
+  return container
+}
+
+function renderShortBlockHarness() {
+  container = document.createElement('div')
+  document.body.append(container)
+  root = createRoot(container)
+  act(() => root!.render(<ShortBlockHarness />))
   return container
 }
 
@@ -217,6 +274,23 @@ function timelineWord(scope: HTMLElement, word = 'Hold') {
 }
 
 describe('mounted Timeline live-preview wiring', () => {
+  it('keeps both edge-resize targets usable on a very short timing block', () => {
+    const scope = renderShortBlockHarness()
+    const word = timelineWord(scope, 'Short')
+    expect(word.classList.contains('is-compact')).toBe(true)
+
+    const startHandle = word.querySelector<HTMLElement>('.timeline-word__handle--start')!
+    const endHandle = word.querySelector<HTMLElement>('.timeline-word__handle--end')!
+    expect(startHandle).not.toBeNull()
+    expect(endHandle).not.toBeNull()
+
+    dispatchPointer(endHandle, 'pointerdown', 81, 100, 14)
+    dispatchPointer(word, 'pointermove', 81, 110, 14)
+    dispatchPointer(word, 'pointerup', 81, 110, 14)
+
+    expect(scope.querySelector('[data-testid="short-saved-timing"]')?.textContent).toBe('1000:1090')
+  })
+
   it('selects by visible marquee, adds with a modifier, and cleans up cancelled capture', () => {
     container = document.createElement('div')
     document.body.append(container)

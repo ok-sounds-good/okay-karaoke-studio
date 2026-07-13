@@ -2,7 +2,13 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type C
 import { AudioWaveform, ChevronLeft, ChevronRight, Edit3, Minus, Plus, RotateCcw, SkipBack, TimerReset, Zap, ZoomIn } from 'lucide-react'
 import type { KaraokeProject, LyricLine, LyricWord, VocalTrack } from '../lib/model'
 import { formatTime } from '../lib/model'
-import { flattenTrack, motionAwareScrollBehavior, type ProjectTimingDraft } from '../utils'
+import {
+  constrainWordResizeTiming,
+  constrainWordShiftDelta,
+  flattenTrack,
+  motionAwareScrollBehavior,
+  type ProjectTimingDraft,
+} from '../utils'
 import { Button, IconButton } from './ui'
 
 interface TimelineProps {
@@ -30,12 +36,14 @@ interface TimelineProps {
 }
 
 const TIMELINE_LABEL_GAP_PX = 4
-const TIMELINE_LINE_GAP_PX = 8
-const TIMELINE_LABEL_TOP_PX = 5
-const TIMELINE_WORD_TOP_PX = 25
+const TIMELINE_LABEL_LANE_GAP_PX = 4
+const TIMELINE_LABEL_ROW_HEIGHT_PX = 20
+const TIMELINE_LABEL_TOP_PX = 3
+const TIMELINE_WORD_ZONE_GAP_PX = 5
 const TIMELINE_WORD_HEIGHT_PX = 17
 const TIMELINE_WORD_ROW_GAP_PX = 3
 const TIMELINE_MIN_TRACK_HEIGHT_PX = 62
+const TIMELINE_EDGE_TOLERANCE_PX = 0.01
 
 export interface TimelineWordLayout {
   word: LyricWord
@@ -44,6 +52,7 @@ export interface TimelineWordLayout {
   top: number
   width: number
   labelWidth: number
+  collisionEnd: number
 }
 
 export interface TimelineLineLayout {
@@ -97,9 +106,9 @@ function assignNonOverlappingRows(words: Omit<TimelineWordLayout, 'top'>[]) {
   ;[...words]
     .sort((a, b) => a.left - b.left || a.wordIndex - b.wordIndex)
     .forEach((word) => {
-      const row = rowEnds.findIndex((end) => end + 2 <= word.left)
+      const row = rowEnds.findIndex((end) => end <= word.left + TIMELINE_EDGE_TOLERANCE_PX)
       const assignedRow = row >= 0 ? row : rowEnds.length
-      rowEnds[assignedRow] = word.left + word.width
+      rowEnds[assignedRow] = word.collisionEnd
       rows.set(word.word.id, assignedRow)
     })
   return { rowCount: Math.max(1, rowEnds.length), rows }
@@ -121,73 +130,85 @@ export function buildTimelineTrackLayout(
       if (adjustedEnd <= 0) return []
       const visibleStart = Math.max(0, adjustedStart)
       const left = (visibleStart / 1000) * pixelsPerSecond
+      const timingWidth = Math.max(0, ((adjustedEnd - visibleStart) / 1000) * pixelsPerSecond)
       return [{
         word,
         wordIndex,
         left,
-        width: Math.max(16, ((adjustedEnd - visibleStart) / 1000) * pixelsPerSecond),
+        width: Math.max(1, timingWidth),
         labelWidth: timelineLabelWidth(word),
+        collisionEnd: left + timingWidth,
       }]
     })
     if (!wordsWithoutTop.length) return []
 
-    const { rowCount, rows } = assignNonOverlappingRows(wordsWithoutTop)
     let labelLeft = Number.POSITIVE_INFINITY
     let labelWidth = Math.max(0, wordsWithoutTop.length - 1) * TIMELINE_LABEL_GAP_PX
-    let intervalEnd = 0
     wordsWithoutTop.forEach((word) => {
       labelLeft = Math.min(labelLeft, word.left)
       labelWidth += word.labelWidth
-      intervalEnd = Math.max(intervalEnd, word.left + word.width)
     })
     const intervalStart = labelLeft
-    intervalEnd = Math.max(intervalEnd, labelLeft + labelWidth)
-    const height = TIMELINE_WORD_TOP_PX
-      + rowCount * TIMELINE_WORD_HEIGHT_PX
-      + Math.max(0, rowCount - 1) * TIMELINE_WORD_ROW_GAP_PX
-      + 6
+    const intervalEnd = labelLeft + labelWidth
     return [{
       line,
       lineIndex,
       lane: 0,
       top: 0,
-      height,
+      height: TIMELINE_LABEL_ROW_HEIGHT_PX,
       labelLeft,
       labelWidth,
       intervalStart,
       intervalEnd,
       words: wordsWithoutTop.map((word) => ({
         ...word,
-        top: TIMELINE_WORD_TOP_PX
-          + (rows.get(word.word.id) ?? 0) * (TIMELINE_WORD_HEIGHT_PX + TIMELINE_WORD_ROW_GAP_PX),
+        top: 0,
       })),
     }]
   }).sort((a, b) => a.intervalStart - b.intervalStart || a.lineIndex - b.lineIndex)
 
   const laneEnds: number[] = []
-  const laneHeights: number[] = []
   candidates.forEach((line) => {
-    const availableLane = laneEnds.findIndex((end) => end + TIMELINE_LINE_GAP_PX <= line.intervalStart)
+    const availableLane = laneEnds.findIndex((end) => end + TIMELINE_LABEL_GAP_PX <= line.intervalStart)
     line.lane = availableLane >= 0 ? availableLane : laneEnds.length
     laneEnds[line.lane] = line.intervalEnd
-    laneHeights[line.lane] = Math.max(laneHeights[line.lane] ?? 0, line.height)
   })
 
-  const laneTops: number[] = []
-  let nextTop = 2
-  laneHeights.forEach((height, lane) => {
-    laneTops[lane] = nextTop
-    nextTop += height
-  })
+  const laneTops = laneEnds.map(
+    (_end, lane) => 2 + lane * (TIMELINE_LABEL_ROW_HEIGHT_PX + TIMELINE_LABEL_LANE_GAP_PX),
+  )
+  const labelZoneEnd = laneEnds.length
+    ? 2 + laneEnds.length * (TIMELINE_LABEL_ROW_HEIGHT_PX + TIMELINE_LABEL_LANE_GAP_PX)
+    : 2
+  const { rowCount, rows } = assignNonOverlappingRows(
+    candidates.flatMap((line) => line.words.map(({ top: _top, ...word }) => word)),
+  )
+  const wordZoneTop = labelZoneEnd + TIMELINE_WORD_ZONE_GAP_PX
   candidates.forEach((line) => {
     line.top = laneTops[line.lane] ?? 2
-    line.words = line.words.map((word) => ({ ...word, top: line.top + word.top }))
+    line.words = line.words.map((word) => ({
+      ...word,
+      top: wordZoneTop
+        + (rows.get(word.word.id) ?? 0) * (TIMELINE_WORD_HEIGHT_PX + TIMELINE_WORD_ROW_GAP_PX),
+    }))
   })
+
+  const trackHeight = wordZoneTop
+    + rowCount * TIMELINE_WORD_HEIGHT_PX
+    + Math.max(0, rowCount - 1) * TIMELINE_WORD_ROW_GAP_PX
+    + 6
 
   return {
     trackId: track.id,
-    height: Math.max(TIMELINE_MIN_TRACK_HEIGHT_PX, nextTop + 2),
-    maxRight: candidates.reduce((maximum, line) => Math.max(maximum, line.intervalEnd), 0),
+    height: Math.max(TIMELINE_MIN_TRACK_HEIGHT_PX, trackHeight),
+    maxRight: candidates.reduce((maximum, line) => Math.max(
+      maximum,
+      line.intervalEnd,
+      line.words.reduce(
+        (wordMaximum, word) => Math.max(wordMaximum, word.left + word.width),
+        0,
+      ),
+    ), 0),
     lines: candidates.sort((a, b) => a.lineIndex - b.lineIndex),
   }
 }
@@ -245,12 +266,13 @@ export function timingDraftForGesture(
   const timingDraft = new Map<string, { startMs: number; endMs: number }>()
 
   if (gesture.mode === 'move') {
+    const constrainedDeltaMs = constrainWordShiftDelta(project, gesture.ids, gesture.deltaMs)
     project.tracks.forEach((track) => {
       track.lines.forEach((line) => {
         line.words.forEach((word) => {
           if (!gesture.ids.has(word.id) || word.startMs === null) return
-          const duration = Math.max(80, (word.endMs ?? word.startMs + 300) - word.startMs)
-          const startMs = Math.max(0, Math.round(word.startMs + gesture.deltaMs))
+          const duration = Math.max(1, (word.endMs ?? word.startMs + 300) - word.startMs)
+          const startMs = Math.max(0, Math.round(word.startMs + constrainedDeltaMs))
           timingDraft.set(word.id, { startMs, endMs: startMs + duration })
         })
       })
@@ -258,18 +280,14 @@ export function timingDraftForGesture(
     return timingDraft
   }
 
-  const minDuration = 80
-  if (gesture.mode === 'start') {
-    timingDraft.set(gesture.wordId, {
-      startMs: Math.max(0, Math.min(gesture.originalEnd - minDuration, gesture.originalStart + gesture.deltaMs)),
-      endMs: gesture.originalEnd,
-    })
-  } else {
-    timingDraft.set(gesture.wordId, {
-      startMs: gesture.originalStart,
-      endMs: Math.max(gesture.originalStart + minDuration, gesture.originalEnd + gesture.deltaMs),
-    })
-  }
+  const constrained = constrainWordResizeTiming(
+    project,
+    gesture.wordId,
+    gesture.mode,
+    gesture.mode === 'start' ? gesture.originalStart + gesture.deltaMs : gesture.originalStart,
+    gesture.mode === 'end' ? gesture.originalEnd + gesture.deltaMs : gesture.originalEnd,
+  )
+  if (constrained) timingDraft.set(gesture.wordId, constrained)
   return timingDraft
 }
 
@@ -368,19 +386,26 @@ export function createTimelineGestureSession(
 
       const context = getContext()
       if (gesture.mode === 'move') {
-        if (gesture.deltaMs !== 0) context.onShiftWords(gesture.ids, gesture.deltaMs)
+        const constrainedDeltaMs = constrainWordShiftDelta(
+          context.project,
+          gesture.ids,
+          gesture.deltaMs,
+        )
+        if (constrainedDeltaMs !== 0) context.onShiftWords(gesture.ids, constrainedDeltaMs)
         return true
       }
 
       if (gesture.deltaMs === 0) return true
 
-      const minDuration = 80
-      const startMs = gesture.mode === 'start'
-        ? Math.max(0, Math.min(gesture.originalEnd - minDuration, gesture.originalStart + gesture.deltaMs))
-        : gesture.originalStart
-      const endMs = gesture.mode === 'end'
-        ? Math.max(gesture.originalStart + minDuration, gesture.originalEnd + gesture.deltaMs)
-        : gesture.originalEnd
+      const constrained = constrainWordResizeTiming(
+        context.project,
+        gesture.wordId,
+        gesture.mode,
+        gesture.mode === 'start' ? gesture.originalStart + gesture.deltaMs : gesture.originalStart,
+        gesture.mode === 'end' ? gesture.originalEnd + gesture.deltaMs : gesture.originalEnd,
+      )
+      if (!constrained) return true
+      const { startMs, endMs } = constrained
       if (startMs !== gesture.originalStart || endMs !== gesture.originalEnd) {
         context.onResizeWord(gesture.wordId, startMs, endMs)
       }
@@ -842,7 +867,7 @@ export function Timeline({
                           style={{
                             top: lineLayout.top,
                             left: lineLayout.intervalStart,
-                            width: Math.max(2, lineLayout.intervalEnd - lineLayout.intervalStart),
+                            width: Math.max(1, lineLayout.intervalEnd - lineLayout.intervalStart),
                             height: lineLayout.height - 2,
                             '--track-color': track.color,
                           } as CSSProperties}
@@ -880,7 +905,7 @@ export function Timeline({
                             <button
                               key={word.id}
                               data-word-id={word.id}
-                              className={`timeline-word ${selected ? 'is-selected' : ''} ${syncWordId === word.id ? 'is-sync-target' : ''}`}
+                              className={`timeline-word ${wordLayout.width < 14 ? 'is-compact' : ''} ${selected ? 'is-selected' : ''} ${syncWordId === word.id ? 'is-sync-target' : ''}`}
                               style={{
                                 top: wordLayout.top,
                                 left: wordLayout.left,

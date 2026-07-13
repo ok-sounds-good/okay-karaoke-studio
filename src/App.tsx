@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { KaraokeProject, LyricDisplaySettings, LyricWord, ValidationIssue, VocalTrack } from './lib/model'
 import {
   createProject,
-  createVocalTrack,
   exportAss,
   exportLrc,
   importLrc,
@@ -248,6 +247,28 @@ export function syncWordIndexFromLyricTime(words: LyricWord[], lyricTimeMs: numb
   ))
 }
 
+const DEFAULT_SYNC_WORD_DURATION_MS = 100
+
+function syncWordEnd(word: LyricWord): number | null {
+  if (word.startMs === null) return null
+  return Math.max(word.startMs + 1, word.endMs ?? word.startMs + DEFAULT_SYNC_WORD_DURATION_MS)
+}
+
+function adjacentTimedWord(
+  words: LyricWord[],
+  index: number,
+  direction: -1 | 1,
+): LyricWord | null {
+  for (
+    let candidateIndex = index + direction;
+    candidateIndex >= 0 && candidateIndex < words.length;
+    candidateIndex += direction
+  ) {
+    if (words[candidateIndex].startMs !== null) return words[candidateIndex]
+  }
+  return null
+}
+
 export default function App() {
   const history = useProjectHistory(createProject)
   const { project, commit: commitHistory, replaceCurrent } = history
@@ -272,6 +293,7 @@ export default function App() {
     wordId: string
     startMs: number
     isLineFinal: boolean
+    nextTimedStartMs: number | null
   } | null>(null)
   const syncSessionHasCommitRef = useRef(false)
   const projectRestoreSequenceRef = useRef(0)
@@ -829,11 +851,15 @@ export default function App() {
       }
       const previous = syncItems[syncCursor - 1]
       const sameLine = previous?.line.id === item.line.id
-      let startMs = Math.round(sampledLyricMs)
-      if (previous && sameLine && previous.word.startMs !== null) {
-        startMs = Math.max(startMs, previous.word.startMs + 1)
-      } else if (previous?.word.endMs !== null && previous?.word.endMs !== undefined) {
-        startMs = Math.max(startMs, previous.word.endMs)
+      const previousTimed = adjacentTimedWord(syncWords, syncCursor, -1)
+      const nextTimed = adjacentTimedWord(syncWords, syncCursor, 1)
+      const previousEndMs = previousTimed ? syncWordEnd(previousTimed) : null
+      const nextTimedStartMs = nextTimed?.startMs ?? null
+      const startMs = Math.max(Math.round(sampledLyricMs), previousEndMs ?? 0)
+
+      if (nextTimedStartMs !== null && startMs >= nextTimedStartMs) {
+        showToast('No timing space remains before the next timed word', 'warning')
+        return
       }
 
       const patches = new Map<
@@ -843,12 +869,19 @@ export default function App() {
       if (previous && sameLine && previous.word.startMs !== null) {
         patches.set(previous.word.id, { endMs: startMs })
       }
-      patches.set(item.word.id, { startMs, endMs: startMs + 100 })
+      patches.set(item.word.id, {
+        startMs,
+        endMs: Math.min(
+          startMs + DEFAULT_SYNC_WORD_DURATION_MS,
+          nextTimedStartMs ?? Number.POSITIVE_INFINITY,
+        ),
+      })
       applySyncMutation((current) => patchWords(current, patches))
       syncHeldRef.current = {
         wordId: item.word.id,
         startMs,
         isLineFinal: item.wordIndex === item.line.words.length - 1,
+        nextTimedStartMs,
       }
       playback.play()
     }
@@ -866,7 +899,10 @@ export default function App() {
       event.preventDefault()
       if (held.isLineFinal) {
         const sampledLyricMs = lyricTimeAtPlayback(playback.getCurrentMs(), project.offsetMs)
-        const endMs = Math.max(held.startMs + 100, Math.round(sampledLyricMs))
+        const endMs = Math.min(
+          Math.max(held.startMs + DEFAULT_SYNC_WORD_DURATION_MS, Math.round(sampledLyricMs)),
+          held.nextTimedStartMs ?? Number.POSITIVE_INFINITY,
+        )
         applySyncMutation((current) => patchWord(current, held.wordId, {
           startMs: held.startMs,
           endMs,
@@ -894,7 +930,7 @@ export default function App() {
       window.removeEventListener('keyup', keyUp)
       window.removeEventListener('blur', windowBlur)
     }
-  }, [applySyncMutation, cancelHeldSync, commit, playback.getCurrentMs, playback.play, playback.seek, playback.toggle, project.offsetMs, selectAllActiveTrackWords, selectedWordIds, showToast, syncCursor, syncItems, syncMode])
+  }, [applySyncMutation, cancelHeldSync, commit, playback.getCurrentMs, playback.play, playback.seek, playback.toggle, project.offsetMs, selectAllActiveTrackWords, selectedWordIds, showToast, syncCursor, syncItems, syncMode, syncWords])
 
   useEffect(() => {
     if (!window.studio) return
@@ -932,23 +968,6 @@ export default function App() {
     setActiveTrackId(trackId)
     setSelectedWordIds(new Set())
   }, [cancelHeldSync])
-
-  const handleAddTrack = useCallback(() => {
-    cancelHeldSync()
-    syncSessionHasCommitRef.current = false
-    setSyncMode(false)
-    const track = createVocalTrack({
-      id: crypto.randomUUID(),
-      name: 'Duet Vocal',
-      color: '#ff8f6b',
-    })
-    commit((current) => ({
-      ...current,
-      tracks: [...current.tracks, track],
-      updatedAt: new Date().toISOString(),
-    }))
-    setActiveTrackId(track.id)
-  }, [cancelHeldSync, commit])
 
   const workflowGuideActions = createWorkflowGuideActions({
     canStartSync: syncWords.length > 0,
@@ -991,7 +1010,6 @@ export default function App() {
           onSelectTrack={handleSelectTrack}
           onUpdateProject={updateProject}
           onUpdateTrack={updateTrack}
-          onAddTrack={handleAddTrack}
           onImportAudio={handleImportAudio}
           onImportLrc={handleImportLrc}
         />

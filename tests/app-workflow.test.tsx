@@ -212,6 +212,7 @@ describe('mounted first-time workflow', () => {
   it('starts clean and sends the same semantic empty project through save and export', async () => {
     expect(document.querySelector('.topbar__document')?.textContent).toContain('Untitled Song')
     expect(document.body.textContent).not.toContain('Neon Afterglow')
+    expect(document.body.textContent).not.toContain('Add duet track')
     expect(document.querySelectorAll('.lyric-line')).toHaveLength(0)
 
     await clickButton('Workflow')
@@ -509,6 +510,73 @@ describe('mounted first-time workflow', () => {
 
     await act(async () => harness.sendMenuAction('undo'))
     expect(document.querySelectorAll('.timeline-word')).toHaveLength(0)
+  })
+
+  it('does not shrink the prior word or start the next word before it when the sync clock regresses', async () => {
+    await clickButton('Edit text')
+    await replaceTextarea('Alpha beta')
+    await clickButton('Apply lyrics')
+    await clickButton('Start sync')
+
+    await tapSyncWord()
+    await pressKey('ArrowRight')
+    await pressKey('ArrowRight')
+    await tapSyncWord()
+    expect(timelineTimingLabels()).toEqual(expect.arrayContaining([
+      'Alpha timing block, 0:00.000–0:00.500',
+      'beta timing block, 0:00.500–0:00.600',
+    ]))
+
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[aria-label="Stop"]')!.click()
+    })
+    await pressKey('ArrowRight')
+    expect(document.querySelector('.time-readout strong')?.textContent).toBe('0:00.250')
+    await clickButton('Start sync')
+    await tapSyncWord()
+
+    await act(async () => harness.sendMenuAction('save'))
+    const saved = parseProject(harness.saveProject.mock.calls.at(-1)?.[0].contents)
+    expect(saved.tracks[0].lines[0].words.map(({ startMs, endMs }) => [startMs, endMs])).toEqual([
+      [0, 500],
+      [500, 600],
+    ])
+  })
+
+  it('caps a held line-final word at the already-timed next word', async () => {
+    await clickButton('Edit text')
+    await replaceTextarea('North\nSouth')
+    await clickButton('Apply lyrics')
+    await clickButton('Start sync')
+
+    await tapSyncWord()
+    await pressKey('ArrowRight')
+    await pressKey('ArrowRight')
+    await tapSyncWord()
+    expect(timelineTimingLabels()).toEqual(expect.arrayContaining([
+      'North timing block, 0:00.000–0:00.100',
+      'South timing block, 0:00.500–0:00.600',
+    ]))
+
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[aria-label="Stop"]')!.click()
+    })
+    await clickButton('Start sync')
+    await pressKey('Space')
+    await pressKey('ArrowRight')
+    await pressKey('ArrowRight')
+    await pressKey('ArrowRight')
+    await releaseKey('Space')
+    await pressKey('Escape')
+
+    await act(async () => harness.sendMenuAction('save'))
+    const saved = parseProject(harness.saveProject.mock.calls.at(-1)?.[0].contents)
+    expect(saved.tracks[0].lines.map((line) => (
+      line.words.map(({ startMs, endMs }) => [startMs, endMs])
+    ))).toEqual([
+      [[0, 500]],
+      [[500, 600]],
+    ])
   })
 
   it('ends an armed sync before Undo and keeps Redo and later bare Space outside that session', async () => {

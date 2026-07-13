@@ -29,7 +29,14 @@ import {
   createVocalTrack,
   retimeLine,
 } from '../src/lib/karaoke'
-import { applyTimingDraft, clearTrackTimingFrom, patchWord, shiftWords } from '../src/utils'
+import {
+  applyTimingDraft,
+  clearTrackTimingFrom,
+  constrainWordResizeTiming,
+  constrainWordShiftDelta,
+  patchWord,
+  shiftWords,
+} from '../src/utils'
 
 function offsetProject() {
   const line = retimeLine(createLyricLine('Hold'), 1_000, 2_000)
@@ -175,11 +182,51 @@ describe('TimeBoard layout and selection geometry', () => {
       (word) => word.word.id === 'overlapping-block',
     )!
 
-    expect(longLabel.width).toBe(16)
+    expect(longLabel.width).toBe(5)
     expect(longLabel.labelWidth).toBeGreaterThan(longLabel.width)
     expect(longLabel.top).not.toBe(overlappingBlock.top)
     expect(firstLayout.lane).not.toBe(secondLayout.lane)
     expect(firstLayout.top).not.toBe(secondLayout.top)
+  })
+
+  it('keeps edge-touching timing blocks on one baseline and separates only genuine overlap', () => {
+    const line = createLyricLine('One Two Three Four', {
+      id: 'baseline-line',
+      startMs: 13_953,
+      endMs: 14_929,
+      words: [
+        createLyricWord('One', { id: 'edge-first', startMs: 13_953, endMs: 14_271 }),
+        createLyricWord('Two', { id: 'edge-second', startMs: 14_271, endMs: 14_554 }),
+        createLyricWord('Three', { id: 'edge-third', startMs: 14_554, endMs: 14_829 }),
+        createLyricWord('Four', { id: 'true-overlap', startMs: 14_800, endMs: 14_929 }),
+      ],
+    })
+    const layout = buildTimelineTrackLayout(
+      createVocalTrack({ id: 'lead', lines: [line] }),
+      0,
+      72,
+    )
+    const words = Object.fromEntries(
+      layout.lines[0].words.map((word) => [word.word.id, word]),
+    )
+
+    expect(words['edge-first'].top).toBe(words['edge-second'].top)
+    expect(words['edge-second'].top).toBe(words['edge-third'].top)
+    expect(words['true-overlap'].top).not.toBe(words['edge-third'].top)
+  })
+
+  it('keeps split resize handles exposed for compact timing blocks', () => {
+    const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
+
+    expect(styles).not.toMatch(
+      /\.timeline-word\.is-compact \.timeline-word__handle\s*\{[^}]*display:\s*none/,
+    )
+    expect(styles).toMatch(
+      /\.timeline-word\.is-compact \.timeline-word__handle--start\s*\{[^}]*top:\s*-4px;[^}]*left:\s*-4px;/,
+    )
+    expect(styles).toMatch(
+      /\.timeline-word\.is-compact \.timeline-word__handle--end\s*\{[^}]*right:\s*-4px;[^}]*bottom:\s*-4px;/,
+    )
   })
 
   it('returns only active-layout timing blocks intersected by a marquee rectangle', () => {
@@ -492,6 +539,175 @@ describe('live timeline timing drafts', () => {
       tracks: [createVocalTrack({ id: 'lead', lines: [line] })],
     })
   }
+
+  function neighborBoundProject() {
+    return createProject({
+      durationMs: 10_000,
+      tracks: [createVocalTrack({
+        id: 'lead',
+        lines: [
+          createLyricLine('Before Moving', {
+            id: 'first-line',
+            startMs: 1_000,
+            endMs: 2_200,
+            words: [
+              createLyricWord('Before', { id: 'before', startMs: 1_000, endMs: 1_500 }),
+              createLyricWord('Moving', { id: 'moving', startMs: 2_000, endMs: 2_200 }),
+            ],
+          }),
+          createLyricLine('Together After', {
+            id: 'second-line',
+            startMs: 2_400,
+            endMs: 2_900,
+            words: [
+              createLyricWord('Together', { id: 'together', startMs: 2_400, endMs: 2_600 }),
+              createLyricWord('After', { id: 'after', startMs: 2_700, endMs: 2_900 }),
+            ],
+          }),
+        ],
+      })],
+    })
+  }
+
+  it('clamps single and grouped moves to lyric-order neighbors across line boundaries', () => {
+    const project = neighborBoundProject()
+
+    expect(constrainWordShiftDelta(project, new Set(['moving']), -2_000)).toBe(-500)
+    expect(constrainWordShiftDelta(project, new Set(['moving']), 2_000)).toBe(200)
+    expect(constrainWordShiftDelta(project, new Set(['moving', 'together']), -2_000)).toBe(-500)
+    expect(constrainWordShiftDelta(project, new Set(['moving', 'together']), 2_000)).toBe(100)
+
+    const movedEarlier = shiftWords(project, new Set(['moving']), -2_000)
+    const movedLater = shiftWords(project, new Set(['moving', 'together']), 2_000)
+    expect(movedEarlier.tracks[0].lines[0].words[1]).toMatchObject({
+      startMs: 1_500,
+      endMs: 1_700,
+    })
+    expect(movedLater.tracks[0].lines[0].words[1]).toMatchObject({
+      startMs: 2_100,
+      endMs: 2_300,
+    })
+    expect(movedLater.tracks[0].lines[1].words[0]).toMatchObject({
+      startMs: 2_500,
+      endMs: 2_700,
+    })
+  })
+
+  it('preserves adjacent sub-80ms durations without creating overlap', () => {
+    const line = createLyricLine('Short words', {
+      id: 'short-line',
+      startMs: 0,
+      endMs: 100,
+      words: [
+        createLyricWord('Short', { id: 'short-first', startMs: 0, endMs: 50 }),
+        createLyricWord('words', { id: 'short-second', startMs: 50, endMs: 100 }),
+      ],
+    })
+    const project = createProject({
+      durationMs: 1_000,
+      tracks: [createVocalTrack({ id: 'lead', lines: [line] })],
+    })
+    const ids = new Set(['short-first', 'short-second'])
+    const gesture = {
+      wordId: 'short-first',
+      mode: 'move' as const,
+      originalStart: 0,
+      originalEnd: 50,
+      ids,
+      deltaMs: 100,
+    }
+
+    const preview = applyTimingDraft(project, timingDraftForGesture(project, gesture))
+    const moved = shiftWords(project, ids, 100)
+    const expected = [
+      expect.objectContaining({ startMs: 100, endMs: 150 }),
+      expect.objectContaining({ startMs: 150, endMs: 200 }),
+    ]
+    expect(preview.tracks[0].lines[0].words).toEqual(expected)
+    expect(moved.tracks[0].lines[0].words).toEqual(expected)
+    expect(constrainWordResizeTiming(project, 'short-first', 'end', 0, 200)).toEqual({
+      startMs: 0,
+      endMs: 50,
+    })
+    expect(constrainWordResizeTiming(project, 'short-second', 'start', -100, 100)).toEqual({
+      startMs: 50,
+      endMs: 100,
+    })
+  })
+
+  it('applies positive and negative offsets to the project-duration move ceiling', () => {
+    const projectAtOffset = (offsetMs: number) => createProject({
+      durationMs: 1_000,
+      offsetMs,
+      tracks: [createVocalTrack({
+        id: `lead-${offsetMs}`,
+        lines: [createLyricLine('Bounded', {
+          id: `line-${offsetMs}`,
+          startMs: 0,
+          endMs: 100,
+          words: [createLyricWord('Bounded', {
+            id: `word-${offsetMs}`,
+            startMs: 0,
+            endMs: 100,
+          })],
+        })],
+      })],
+    })
+
+    const positive = projectAtOffset(100)
+    const negative = projectAtOffset(-100)
+    expect(constrainWordShiftDelta(positive, new Set(['word-100']), 10_000)).toBe(800)
+    expect(constrainWordShiftDelta(negative, new Set(['word--100']), 10_000)).toBe(1_000)
+  })
+
+  it('clamps both resize edges to the nearest timed words across line boundaries', () => {
+    const project = neighborBoundProject()
+
+    expect(constrainWordResizeTiming(project, 'together', 'start', 100, 2_600)).toEqual({
+      startMs: 2_200,
+      endMs: 2_600,
+    })
+    expect(constrainWordResizeTiming(project, 'moving', 'end', 2_000, 9_000)).toEqual({
+      startMs: 2_000,
+      endMs: 2_400,
+    })
+  })
+
+  it('uses the same cross-line clamps for gesture drafts and committed edits', () => {
+    const project = neighborBoundProject()
+    const moveGesture = {
+      wordId: 'moving',
+      mode: 'move' as const,
+      originalStart: 2_000,
+      originalEnd: 2_200,
+      ids: new Set(['moving', 'together']),
+      deltaMs: 2_000,
+    }
+    const movePreview = applyTimingDraft(project, timingDraftForGesture(project, moveGesture))
+    const moveCommit = shiftWords(project, moveGesture.ids, moveGesture.deltaMs)
+    expect(movePreview.tracks[0].lines[0].words[1]).toEqual(
+      moveCommit.tracks[0].lines[0].words[1],
+    )
+    expect(movePreview.tracks[0].lines[1].words[0]).toEqual(
+      moveCommit.tracks[0].lines[1].words[0],
+    )
+
+    const resizeGesture = {
+      wordId: 'together',
+      mode: 'start' as const,
+      originalStart: 2_400,
+      originalEnd: 2_600,
+      ids: new Set(['together']),
+      deltaMs: -2_000,
+    }
+    const resizeDraft = timingDraftForGesture(project, resizeGesture)
+    const resizePreview = applyTimingDraft(project, resizeDraft)
+    const constrained = constrainWordResizeTiming(project, 'together', 'start', 400, 2_600)!
+    const resizeCommit = patchWord(project, 'together', constrained)
+    expect(resizePreview.tracks[0].lines[1].words[0]).toEqual(
+      resizeCommit.tracks[0].lines[1].words[0],
+    )
+  })
 
   it('publishes actual gesture-session moves through the App preview projection', () => {
     const project = timedProject()

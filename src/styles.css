@@ -1705,8 +1705,9 @@ button:disabled {
   position: absolute;
   z-index: 2;
   display: block;
-  min-width: 16px;
-  overflow: hidden;
+  min-width: 1px;
+  padding: 0;
+  overflow: visible;
   border: 1px solid color-mix(in srgb, var(--track-color) 58%, #25312b);
   border-radius: 5px;
   background: color-mix(in srgb, var(--track-color) 17%, #16201b);
@@ -1759,6 +1760,25 @@ button:disabled {
 
 .timeline-word__handle--start { left: 2px; }
 .timeline-word__handle--end { right: 2px; }
+
+/* Short blocks keep duration-sized geometry. Splitting their edge handles
+   vertically makes both targets reachable even when their x positions meet. */
+.timeline-word.is-compact .timeline-word__handle {
+  top: auto;
+  bottom: auto;
+  width: 9px;
+  height: 9px;
+}
+
+.timeline-word.is-compact .timeline-word__handle--start {
+  top: -4px;
+  left: -4px;
+}
+
+.timeline-word.is-compact .timeline-word__handle--end {
+  right: -4px;
+  bottom: -4px;
+}
 
 .timeline-marquee {
   position: absolute;
