@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
   clampTiming,
@@ -21,7 +21,7 @@ import {
   validateProject,
   type KaraokeProject,
 } from '../src/lib/karaoke'
-import { effectiveDuration, recalculateLine } from '../src/utils'
+import { effectiveDuration, motionAwareScrollBehavior, recalculateLine } from '../src/utils'
 
 describe('karaoke project model', () => {
   it('creates a valid seeded project with integer word timings', () => {
@@ -29,6 +29,8 @@ describe('karaoke project model', () => {
 
     expect(project.schemaVersion).toBe(2)
     expect(project.title).toBe('Neon Afterglow')
+    expect(project.tracks[0].color).toBe('#22d3ee')
+    expect(createVocalTrack({ id: 'default-color' }).color).toBe('#22d3ee')
     expect(project.tracks[0].lines.length).toBeGreaterThan(3)
     expect(
       project.tracks[0].lines.flatMap((line) => line.words).every(
@@ -191,6 +193,17 @@ describe('karaoke project model', () => {
 })
 
 describe('timing helpers', () => {
+  it('honors reduced motion for programmatic scrolling', () => {
+    try {
+      vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true })))
+      expect(motionAwareScrollBehavior()).toBe('auto')
+      vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false })))
+      expect(motionAwareScrollBehavior()).toBe('smooth')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('clamps, retimes, and formats integer millisecond timings', () => {
     expect(clampTiming(-500, 12_000, 10_000)).toEqual({
       startMs: 0,
@@ -350,7 +363,7 @@ describe('ASS export', () => {
 
     expect(output).toContain('[V4+ Styles]')
     expect(output).toContain('[Events]')
-    expect(output).toContain('Style: Lead Vocal')
+    expect(output).toContain('Style: Lead Vocal,Arial,72,&H00EED322')
     expect(output).toMatch(/Dialogue: 0,0:00:02\.00,0:00:05\.40,Lead Vocal/)
     expect(output).toContain('{\\kf')
   })

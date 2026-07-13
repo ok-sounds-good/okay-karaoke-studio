@@ -985,7 +985,7 @@ async function createMainWindow() {
     minWidth: 1080,
     minHeight: 680,
     show: false,
-    backgroundColor: '#101217',
+    backgroundColor: '#f8f6fb',
     useContentSize: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),

@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "source": {
+    "path": "build/icon-source.png",
+    "sha256": "40cf00e681a810d03dc93c0331235dfd7893e95e9d90db1c40e84cba633bd319"
+  },
+  "generator": {
+    "path": "scripts/generate-icon-assets.cjs",
+    "sha256": "088a3aae60820d931a473ce19cdf23320efc93429657bf730796985c008a0081"
+  },
+  "configuration": {
+    "sourceInsetRatio": 0.08293460925039872,
+    "cornerRadiusRatio": 0.23
+  },
+  "generated": [
+    {
+      "path": "build/icon.png",
+      "size": 1024,
+      "sha256": "6faf5cc8069453212daaad99886dc2f7468d578d0e39a5fb3262d4dac02001db"
+    },
+    {
+      "path": "public/app-icon.png",
+      "size": 128,
+      "sha256": "ae330871861e8f8bf6a27289e89862bc32d44d6bdb0a7ae9ef084da7c3c0aed3"
+    }
+  ]
+}

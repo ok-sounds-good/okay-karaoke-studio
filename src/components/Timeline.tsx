@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperti
 import { AudioWaveform, ChevronLeft, ChevronRight, Focus, Minus, Plus, ZoomIn } from 'lucide-react'
 import type { KaraokeProject, LyricWord } from '../lib/model'
 import { formatTime } from '../lib/model'
-import { flattenTrack, type ProjectTimingDraft } from '../utils'
+import { flattenTrack, motionAwareScrollBehavior, type ProjectTimingDraft } from '../utils'
 import { IconButton } from './ui'
 
 interface TimelineProps {
@@ -307,7 +307,10 @@ export function Timeline({
     const left = playheadLeft
     const margin = 130
     if (left < viewport.scrollLeft + margin || left > viewport.scrollLeft + viewport.clientWidth - margin) {
-      viewport.scrollTo({ left: Math.max(0, left - viewport.clientWidth * 0.32), behavior: 'smooth' })
+      viewport.scrollTo({
+        left: Math.max(0, left - viewport.clientWidth * 0.32),
+        behavior: motionAwareScrollBehavior(),
+      })
     }
   }, [Math.floor(currentMs / 500), playheadLeft])
 
@@ -401,13 +404,13 @@ export function Timeline({
         </div>
         <div className="timeline-tools">
           <span className="timeline-hint">Drag words · resize edges · click ruler to seek</span>
-          <IconButton aria-label="Scroll timeline left" onClick={() => viewportRef.current?.scrollBy({ left: -420, behavior: 'smooth' })}>
+          <IconButton aria-label="Scroll timeline left" onClick={() => viewportRef.current?.scrollBy({ left: -420, behavior: motionAwareScrollBehavior() })}>
             <ChevronLeft size={15} />
           </IconButton>
-          <IconButton aria-label="Center playhead" onClick={() => viewportRef.current?.scrollTo({ left: Math.max(0, playheadLeft - (viewportRef.current?.clientWidth ?? 0) / 2), behavior: 'smooth' })}>
+          <IconButton aria-label="Center playhead" onClick={() => viewportRef.current?.scrollTo({ left: Math.max(0, playheadLeft - (viewportRef.current?.clientWidth ?? 0) / 2), behavior: motionAwareScrollBehavior() })}>
             <Focus size={15} />
           </IconButton>
-          <IconButton aria-label="Scroll timeline right" onClick={() => viewportRef.current?.scrollBy({ left: 420, behavior: 'smooth' })}>
+          <IconButton aria-label="Scroll timeline right" onClick={() => viewportRef.current?.scrollBy({ left: 420, behavior: motionAwareScrollBehavior() })}>
             <ChevronRight size={15} />
           </IconButton>
           <div className="zoom-control">

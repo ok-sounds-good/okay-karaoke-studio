@@ -21,6 +21,12 @@ export interface WordTimingDraft {
 
 export type ProjectTimingDraft = ReadonlyMap<string, WordTimingDraft>
 
+export function motionAwareScrollBehavior(): ScrollBehavior {
+  return globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    ? 'auto'
+    : 'smooth'
+}
+
 export function flattenTrack(track: VocalTrack): WordRef[] {
   return track.lines.flatMap((line, lineIndex) =>
     line.words.map((word, wordIndex) => ({ word, line, track, wordIndex, lineIndex })),

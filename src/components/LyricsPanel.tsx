@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { Captions, Check, Edit3, Mic2, TimerReset } from 'lucide-react'
 import type { LyricWord, VocalTrack } from '../lib/model'
 import { formatTime } from '../lib/model'
-import { flattenTrack, getActiveLine } from '../utils'
+import { flattenTrack, getActiveLine, motionAwareScrollBehavior } from '../utils'
 import { Button } from './ui'
 
 interface LyricsPanelProps {
@@ -35,7 +35,7 @@ export function LyricsPanel({
   useEffect(() => {
     if (!activeLine || !listRef.current) return
     const element = listRef.current.querySelector<HTMLElement>(`[data-line-id="${activeLine.id}"]`)
-    element?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    element?.scrollIntoView({ block: 'nearest', behavior: motionAwareScrollBehavior() })
   }, [activeLine?.id])
 
   if (!activeTrack) return null

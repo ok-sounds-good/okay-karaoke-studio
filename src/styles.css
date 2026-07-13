@@ -1168,8 +1168,8 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 2px;
-  color: #b08475 !important;
-  font-size: 7px !important;
+  color: #b08475;
+  font-size: 7px;
 }
 
 .line-check {

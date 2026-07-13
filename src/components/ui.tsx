@@ -19,9 +19,7 @@ export function IconButton({ className = '', ...props }: ButtonHTMLAttributes<HT
 export function LogoMark({ small = false }: { small?: boolean }) {
   return (
     <span className={`logo-mark ${small ? 'logo-mark--small' : ''}`} aria-hidden="true">
-      <span className="logo-mark__ring" />
-      <span className="logo-mark__stem" />
-      <span className="logo-mark__spark" />
+      <img src="/app-icon.png" alt="" />
     </span>
   )
 }
