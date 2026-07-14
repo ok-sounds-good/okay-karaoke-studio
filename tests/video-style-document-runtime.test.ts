@@ -71,13 +71,16 @@ describe('browser render runtime', () => {
   it('matches fonts, text safety, tuple line identities, progress, and asset reloads', async () => {
     stageDom()
     const loadedFaces: Array<{ family: string; source: string }> = []
-    let rejectFontLoad = false
+    const rejectedSources = new Set<string>()
+    const deferredSources = new Map<string, Promise<void>>()
     class TestFontFace {
       constructor(public family: string, public source: string) {
         loadedFaces.push({ family, source })
       }
       async load() {
-        if (rejectFontLoad) throw new Error('private font loader detail')
+        const deferred = deferredSources.get(this.source)
+        if (deferred) await deferred
+        if (rejectedSources.has(this.source)) throw new Error('private font loader detail')
         return this
       }
     }
@@ -91,7 +94,7 @@ describe('browser render runtime', () => {
 
     const typeface: FontTypefaceDescriptor = {
       kind: 'local', family: 'Tie Sans', faces: [
-        { fullName: 'Tie Zulu', style: 'Zulu', postscriptName: 'Tie-Zulu', weight: 300,
+        { fullName: 'Tie Zulu', style: 'Zulu', postscriptName: 'Tie"Zulu', weight: 300,
           slant: 'normal' },
         { fullName: 'Tie Angstrom', style: 'Ångstrom', postscriptName: 'Tie-Angstrom', weight: 500,
           slant: 'normal' },
@@ -104,19 +107,44 @@ describe('browser render runtime', () => {
       typeface, fontStyle: requested, sizePx: 82,
       unsungColor: '#72687D', sungColor: '#FF8A2B', alignment: 'left',
     }
+    const equivalentFaces: FontFaceDescriptor[] = [
+      { fullName: 'Exact Zulu', style: 'Regular', postscriptName: 'Tie\\Zulu',
+        weight: 400, slant: 'normal' },
+      { fullName: 'Exact Alpha', style: 'Regular', postscriptName: 'Tie\\Alpha',
+        weight: 400, slant: 'normal' },
+    ]
+    const equivalentRequest = { ...requested, style: 'Regular', weight: 400 }
+    const exactStyle = {
+      ...style,
+      typeface: { kind: 'local', family: 'Exact Sans', faces: equivalentFaces } as const,
+      fontStyle: equivalentRequest,
+    }
+    const reversedExactStyle = {
+      ...exactStyle,
+      typeface: { ...exactStyle.typeface, faces: [...equivalentFaces].reverse() },
+    }
     window.eval(`(${installKaraokeRuntime.toString()})()`)
     const runtime = window as unknown as {
       prepareKaraokeAssets(value: object): Promise<{ fontFallbacks: unknown[] }>
       renderKaraokeFrame(state: object, sequence: number): boolean
+      backgroundDataUrl: string
       stageLayout: typeof STAGE_LAYOUT
     }
-    await runtime.prepareKaraokeAssets({
-      backgroundDataUrl: '', fonts: [style],
+    const assets = (fonts: object[]) => ({
+      backgroundDataUrl: '', fonts,
       stageLayout: structuredClone(STAGE_LAYOUT),
       syncAidGeometry: structuredClone(SYNC_AID_GEOMETRY),
     })
+    await runtime.prepareKaraokeAssets(assets([
+      style, style, exactStyle, reversedExactStyle,
+    ]))
     expect(Object.isFrozen(runtime.stageLayout.lyric.gapsPx)).toBe(true)
-    expect(loadedFaces[0].source).toBe('local("Tie-Zulu")')
+    expect(loadedFaces.map((face) => face.source)).toEqual([
+      String.raw`local("Tie\"Zulu")`,
+      String.raw`local("Tie\\Alpha")`,
+    ])
+    expect(loadedFaces[0].family).not.toBe(loadedFaces[1].family)
+    expect(loadedFaces.map((face) => face.family)).toEqual(['OKSLocalFont0', 'OKSLocalFont1'])
 
     const stageStyle = cloneStageStyle()
     stageStyle.lyrics = style
@@ -164,18 +192,114 @@ describe('browser render runtime', () => {
       .toEqual(['translateX(100px)', 'translateX(0px)'])
     expect(document.body.dataset.frame).toBe('10')
 
-    rejectFontLoad = true
-    const fallback = await runtime.prepareKaraokeAssets({
-      backgroundDataUrl: '', fonts: [style],
-      stageLayout: structuredClone(STAGE_LAYOUT),
-      syncAidGeometry: structuredClone(SYNC_AID_GEOMETRY),
-    })
-    expect(fallback.fontFallbacks).toEqual([{ requested: 'Tie Zulu', effective: 'System UI' }])
-    expect(JSON.stringify(fallback)).not.toContain('private font loader detail')
+    rejectedSources.add(loadedFaces[0].source)
+    rejectedSources.add(loadedFaces[1].source)
+    const cached = await runtime.prepareKaraokeAssets(assets([style, reversedExactStyle]))
+    expect(cached.fontFallbacks).toEqual([])
+    expect(loadedFaces).toHaveLength(2)
     expect(runtime.renderKaraokeFrame(frameState, 11)).toBe(true)
-    expect(document.querySelector<HTMLElement>('.lyric')?.style.fontFamily).toBe(
-      deterministicFontFamily(typeface),
-    )
+    expect(document.querySelector<HTMLElement>('.lyric')?.style.fontFamily).toBe(expectedFamily)
     expect(document.body.dataset.frame).toBe('11')
+
+    const retryFace: FontFaceDescriptor = {
+      fullName: 'Retry Face', style: 'Regular', postscriptName: 'Retry-Face',
+      weight: 400, slant: 'normal',
+    }
+    const retryTypeface: FontTypefaceDescriptor = {
+      kind: 'local', family: 'Retry Sans', faces: [retryFace],
+    }
+    const retryStyle = {
+      ...style,
+      typeface: retryTypeface,
+      fontStyle: retryFace,
+    }
+    rejectedSources.add('local("Retry-Face")')
+    const failed = await runtime.prepareKaraokeAssets(assets([retryStyle, retryStyle]))
+    expect(failed.fontFallbacks).toEqual([{ requested: 'Retry Face', effective: 'System UI' }])
+    expect(JSON.stringify(failed)).not.toContain('private font loader detail')
+    expect(loadedFaces).toHaveLength(3)
+
+    rejectedSources.delete('local("Retry-Face")')
+    const retried = await runtime.prepareKaraokeAssets(assets([retryStyle]))
+    expect(retried.fontFallbacks).toEqual([])
+    expect(loadedFaces).toHaveLength(4)
+
+    const makeLocalStyle = (postscriptName: string) => {
+      const face: FontFaceDescriptor = {
+        fullName: postscriptName, style: 'Regular', postscriptName,
+        weight: 400, slant: 'normal',
+      }
+      const localTypeface: FontTypefaceDescriptor = {
+        kind: 'local', family: postscriptName, faces: [face],
+      }
+      return { ...style, typeface: localTypeface, fontStyle: face }
+    }
+    const frameForStyle = (activeStyle: ReturnType<typeof makeLocalStyle>) => {
+      const activeStage = cloneStageStyle()
+      activeStage.lyrics = activeStyle
+      return {
+        ...frameState, stageStyle: activeStage, syncAids: [],
+        lines: [{ ...lines[0], id: 'active', trackId: 'active', style: activeStyle }],
+      }
+    }
+    const expectedStyleFamily = (
+      activeStyle: ReturnType<typeof makeLocalStyle>,
+      loaded: { family: string },
+    ) => deterministicFontFamily(activeStyle.typeface, loaded.family)
+      .replace(`"${loaded.family}"`, loaded.family)
+
+    let releaseDeferred!: () => void
+    deferredSources.set('local("Deferred-A")', new Promise((resolve) => {
+      releaseDeferred = resolve
+    }))
+    const deferredStyle = makeLocalStyle('Deferred-A')
+    const freshStyle = makeLocalStyle('Fresh-B')
+    const pendingA = runtime.prepareKaraokeAssets(assets([deferredStyle]))
+    expect(runtime.renderKaraokeFrame(frameForStyle(retryStyle), 12)).toBe(true)
+    expect(document.querySelector<HTMLElement>('.lyric')?.style.fontFamily).toBe(
+      expectedStyleFamily(retryStyle, loadedFaces[3]),
+    )
+
+    await runtime.prepareKaraokeAssets(assets([freshStyle]))
+    const freshLoaded = loadedFaces.find((face) => face.source === 'local("Fresh-B")')!
+    const freshFamily = expectedStyleFamily(freshStyle, freshLoaded)
+    const freshFrame = frameForStyle(freshStyle)
+    expect(runtime.renderKaraokeFrame(freshFrame, 13)).toBe(true)
+    expect(document.querySelector<HTMLElement>('.lyric')?.style.fontFamily).toBe(freshFamily)
+    releaseDeferred()
+    await pendingA
+    expect(runtime.renderKaraokeFrame(freshFrame, 14)).toBe(true)
+    expect(document.querySelector<HTMLElement>('.lyric')?.style.fontFamily).toBe(freshFamily)
+    expect(runtime.renderKaraokeFrame(frameForStyle(deferredStyle), 15)).toBe(true)
+    expect(document.querySelector<HTMLElement>('.lyric')?.style.fontFamily).toBe(
+      deterministicFontFamily(deferredStyle.typeface),
+    )
+
+    class RejectingImage {
+      onerror: ((event: Event) => void) | null = null
+      set src(_value: string) {
+        queueMicrotask(() => this.onerror?.(new Event('error')))
+      }
+    }
+    vi.stubGlobal('Image', RejectingImage)
+    const failedBackground = {
+      ...assets([deferredStyle]), backgroundDataUrl: 'data:image/png;base64,invalid',
+    }
+    await expect(runtime.prepareKaraokeAssets(failedBackground)).rejects.toBeTruthy()
+    expect(runtime.backgroundDataUrl).toBe('')
+    expect(runtime.renderKaraokeFrame(freshFrame, 16)).toBe(true)
+    expect(document.querySelector<HTMLElement>('.lyric')?.style.fontFamily).toBe(freshFamily)
+
+    const invalidFace = { ...retryFace, fullName: 'Invalid Face', postscriptName: 'bad name' }
+    const invalidStyle = {
+      ...retryStyle,
+      typeface: { kind: 'local', family: 'Invalid Sans', faces: [invalidFace] } as const,
+      fontStyle: invalidFace,
+    }
+    const invalid = await runtime.prepareKaraokeAssets(assets([invalidStyle]))
+    expect(invalid.fontFallbacks).toEqual([
+      { requested: 'Invalid Face', effective: 'System UI' },
+    ])
+    expect(loadedFaces).toHaveLength(6)
   })
 })

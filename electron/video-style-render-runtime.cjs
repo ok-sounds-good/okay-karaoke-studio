@@ -5,7 +5,10 @@
  * Keep it self-contained: it cannot close over any Node.js values.
  */
 function installKaraokeRuntime() {
-  const aliases = new Map()
+  let aliases = new Map()
+  const fontLoads = new Map()
+  let assetGeneration = 0
+  let nextFontAlias = 0
   let layoutKey = ''
   let wordNodes = []
   let lineTextNodes = new Map()
@@ -36,26 +39,61 @@ function installKaraokeRuntime() {
     return 0
   }
 
-  const fontAlias = (name) => `oks-local-${name}`
+  const compareFontFaces = (left, right) => compareOrdinal(left.style, right.style) ||
+    compareOrdinal(left.fullName, right.fullName) ||
+    compareOrdinal(String(left.postscriptName), String(right.postscriptName))
+
+  const forbiddenPostscriptCharacters = new Set('[](){}<>/%')
+
+  const isValidPostScriptName = (value) => {
+    if (typeof value !== 'string' || value.length < 1 || value.length > 63) return false
+    for (const character of value) {
+      const codePoint = character.codePointAt(0) || 0
+      if (
+        codePoint < 0x21 ||
+        codePoint > 0x7e ||
+        forbiddenPostscriptCharacters.has(character)
+      ) return false
+    }
+    return true
+  }
+
+  const escapeCssString = (value) => value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')
+
+  const localFontSource = (postscriptName) => {
+    if (!isValidPostScriptName(postscriptName)) throw new TypeError('Invalid PostScript name.')
+    return `local("${escapeCssString(postscriptName)}")`
+  }
+
+  const fontFaceKey = (face) => JSON.stringify([
+    face.postscriptName,
+    face.fullName,
+    face.style,
+    face.weight,
+    face.slant,
+  ])
+
+  const allocateFontAlias = () => {
+    const alias = `OKSLocalFont${nextFontAlias.toString(36)}`
+    nextFontAlias += 1
+    return alias
+  }
 
   const resolveFontFace = (typeface, requested) => {
     const exactPostscript = requested.postscriptName
       ? typeface.faces.find((face) => face.postscriptName === requested.postscriptName)
       : null
     if (exactPostscript) return exactPostscript
-    const exactStyle = typeface.faces.find((face) => (
+    const exactStyle = typeface.faces.filter((face) => (
       face.style.toLowerCase() === requested.style.toLowerCase() &&
       face.weight === requested.weight &&
       face.slant === requested.slant
-    ))
+    )).sort(compareFontFaces)[0]
     if (exactStyle) return exactStyle
     return [...typeface.faces].sort((left, right) => {
       const score = (face) => Math.abs(face.weight - requested.weight) +
         (face.slant === requested.slant ? 0 : 1_000)
-      return score(left) - score(right) ||
-        compareOrdinal(left.style, right.style) ||
-        compareOrdinal(left.fullName, right.fullName) ||
-        compareOrdinal(String(left.postscriptName), String(right.postscriptName))
+      return score(left) - score(right) || compareFontFaces(left, right)
     })[0]
   }
 
@@ -94,22 +132,37 @@ function installKaraokeRuntime() {
     return `${Math.floor(totalMinutes / 60)}:${minutes}:${seconds}.${milliseconds}`
   }
 
-  const loadFont = async (style) => {
-    const face = resolveFontFace(style.typeface, style.fontStyle)
-    if (
-      style.typeface.kind !== 'local' ||
-      !/^[a-z0-9._+-]{1,300}$/i.test(face.postscriptName)
-    ) return null
-    const name = fontAlias(face.postscriptName)
-    try {
-      const loadedFace = new FontFace(name, `local("${face.postscriptName}")`, {
+  const loadLocalFont = (face) => {
+    const cached = fontLoads.get(face.postscriptName)
+    if (cached) return cached
+    const alias = allocateFontAlias()
+    const pending = (async () => {
+      const loadedFace = new FontFace(alias, localFontSource(face.postscriptName), {
         weight: String(face.weight),
         style: face.slant,
         display: 'block',
       })
       const loaded = await loadedFace.load()
       document.fonts.add(loaded)
-      aliases.set(face.postscriptName, name)
+      return alias
+    })()
+    fontLoads.set(face.postscriptName, pending)
+    void pending.catch(() => {
+      if (fontLoads.get(face.postscriptName) === pending) {
+        fontLoads.delete(face.postscriptName)
+      }
+    })
+    return pending
+  }
+
+  const loadFont = async (style, preparedAliases) => {
+    const face = resolveFontFace(style.typeface, style.fontStyle)
+    if (style.typeface.kind !== 'local') return null
+    if (!isValidPostScriptName(face.postscriptName)) {
+      return { requested: face.fullName, effective: 'System UI' }
+    }
+    try {
+      preparedAliases.set(face.postscriptName, await loadLocalFont(face))
       return null
     } catch {
       return {
@@ -120,23 +173,41 @@ function installKaraokeRuntime() {
   }
 
   window.prepareKaraokeAssets = async (runtime) => {
-    aliases.clear()
-    layoutKey = ''
-    window.backgroundDataUrl = runtime.backgroundDataUrl || ''
-    window.stageLayout = deepFreeze(runtime.stageLayout)
-    window.syncAidGeometry = deepFreeze(runtime.syncAidGeometry)
-    const backgroundLoad = runtime.backgroundDataUrl
+    const generation = ++assetGeneration
+    const preparedAliases = new Map()
+    const backgroundDataUrl = runtime.backgroundDataUrl || ''
+    const stageLayout = deepFreeze(runtime.stageLayout)
+    const syncAidGeometry = deepFreeze(runtime.syncAidGeometry)
+    const backgroundLoad = backgroundDataUrl
       ? new Promise((resolve, reject) => {
           const image = new Image()
           image.onload = resolve
           image.onerror = reject
-          image.src = runtime.backgroundDataUrl
-        }).then(() => { byId('scene').dataset.backgroundReady = 'true' })
-      : Promise.resolve()
-    const loaded = await Promise.all([
+          image.src = backgroundDataUrl
+        }).then(() => true)
+      : Promise.resolve(false)
+    const uniqueFonts = new Map()
+    runtime.fonts.forEach((style) => {
+      const face = resolveFontFace(style.typeface, style.fontStyle)
+      if (style.typeface.kind !== 'local') return
+      const key = isValidPostScriptName(face.postscriptName)
+        ? JSON.stringify(['postscriptName', face.postscriptName])
+        : fontFaceKey(face)
+      if (!uniqueFonts.has(key)) uniqueFonts.set(key, style)
+    })
+    const [backgroundReady, ...loaded] = await Promise.all([
       backgroundLoad,
-      ...runtime.fonts.map(loadFont),
+      ...[...uniqueFonts.values()].map((style) => loadFont(style, preparedAliases)),
     ])
+    if (generation === assetGeneration) {
+      aliases = preparedAliases
+      layoutKey = ''
+      window.backgroundDataUrl = backgroundDataUrl
+      window.stageLayout = stageLayout
+      window.syncAidGeometry = syncAidGeometry
+      if (backgroundReady) byId('scene').dataset.backgroundReady = 'true'
+      else delete byId('scene').dataset.backgroundReady
+    }
     return { fontFallbacks: loaded.filter(Boolean) }
   }
 

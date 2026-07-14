@@ -12,6 +12,7 @@ import {
   type TextStyle,
   type VocalStyle,
 } from './video-style'
+import { isValidPostScriptName } from './font-identity'
 
 type RecordValue = Record<string, unknown>
 
@@ -97,10 +98,7 @@ export function validFontFaceDescriptor(value: unknown): value is FontFaceDescri
   return typeof face.fullName === 'string' && Boolean(face.fullName.trim()) &&
     face.fullName.length <= 300 &&
     typeof face.style === 'string' && Boolean(face.style.trim()) && face.style.length <= 120 &&
-    (face.postscriptName === null || (
-      typeof face.postscriptName === 'string' &&
-      /^[a-z0-9._+-]{1,300}$/iu.test(face.postscriptName)
-    )) &&
+    (face.postscriptName === null || isValidPostScriptName(face.postscriptName)) &&
     Number.isSafeInteger(face.weight) && Number(face.weight) >= 100 && Number(face.weight) <= 900 &&
     ['normal', 'italic', 'oblique'].includes(String(face.slant))
 }

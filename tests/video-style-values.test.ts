@@ -6,9 +6,10 @@ import {
 import {
   DEFAULT_STAGE_STYLE, DEFAULT_VOCAL_STYLE, FONT_SIZE_OPTIONS,
   SYSTEM_MONOSPACE_TYPEFACE, SYSTEM_UI_TYPEFACE, backgroundReadiness,
-  cloneStageStyle, cloneVocalStyle, deterministicFontFamily, fontFaceKey,
+  cloneStageStyle, cloneVocalStyle, createFontAliasBatch, deterministicFontFamily, fontFaceKey,
   fontSlantFromStyle, fontStyleFromDescriptor, fontTypefaceKey, fontWeightFromStyle,
-  genericFontFace, isFontSizePx, isHexColor, isValidSyncAid, normalizeStyleInteger,
+  genericFontFace, isFontSizePx, isHexColor, isValidPostScriptName, isValidSyncAid,
+  localFontSource, normalizeStyleInteger,
   resolveFontFace, resolveVocalStyle, type FontFaceDescriptor, type FontTypefaceDescriptor,
   type StageStyle, type VocalStyle,
 } from '../src/lib/video-style'
@@ -133,6 +134,33 @@ describe('video style value contracts', () => {
     })
   })
 
+  it('uses the exact PostScript grammar and opaque, collision-free CSS aliases', () => {
+    const maximumName = 'A'.repeat(63)
+    const escapedName = 'Demo"\\Face'
+    expect(isValidPostScriptName(maximumName)).toBe(true)
+    expect(isValidPostScriptName('A'.repeat(64))).toBe(false)
+    expect(isValidPostScriptName(escapedName)).toBe(true)
+    expect(localFontSource(escapedName)).toBe(String.raw`local("Demo\"\\Face")`)
+    const face = LOCAL_TYPEFACE.faces[0]
+    expect(validFontFaceDescriptor({ ...face, postscriptName: escapedName })).toBe(true)
+    expect(validFontFaceDescriptor({ ...face, postscriptName: 'A'.repeat(64) })).toBe(false)
+    const invalidNames = ['', 'has space', 'UnicodeÅ', 'Line\nBreak', `Delete\u007f`]
+    for (const delimiter of '[](){}<>/%') invalidNames.push(`A${delimiter}B`)
+    for (const invalid of invalidNames) {
+      expect(isValidPostScriptName(invalid)).toBe(false)
+      expect(() => localFontSource(invalid)).toThrow(/PostScript/u)
+    }
+    const aliases = createFontAliasBatch()
+    const quoted = aliases.aliasFor('Demo"Face')
+    const slashed = aliases.aliasFor('Demo\\Face')
+    expect(aliases.aliasFor('Demo"Face')).toBe(quoted)
+    expect(slashed).not.toBe(quoted)
+    expect([quoted, slashed]).toEqual(['OKSLocalFont0', 'OKSLocalFont1'])
+    const fallbackStack = deterministicFontFamily(LOCAL_TYPEFACE)
+    expect(deterministicFontFamily(LOCAL_TYPEFACE, 'K')).toBe(fallbackStack)
+    expect(deterministicFontFamily(LOCAL_TYPEFACE, 'ſ')).toBe(fallbackStack)
+  })
+
   it('deep-clones mutable stage and vocal values', () => {
     const stage = cloneStageStyle()
     stage.background.solidColor = '#abcdef'
@@ -174,12 +202,35 @@ describe('video style value contracts', () => {
       weight: 400, slant: 'normal',
     }
     expect(resolveFontFace(tied, requested).style).toBe('Zulu')
-    expect(fontFaceKey(LOCAL_TYPEFACE.faces[0])).toBe('DemoSans-Regular')
-    expect(fontFaceKey(genericFontFace(SYSTEM_UI_TYPEFACE, 'Regular'))).toBe('Regular:400:normal')
-    expect(fontTypefaceKey(LOCAL_TYPEFACE)).toBe(
-      'local:Demo Sans:DemoSans-Bold|DemoSans-Regular',
-    )
-    expect(deterministicFontFamily(LOCAL_TYPEFACE, 'Demo "Alias"')).toContain('"Demo Alias"')
+    const equivalentFaces: FontFaceDescriptor[] = [
+      { fullName: 'Twin Zulu', style: 'Regular', postscriptName: 'Twin-Zulu',
+        weight: 400, slant: 'normal' },
+      { fullName: 'Twin Alpha', style: 'Regular', postscriptName: 'Twin-Alpha',
+        weight: 400, slant: 'normal' },
+    ]
+    const equivalentRequest = { ...requested, style: 'Regular' }
+    const forward = { ...LOCAL_TYPEFACE, faces: equivalentFaces }
+    const reverse = { ...LOCAL_TYPEFACE, faces: [...equivalentFaces].reverse() }
+    expect(fontTypefaceKey(forward)).toBe(fontTypefaceKey(reverse))
+    expect(resolveFontFace(forward, equivalentRequest).postscriptName).toBe('Twin-Alpha')
+    expect(resolveFontFace(reverse, equivalentRequest).postscriptName).toBe('Twin-Alpha')
+    expect(resolveFontFace(reverse, equivalentFaces[0]).postscriptName).toBe('Twin-Zulu')
+    expect(JSON.parse(fontFaceKey(LOCAL_TYPEFACE.faces[0])))
+      .toEqual(['DemoSans-Regular', 'Demo Sans Regular', 'Regular', 400, 'normal'])
+    expect(JSON.parse(fontFaceKey(genericFontFace(SYSTEM_UI_TYPEFACE, 'Regular')))[0]).toBeNull()
+    const reversed = { ...LOCAL_TYPEFACE, faces: [...LOCAL_TYPEFACE.faces].reverse() }
+    expect(fontTypefaceKey(reversed)).toBe(fontTypefaceKey(LOCAL_TYPEFACE))
+    const baseFace = LOCAL_TYPEFACE.faces[0]
+    const collidingOldKeys = [
+      { ...LOCAL_TYPEFACE, family: 'A:B', faces: [{ ...baseFace, postscriptName: 'C|D' }] },
+      { ...LOCAL_TYPEFACE, family: 'A', faces: [{ ...baseFace, postscriptName: 'B:C|D' }] },
+    ]
+    expect(fontTypefaceKey(collidingOldKeys[0])).not.toBe(fontTypefaceKey(collidingOldKeys[1]))
+    expect(fontFaceKey({ ...LOCAL_TYPEFACE.faces[0], fullName: 'Another name' }))
+      .not.toBe(fontFaceKey(LOCAL_TYPEFACE.faces[0]))
+    expect(deterministicFontFamily(LOCAL_TYPEFACE, 'OKSLocalFont0')).toContain('"OKSLocalFont0"')
+    expect(deterministicFontFamily(LOCAL_TYPEFACE, 'Demo "Alias"'))
+      .toBe(deterministicFontFamily(LOCAL_TYPEFACE))
   })
 
   it('preserves valid color spelling and validates linked image readiness', () => {

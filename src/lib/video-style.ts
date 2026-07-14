@@ -15,6 +15,19 @@ export type VocalAlignment = 'left' | 'center' | 'right'
 export type SystemFontKind = 'system-ui' | 'system-monospace'
 export type FontSlant = 'normal' | 'italic' | 'oblique'
 
+export {
+  createFontAliasBatch,
+  deterministicFontFamily,
+  escapeCssString,
+  fontFaceKey,
+  fontSlantFromStyle,
+  fontStyleFromDescriptor,
+  fontTypefaceKey,
+  fontWeightFromStyle,
+  isValidPostScriptName,
+  localFontSource,
+} from './font-identity'
+
 const FONT_SIZE_SET = new Set<number>(FONT_SIZE_OPTIONS)
 
 export function isFontSizePx(value: unknown): value is FontSizePx {
@@ -316,59 +329,16 @@ export function resolveVocalStyle(
   }
 }
 
-export function fontWeightFromStyle(style: string): number {
-  const normalized = style.toLowerCase().replace(/[\s_-]+/gu, '')
-  if (normalized.includes('thin')) return 100
-  if (normalized.includes('extralight') || normalized.includes('ultralight')) return 200
-  if (normalized.includes('light')) return 300
-  if (normalized.includes('medium')) return 500
-  if (normalized.includes('semibold') || normalized.includes('demibold')) return 600
-  if (normalized.includes('extrabold') || normalized.includes('ultrabold')) return 800
-  if (normalized.includes('black') || normalized.includes('heavy')) return 900
-  if (normalized.includes('bold')) return 700
-  return 400
-}
-
-export function fontSlantFromStyle(style: string): FontSlant {
-  const normalized = style.toLowerCase()
-  if (normalized.includes('italic')) return 'italic'
-  if (normalized.includes('oblique')) return 'oblique'
-  return 'normal'
-}
-
-export function fontStyleFromDescriptor(font: FontFaceDescriptor): FontSlant {
-  return font.slant
-}
-
-export function deterministicFontFamily(typeface: FontTypefaceDescriptor, alias?: string): string {
-  if (typeface.kind === 'system-monospace') {
-    return 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
-  }
-  if (typeface.kind === 'system-ui') {
-    return 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
-  }
-  return alias
-    ? `"${alias.replaceAll('"', '')}", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`
-    : 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
-}
-
-export function fontFaceKey(face: FontFaceDescriptor): string {
-  return face.postscriptName ?? `${face.style}:${face.weight}:${face.slant}`
-}
-
-export function fontTypefaceKey(typeface: FontTypefaceDescriptor): string {
-  const identity = typeface.faces
-    .map((face) => face.postscriptName)
-    .filter(Boolean)
-    .sort()
-    .join('|')
-  return `${typeface.kind}:${typeface.family}:${identity}`
-}
-
 function compareOrdinal(left: string, right: string): number {
   if (left < right) return -1
   if (left > right) return 1
   return 0
+}
+
+function compareFontFaces(left: FontFaceDescriptor, right: FontFaceDescriptor): number {
+  return compareOrdinal(left.style, right.style) ||
+    compareOrdinal(left.fullName, right.fullName) ||
+    compareOrdinal(String(left.postscriptName), String(right.postscriptName))
 }
 
 export function resolveFontFace(
@@ -379,21 +349,18 @@ export function resolveFontFace(
     ? typeface.faces.find((face) => face.postscriptName === requested.postscriptName)
     : null
   if (exactPostscript) return cloneFontFace(exactPostscript)
-  const exactStyle = typeface.faces.find((face) => (
+  const exactStyle = typeface.faces.filter((face) => (
     face.style.toLowerCase() === requested.style.toLowerCase() &&
     face.weight === requested.weight &&
     face.slant === requested.slant
-  ))
+  )).sort(compareFontFaces)[0]
   if (exactStyle) return cloneFontFace(exactStyle)
   const ranked = [...typeface.faces].sort((left, right) => {
     const score = (face: FontFaceDescriptor) => (
       Math.abs(face.weight - requested.weight) +
       (face.slant === requested.slant ? 0 : 1_000)
     )
-    return score(left) - score(right) ||
-      compareOrdinal(left.style, right.style) ||
-      compareOrdinal(left.fullName, right.fullName) ||
-      compareOrdinal(String(left.postscriptName), String(right.postscriptName))
+    return score(left) - score(right) || compareFontFaces(left, right)
   })
   return cloneFontFace(ranked[0] ?? genericFontFace(SYSTEM_UI_TYPEFACE, 'Regular'))
 }
