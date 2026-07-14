@@ -94,8 +94,8 @@ export function WorkflowGuideDialog({
         </li>
         <li>
           <span><MousePointer2 size={18} /></span>
-          <div><strong>Correct the TimeBoard</strong><p>Select or drag word blocks to move them; drag either edge to resize.</p></div>
-          <Button size="sm" variant="secondary" onClick={onClose}><MousePointer2 size={13} /> Show TimeBoard</Button>
+          <div><strong>Correct timing in the Lyric Timing area</strong><p>Select or drag word blocks to move them; drag either edge to resize.</p></div>
+          <Button size="sm" variant="secondary" onClick={onClose}><MousePointer2 size={13} /> Show Lyric Timing</Button>
         </li>
         <li>
           <span><Play size={18} /></span>

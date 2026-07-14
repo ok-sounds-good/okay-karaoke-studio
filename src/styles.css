@@ -424,15 +424,10 @@ button:disabled {
   box-shadow: 12px 0 28px rgba(0, 0, 0, .09);
 }
 
-.inspector > .panel-header {
-  padding-left: 16px;
-  background: #151c18;
-}
-
 .inspector__scroll {
   flex: 1;
   min-height: 0;
-  padding: 4px 14px 22px;
+  padding: 0 14px 22px;
   overflow-y: auto;
 }
 

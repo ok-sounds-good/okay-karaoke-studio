@@ -173,10 +173,6 @@ select:focus-visible {
   box-shadow: 10px 0 25px rgba(76, 55, 101, .06);
 }
 
-.inspector > .panel-header {
-  background: #f6f1fa;
-}
-
 .inspector-section {
   border-bottom-color: var(--line-soft);
 }
