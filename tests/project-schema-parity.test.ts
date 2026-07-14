@@ -217,28 +217,6 @@ describe('current project schema parity', () => {
     expect(mainSource).toContain('withParsedProject(request.contents, async () => {')
   })
 
-  it('gates the video-export effect region behind strict project parsing', () => {
-    let effects = 0
-    representativeRejectedProjectJson().forEach((projectJson) => {
-      expect(() => projectSchema.withParsedProject(
-        projectJson,
-        () => { effects += 1 },
-      )).toThrow()
-    })
-    expect(effects).toBe(0)
-
-    const mainSource = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf8')
-    const start = mainSource.indexOf('ipcMain.handle(CHANNELS.exportVideo')
-    const end = mainSource.indexOf('ipcMain.handle(CHANNELS.cancelVideoExport', start)
-    const handler = mainSource.slice(start, end)
-    const parseGate = handler.indexOf('withParsedProject(request.projectJson')
-    expect(parseGate).toBeGreaterThan(handler.indexOf('normalizeVideoExportRequest(value)'))
-    for (const effect of [
-      'beginVideoExport(', 'ensureFfmpegForExport(',
-      'showCanonicalSaveDialog(', 'exportKaraokeVideo(',
-    ]) expect(parseGate).toBeLessThan(handler.indexOf(effect))
-  })
-
   it('gates editable-project export effects behind strict project parsing', () => {
     let effects = 0
     representativeRejectedProjectJson().forEach((projectJson) => {

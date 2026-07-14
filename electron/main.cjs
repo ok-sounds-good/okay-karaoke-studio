@@ -11,7 +11,7 @@ const {
   readUtf8FileWithinLimit,
   writeUtf8FileAtomically,
 } = require('./project-files.cjs')
-const { withParsedProject } = require('./project-schema.cjs')
+const { parseProjectJson, withParsedProject } = require('./project-schema.cjs')
 const {
   createVideoExportCommitState,
   exportKaraokeVideo,
@@ -23,6 +23,7 @@ const {
   VIDEO_EXPORT_CANCEL_DIALOG_OPTIONS,
   createVideoExportLifecycleGuard,
 } = require('./video-export-lifecycle.cjs')
+const { createVideoExportOperation } = require('./video-export-operation.cjs')
 const {
   EXPORT_FILTERS,
   ensureExportExtension,
@@ -140,7 +141,6 @@ const restorableProjectAudioByOwner = new Map()
 const writableProjectPaths = new Set()
 
 let mainWindow = null
-let activeVideoExport = null
 
 app.setName(APP_NAME)
 
@@ -556,41 +556,57 @@ function makeMediaResult(filePath, ownerContents) {
   }
 }
 
-function beginVideoExport(ownerId) {
-  let resolveFinished
-  const operation = {
-    ownerId,
-    controller: new AbortController(),
-    commitState: createVideoExportCommitState(),
-    finished: new Promise((resolve) => { resolveFinished = resolve }),
-    resolveFinished,
-  }
-  activeVideoExport = operation
-  return operation
+function prepareVideoExport({ owner, signal }) {
+  return ensureFfmpegForExport({
+    openExternal: openExternalUrl,
+    showMessageBox: (options) => dialog.showMessageBox(owner, options),
+    signal,
+  })
 }
 
-function canceledVideoExportError() {
-  const error = new Error('Video export canceled')
-  error.name = 'AbortError'
-  return error
+function selectVideoExportDestination({ owner, request }) {
+  const defaultName = ensureExportExtension(
+    safeFileName(request.suggestedName, 'karaoke-video.mp4'),
+    'mp4',
+  )
+  return showCanonicalSaveDialog(
+    dialog.showSaveDialog.bind(dialog),
+    owner,
+    {
+      title: 'Export Karaoke Video',
+      buttonLabel: 'Render Video',
+      defaultPath: documentsPath(defaultName),
+      filters: VIDEO_FILTERS,
+    },
+    'mp4',
+  )
 }
 
-function finishVideoExport(operation) {
-  if (activeVideoExport === operation) activeVideoExport = null
-  operation.resolveFinished()
+function executeVideoExport({ request, preparation, destination, operation, onProgress }) {
+  return exportKaraokeVideo({
+    BrowserWindow,
+    projectJson: request.projectJson,
+    durationMs: request.durationMs,
+    audioPath: request.audioPath,
+    outputPath: path.resolve(destination),
+    ffmpegPath: preparation,
+    resolution: request.resolution,
+    fps: request.fps,
+    onProgress,
+    onPromotionStart: () => operation.commitState.beginPromotion(),
+    onPromotionComplete: () => operation.commitState.finishPromotion(),
+    signal: operation.controller.signal,
+  })
 }
 
-function abortActiveVideoExport() {
-  const operation = activeVideoExport
-  if (!operation) return Promise.resolve()
-  if (!operation.commitState.tryBeginCancellation()) {
-    const error = new Error('Video export promotion has already begun and cannot be canceled')
-    error.code = 'VIDEO_EXPORT_NOT_CANCELLABLE'
-    return Promise.reject(error)
-  }
-  operation.controller.abort()
-  return operation.finished
-}
+const videoExportOperation = createVideoExportOperation({
+  parseProject: parseProjectJson,
+  createCommitState: createVideoExportCommitState,
+  prepareExport: prepareVideoExport,
+  selectDestination: selectVideoExportDestination,
+  executeExport: executeVideoExport,
+  sendProgress: (sender, progress) => sender.send(CHANNELS.videoExportProgress, progress),
+})
 
 async function confirmLifecycleVideoExportCancellation() {
   const owner = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null
@@ -606,7 +622,7 @@ async function confirmLifecycleVideoExportCancellation() {
 
 const videoExportLifecycleGuard = createVideoExportLifecycleGuard({
   confirmCancellation: confirmLifecycleVideoExportCancellation,
-  abortActiveExport: abortActiveVideoExport,
+  abortActiveExport: videoExportOperation.abortActiveExport,
   closeWindow: () => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close()
   },
@@ -762,71 +778,13 @@ function registerIpcHandlers() {
   ipcMain.handle(CHANNELS.exportVideo, async (event, value) => {
     const owner = assertTrustedSender(event)
     const request = normalizeVideoExportRequest(value)
-    return withParsedProject(request.projectJson, async () => {
-      if (activeVideoExport) throw new Error('Another karaoke video export is already running')
-      const operation = beginVideoExport(event.sender.id)
-      const abortWhenOwnerCloses = () => {
-        if (operation.commitState.tryBeginCancellation()) operation.controller.abort()
-      }
-      event.sender.once('destroyed', abortWhenOwnerCloses)
-
-      try {
-        const ffmpegPath = await ensureFfmpegForExport({
-          openExternal: openExternalUrl,
-          showMessageBox: (options) => dialog.showMessageBox(owner, options),
-          signal: operation.controller.signal,
-        })
-        if (!ffmpegPath) return null
-        if (operation.controller.signal.aborted) throw canceledVideoExportError()
-
-        const defaultName = ensureExportExtension(
-          safeFileName(request.suggestedName, 'karaoke-video.mp4'),
-          'mp4',
-        )
-        const selectedOutputPath = await showCanonicalSaveDialog(
-          dialog.showSaveDialog.bind(dialog),
-          owner,
-          {
-            title: 'Export Karaoke Video',
-            buttonLabel: 'Render Video',
-            defaultPath: documentsPath(defaultName),
-            filters: VIDEO_FILTERS,
-          },
-          'mp4',
-        )
-        if (!selectedOutputPath) return null
-        if (operation.controller.signal.aborted) throw canceledVideoExportError()
-
-        const sendProgress = (progress) => {
-          if (!event.sender.isDestroyed()) {
-            event.sender.send(CHANNELS.videoExportProgress, progress)
-          }
-        }
-        return await exportKaraokeVideo({
-          BrowserWindow,
-          projectJson: request.projectJson,
-          durationMs: request.durationMs,
-          audioPath: request.audioPath,
-          outputPath: path.resolve(selectedOutputPath),
-          ffmpegPath,
-          resolution: request.resolution,
-          fps: request.fps,
-          onProgress: sendProgress,
-          onPromotionStart: () => operation.commitState.beginPromotion(),
-          onPromotionComplete: () => operation.commitState.finishPromotion(),
-          signal: operation.controller.signal,
-        })
-      } finally {
-        event.sender.removeListener('destroyed', abortWhenOwnerCloses)
-        finishVideoExport(operation)
-      }
-    })
+    return videoExportOperation.run({ owner, sender: event.sender, request })
   })
 
   ipcMain.handle(CHANNELS.cancelVideoExport, async (event) => {
     assertTrustedSender(event)
-    const operation = activeVideoExport
-    if (!operation || operation.ownerId !== event.sender.id) return false
+    const operation = videoExportOperation.activeExportForOwner(event.sender.id)
+    if (!operation) return false
     if (!operation.commitState.tryBeginCancellation()) return false
     operation.controller.abort()
     await operation.finished
@@ -1041,7 +999,7 @@ async function createMainWindow() {
     if (!window.isDestroyed()) window.show()
   })
   window.on('close', (event) => {
-    if (!activeVideoExport) return
+    if (!videoExportOperation.hasActiveExport()) return
     event.preventDefault()
     void videoExportLifecycleGuard.requestWindowClose()
   })
@@ -1081,7 +1039,7 @@ if (!hasSingleInstanceLock) {
 } else {
   app.on('second-instance', focusMainWindow)
   app.on('before-quit', (event) => {
-    if (!activeVideoExport) return
+    if (!videoExportOperation.hasActiveExport()) return
     event.preventDefault()
     void videoExportLifecycleGuard.requestAppQuit()
   })
