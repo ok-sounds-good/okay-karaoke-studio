@@ -210,7 +210,7 @@ describe('mounted first-time workflow', () => {
 
   it('offers lyric editing only from Live Preview in the non-sync workspace', () => {
     const preview = document.querySelector<HTMLElement>('[aria-label="Karaoke preview"]')
-    const timeline = document.querySelector<HTMLElement>('[aria-label="TimeBoard"]')
+    const timeline = document.querySelector<HTMLElement>('[aria-label="Lyric Timing"]')
     const editTextButtons = [...document.querySelectorAll<HTMLButtonElement>('button')]
       .filter((button) => button.textContent?.trim() === 'Edit text')
 
@@ -220,6 +220,18 @@ describe('mounted first-time workflow', () => {
     expect(preview?.contains(editTextButtons[0])).toBe(true)
     expect(timeline?.contains(editTextButtons[0])).toBe(false)
     expect(timeline?.textContent).not.toContain('Edit text')
+  })
+
+  it('starts the inspector with song details and no decorative header row', () => {
+    const inspector = document.querySelector<HTMLElement>('[aria-label="Project inspector"]')
+
+    expect(inspector).not.toBeNull()
+    expect(inspector?.firstElementChild?.className).toBe('inspector__scroll')
+    expect(inspector?.querySelector('.panel-header')).toBeNull()
+    expect(
+      inspector?.querySelector('.inspector-section:first-child .inspector-section__title')
+        ?.textContent,
+    ).toContain('Song details')
   })
 
   it('opens the real guide from TopBar and enforces the lyrics-to-sync transition', async () => {

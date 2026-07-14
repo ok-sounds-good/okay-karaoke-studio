@@ -1,6 +1,6 @@
 # Okay Karaoke Studio
 
-Okay Karaoke Studio is a single-window desktop application for editing and synchronizing karaoke lyrics. It combines a verification-focused stage preview, transactional lyric editor, waveform TimeBoard, project inspector, and playback transport in one workspace.
+Okay Karaoke Studio is a single-window desktop application for editing and synchronizing karaoke lyrics. It combines a verification-focused stage preview, transactional lyric editor, waveform Lyric Timing editor, project inspector, and playback transport in one workspace.
 
 ![Status](https://img.shields.io/badge/status-MVP%20acceptance%20open-d7fa4a?labelColor=171e1b)
 ![Electron](https://img.shields.io/badge/Electron-desktop-58d6de?labelColor=171e1b)
@@ -24,11 +24,11 @@ Okay Karaoke Studio is a single-window desktop application for editing and synch
   name, and section gaps do not inject an automatic Instrumental graphic.
 - Draggable, resizable word blocks on a common chronological baseline, readable
   staggered label lanes, range selection, and timing controls on a zoomable
-  waveform TimeBoard. Timing edits cannot cross the preceding or following
+  waveform Lyric Timing editor. Timing edits cannot cross the preceding or following
   timed word in lyric order, including across line boundaries.
 - Live Preview's single **Edit text** action opens raw lyric editing with
   syllable separators, preserved blank-row section breaks, and screen-fit
-  guidance; TimeBoard does not duplicate it, and no Word Map is persistently
+  guidance; Lyric Timing does not duplicate it, and no Word Map is persistently
   rendered in the main workspace.
 - LRC import, enhanced LRC and ASS export, configurable 240p-through-2160p MP4
   karaoke rendering at 30 or 60 fps, and current v0 `.oks` projects.
@@ -103,7 +103,7 @@ bun run test:video
 4. In Live Preview, choose 1 through 5 visible lyric lines and either **Clear**
    or **Scroll** advance behavior. These project settings also govern MP4 output.
 5. Move the playhead to the desired start and choose **Start Sync** in the
-   TimeBoard. Live Preview is suspended and a lightweight Sync Focus shows the
+   Lyric Timing editor. Live Preview is suspended and a lightweight Sync Focus shows the
    current and next lyric lines in cursor order.
 6. Press Space at each word onset. A new onset on the same line backfills the
    preceding word's end; hold the final word of a line until its sung end. The
@@ -111,14 +111,14 @@ bun run test:video
    in lyric order, even across line boundaries. The authoritative playback
    clock supplies timestamps, and taps before lyric time `0:00` are ignored.
    Press Escape to finish the synchronization session and restore Live Preview.
-7. Verify timing in Live Preview, then select words in the TimeBoard.
+7. Verify timing in Live Preview, then select words in Lyric Timing.
    Command/Ctrl+A selects the active track outside text fields; dragging across
-   empty TimeBoard space creates a marquee selection. Drag blocks to move timing
+   empty Lyric Timing space creates a marquee selection. Drag blocks to move timing
    and drag either edge to resize; moves and resizes stop at the adjacent timed
    words in lyric order, including across line boundaries. A synchronization
-   session is one undoable history step; individual TimeBoard corrections remain
+   session is one undoable history step; individual Lyric Timing corrections remain
    undoable edits.
-8. Use the TimeBoard's **Clear Timing** or **Clear Timing After Cursor** controls
+8. Use Lyric Timing's **Clear Timing** or **Clear Timing After Cursor** controls
    when resynchronizing. Use transport **Stop** to pause and return to `0:00`.
 9. Review the timing status, save the current v0 `.oks` project, and export LRC,
    ASS, or an MP4 karaoke video. Video export requires attached audio and offers

@@ -736,13 +736,13 @@ export function Timeline({
   const totalWordCount = project.tracks.reduce((total, track) => total + flattenTrack(track).length, 0)
 
   return (
-    <section className="timeline-panel panel" aria-label="TimeBoard">
+    <section className="timeline-panel panel" aria-label="Lyric Timing">
       <header className="panel-header timeline-panel__header">
         <div className="panel-title">
           <span className="panel-title__icon"><AudioWaveform size={16} /></span>
           <div>
             <span className="eyebrow">Precision editor</span>
-            <h2>TimeBoard</h2>
+            <h2>Lyric Timing</h2>
           </div>
         </div>
         <div className="timeline-tools">
@@ -791,7 +791,7 @@ export function Timeline({
             <Minus size={12} />
             <input
               aria-label="Timeline zoom"
-              title="Zoom the TimeBoard horizontally"
+              title="Zoom Lyric Timing horizontally"
               type="range"
               min="0.45"
               max="3.5"

@@ -36,16 +36,6 @@ export const InspectorPanel = memo(function InspectorPanel({
   const untimed = allWords.filter(({ word }) => word.startMs === null).length
   return (
     <aside className="inspector panel" aria-label="Project inspector">
-      <header className="panel-header">
-        <div className="panel-title">
-          <span className="panel-title__icon"><SlidersHorizontal size={16} /></span>
-          <div>
-            <span className="eyebrow">Document</span>
-            <h2>Project</h2>
-          </div>
-        </div>
-      </header>
-
       <div className="inspector__scroll">
         <section className="inspector-section">
           <div className="inspector-section__title">

@@ -209,7 +209,7 @@ describe('offset-aware renderer state', () => {
   })
 })
 
-describe('TimeBoard layout and selection geometry', () => {
+describe('Lyric Timing layout and selection geometry', () => {
   it('keeps long labels independent and separates overlapping lines and same-line blocks', () => {
     const firstLine = createLyricLine('Extraordinarily brief', {
       id: 'first-line',
@@ -458,7 +458,7 @@ describe('first-time workflow', () => {
     expect(markup).toContain('Attach the backing track')
     expect(markup).toContain('Add the lyrics')
     expect(markup).toContain('Time each word')
-    expect(markup).toContain('Correct the TimeBoard')
+    expect(markup).toContain('Correct timing in the Lyric Timing area')
     expect(markup).toContain('Verify in Live Preview')
     expect(markup).toContain('Save and export')
     expect(markup).toContain('system file pickers only appear when you choose a file or destination')
@@ -486,7 +486,7 @@ describe('first-time workflow', () => {
       'Import LRC',
       'Edit lyrics',
       'Arm tap sync',
-      'Show TimeBoard',
+      'Show Lyric Timing',
       'Show preview',
       'Save .oks',
       'Choose export',
@@ -586,6 +586,7 @@ describe('first-time workflow', () => {
 
   it('enforces a scroll-safe workflow layout at the 1280 by 720 contract', () => {
     const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
+    const identity = readFileSync(new URL('../src/identity.css', import.meta.url), 'utf8')
     const electronMain = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf8')
     const minimumWindow = electronMain.match(/minWidth:\s*(\d+),\s*\n\s*minHeight:\s*(\d+)/)
 
@@ -598,6 +599,11 @@ describe('first-time workflow', () => {
     expect(styles).toMatch(
       /@media \(max-height: 720px\)\s*\{[\s\S]*?\.workflow-guide > li\s*\{[\s\S]*?min-height:\s*52px;/,
     )
+    expect(styles).toMatch(
+      /\.inspector__scroll\s*\{[\s\S]*?min-height:\s*0;[\s\S]*?overflow-y:\s*auto;/,
+    )
+    expect(styles).not.toContain('.inspector > .panel-header')
+    expect(identity).not.toContain('.inspector > .panel-header')
   })
 
   it('assigns playback to Shift+Space without registering bare Space globally', () => {
