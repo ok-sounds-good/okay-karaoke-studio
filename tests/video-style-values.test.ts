@@ -132,6 +132,12 @@ describe('video style value contracts', () => {
     invalids.forEach((typeface) => {
       expect(() => decodeTypeface(typeface, 'font')).toThrow()
     })
+    const sparseLocal = jsonClone(LOCAL_TYPEFACE)
+    sparseLocal.faces = new Array(1)
+    const sparseSystem = jsonClone(SYSTEM_UI_TYPEFACE)
+    delete sparseSystem.faces[0]
+    expect(() => decodeTypeface(sparseLocal, 'font')).toThrow()
+    expect(() => decodeTypeface(sparseSystem, 'font')).toThrow()
   })
 
   it('uses the exact PostScript grammar and opaque, collision-free CSS aliases', () => {
@@ -262,7 +268,10 @@ describe('video style value contracts', () => {
       imageStage.background.imagePath = validPath
       expect(decodeStageStyle(imageStage).background.imagePath).toBe(validPath)
     }
-    for (const invalidPath of ['', 'relative.png', '/linked/bad\0.png', `/${'a'.repeat(8_192)}`]) {
+    for (const invalidPath of [
+      '', 'relative.png', 'K:/linked/background.png', 'ſ:/linked/background.png',
+      '/linked/bad\0.png', `/${'a'.repeat(8_192)}`,
+    ]) {
       imageStage.background.imagePath = invalidPath
       expect(() => decodeStageStyle(imageStage)).toThrow(/absolute path|required|too long/u)
     }
