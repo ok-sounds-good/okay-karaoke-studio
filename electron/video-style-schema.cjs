@@ -1,35 +1,57 @@
-import {
-  FONT_SIZE_OPTIONS,
-  SYSTEM_MONOSPACE_TYPEFACE,
-  SYSTEM_UI_TYPEFACE,
-  isFontSizePx,
-  isHexColor,
-  isValidSyncAid,
-  type FontFaceDescriptor,
-  type FontSizePx,
-  type FontTypefaceDescriptor,
-  type StageStyle,
-  type TextStyle,
-  type VocalStyle,
-} from './video-style'
-import { isValidPostScriptName } from './font-identity'
+'use strict'
 
-type RecordValue = Record<string, unknown>
+// This contract is for JSON-shaped data; proxy/getter evaluation counts are not an API.
+const FONT_SIZE_OPTIONS = Object.freeze([
+  8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 24, 25, 27, 28, 32, 36, 40, 42,
+  48, 56, 64, 72, 82, 96, 104, 120, 144, 180, 240, 320, 400,
+])
+const FONT_SIZE_SET = new Set(FONT_SIZE_OPTIONS)
+const FACE_KEYS = ['fullName', 'style', 'postscriptName', 'weight', 'slant']
+const TYPEFACE_KEYS = ['kind', 'family', 'faces']
+const FORBIDDEN_POSTSCRIPT_CHARACTERS = new Set('[](){}<>/%')
 
-const FACE_KEYS = ['fullName', 'style', 'postscriptName', 'weight', 'slant'] as const
-const TYPEFACE_KEYS = ['kind', 'family', 'faces'] as const
+function genericFace(family, style, weight, slant = 'normal') {
+  return {
+    fullName: `${family} ${style}`,
+    style,
+    postscriptName: null,
+    weight,
+    slant,
+  }
+}
 
-function isAbsoluteLinkedPath(value: string): boolean {
+function genericFaces(family) {
+  return [
+    genericFace(family, 'Regular', 400),
+    genericFace(family, 'Italic', 400, 'italic'),
+    genericFace(family, 'Semi Bold', 600),
+    genericFace(family, 'Bold', 700),
+    genericFace(family, 'Extra Bold', 800),
+  ]
+}
+
+const SYSTEM_UI_TYPEFACE = {
+  kind: 'system-ui',
+  family: 'System UI',
+  faces: genericFaces('System UI'),
+}
+const SYSTEM_MONOSPACE_TYPEFACE = {
+  kind: 'system-monospace',
+  family: 'System Monospace',
+  faces: genericFaces('System Monospace'),
+}
+
+function isAbsoluteLinkedPath(value) {
   if (value.includes('\0')) return false
   return value.startsWith('/') || /^[A-Za-z]:[\\/]/u.test(value) || value.startsWith('\\\\')
 }
 
-function hasExactKeys(value: RecordValue, expected: readonly string[]): boolean {
+function hasExactKeys(value, expected) {
   const keys = Object.keys(value)
   return keys.length === expected.length && expected.every((key) => Object.hasOwn(value, key))
 }
 
-function exactKeys(value: RecordValue, expected: readonly string[], path: string): void {
+function exactKeys(value, expected, path) {
   const allowed = new Set(expected)
   const unexpected = Object.keys(value).find((key) => !allowed.has(key))
   if (unexpected) throw new TypeError(`${path}.${unexpected} is not supported.`)
@@ -37,37 +59,31 @@ function exactKeys(value: RecordValue, expected: readonly string[], path: string
   if (missing) throw new TypeError(`${path}.${missing} is required.`)
 }
 
-function record(value: unknown, path: string): RecordValue {
+function record(value, path) {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     throw new TypeError(`${path} must be an object.`)
   }
-  return value as RecordValue
+  return value
 }
 
-function string(value: RecordValue, key: string, path: string): string {
+function string(value, key, path) {
   if (typeof value[key] !== 'string') throw new TypeError(`${path}.${key} must be a string.`)
   return value[key]
 }
 
-function boolean(value: RecordValue, key: string, path: string): boolean {
+function boolean(value, key, path) {
   if (typeof value[key] !== 'boolean') throw new TypeError(`${path}.${key} must be a boolean.`)
   return value[key]
 }
 
-function integer(value: RecordValue, key: string, path: string): number {
+function integer(value, key, path) {
   if (!Number.isSafeInteger(value[key])) {
     throw new TypeError(`${path}.${key} must be a safe integer.`)
   }
-  return value[key] as number
+  return value[key]
 }
 
-function boundedInteger(
-  value: RecordValue,
-  key: string,
-  path: string,
-  minimum: number,
-  maximum: number,
-): number {
+function boundedInteger(value, key, path, minimum, maximum) {
   const result = integer(value, key, path)
   if (result < minimum || result > maximum) {
     throw new RangeError(`${path}.${key} must be from ${minimum} to ${maximum}.`)
@@ -75,7 +91,11 @@ function boundedInteger(
   return result
 }
 
-function fontSize(value: RecordValue, key: string, path: string): FontSizePx {
+function isFontSizePx(value) {
+  return typeof value === 'number' && FONT_SIZE_SET.has(value)
+}
+
+function fontSize(value, key, path) {
   const result = value[key]
   if (!isFontSizePx(result)) {
     throw new RangeError(
@@ -85,25 +105,41 @@ function fontSize(value: RecordValue, key: string, path: string): FontSizePx {
   return result
 }
 
-function color(value: RecordValue, key: string, path: string): string {
+function isHexColor(value) {
+  return typeof value === 'string' && /^#[0-9a-f]{6}$/iu.test(value)
+}
+
+function color(value, key, path) {
   const result = string(value, key, path)
   if (!isHexColor(result)) throw new TypeError(`${path}.${key} must be a six-digit hex color.`)
   return result
 }
 
-export function validFontFaceDescriptor(value: unknown): value is FontFaceDescriptor {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
-  const face = value as RecordValue
-  if (!hasExactKeys(face, FACE_KEYS)) return false
-  return typeof face.fullName === 'string' && Boolean(face.fullName.trim()) &&
-    face.fullName.length <= 300 &&
-    typeof face.style === 'string' && Boolean(face.style.trim()) && face.style.length <= 120 &&
-    (face.postscriptName === null || isValidPostScriptName(face.postscriptName)) &&
-    Number.isSafeInteger(face.weight) && Number(face.weight) >= 100 && Number(face.weight) <= 900 &&
-    ['normal', 'italic', 'oblique'].includes(String(face.slant))
+function isValidPostScriptName(value) {
+  if (typeof value !== 'string' || value.length < 1 || value.length > 63) return false
+  for (const character of value) {
+    const codePoint = character.codePointAt(0) || 0
+    if (
+      codePoint < 0x21 ||
+      codePoint > 0x7e ||
+      FORBIDDEN_POSTSCRIPT_CHARACTERS.has(character)
+    ) return false
+  }
+  return true
 }
 
-function sameFace(left: FontFaceDescriptor, right: FontFaceDescriptor): boolean {
+function validFontFaceDescriptor(value) {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  if (!hasExactKeys(value, FACE_KEYS)) return false
+  return typeof value.fullName === 'string' && Boolean(value.fullName.trim()) &&
+    value.fullName.length <= 300 &&
+    typeof value.style === 'string' && Boolean(value.style.trim()) && value.style.length <= 120 &&
+    (value.postscriptName === null || isValidPostScriptName(value.postscriptName)) &&
+    Number.isSafeInteger(value.weight) && value.weight >= 100 && value.weight <= 900 &&
+    ['normal', 'italic', 'oblique'].includes(String(value.slant))
+}
+
+function sameFace(left, right) {
   return left.fullName === right.fullName &&
     left.style === right.style &&
     left.postscriptName === right.postscriptName &&
@@ -111,57 +147,48 @@ function sameFace(left: FontFaceDescriptor, right: FontFaceDescriptor): boolean 
     left.slant === right.slant
 }
 
-function sameTypeface(
-  candidate: FontTypefaceDescriptor,
-  canonical: FontTypefaceDescriptor,
-): boolean {
+function sameTypeface(candidate, canonical) {
   return candidate.kind === canonical.kind &&
     candidate.family === canonical.family &&
     candidate.faces.length === canonical.faces.length &&
     candidate.faces.every((face, index) => sameFace(face, canonical.faces[index]))
 }
 
-export function validTypefaceDescriptor(value: unknown): value is FontTypefaceDescriptor {
+function validTypefaceDescriptor(value) {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
-  const source = value as RecordValue
-  if (!hasExactKeys(source, TYPEFACE_KEYS)) return false
-  if (!['system-ui', 'system-monospace', 'local'].includes(String(source.kind))) return false
-  if (typeof source.family !== 'string' || !source.family.trim() || source.family.length > 300) {
+  if (!hasExactKeys(value, TYPEFACE_KEYS)) return false
+  if (!['system-ui', 'system-monospace', 'local'].includes(String(value.kind))) return false
+  if (typeof value.family !== 'string' || !value.family.trim() || value.family.length > 300) {
     return false
   }
-  if (!Array.isArray(source.faces) || source.faces.length < 1 || source.faces.length > 100) {
+  if (!Array.isArray(value.faces) || value.faces.length < 1 || value.faces.length > 100) {
     return false
   }
-  for (let index = 0; index < source.faces.length; index += 1) {
-    if (!Object.hasOwn(source.faces, index)) return false
+  for (let index = 0; index < value.faces.length; index += 1) {
+    if (!Object.hasOwn(value.faces, index)) return false
   }
-  if (!source.faces.every(validFontFaceDescriptor)) return false
-
-  const typeface = source as unknown as FontTypefaceDescriptor
-  if (typeface.kind === 'system-ui') return sameTypeface(typeface, SYSTEM_UI_TYPEFACE)
-  if (typeface.kind === 'system-monospace') {
-    return sameTypeface(typeface, SYSTEM_MONOSPACE_TYPEFACE)
-  }
-  const postscriptNames = typeface.faces.map((face) => face.postscriptName)
+  if (!value.faces.every(validFontFaceDescriptor)) return false
+  if (value.kind === 'system-ui') return sameTypeface(value, SYSTEM_UI_TYPEFACE)
+  if (value.kind === 'system-monospace') return sameTypeface(value, SYSTEM_MONOSPACE_TYPEFACE)
+  const postscriptNames = value.faces.map((face) => face.postscriptName)
   return postscriptNames.every((name) => name !== null) &&
     new Set(postscriptNames).size === postscriptNames.length
 }
 
-function validTextStyle(value: unknown, withVisibility = false): value is TextStyle {
+function validTextStyle(value, withVisibility = false) {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
-  const style = value as RecordValue
   const keys = withVisibility
     ? ['typeface', 'fontStyle', 'sizePx', 'color', 'visible']
     : ['typeface', 'fontStyle', 'sizePx', 'color']
-  return hasExactKeys(style, keys) &&
-    validTypefaceDescriptor(style.typeface) &&
-    validFontFaceDescriptor(style.fontStyle) &&
-    isFontSizePx(style.sizePx) &&
-    typeof style.color === 'string' && isHexColor(style.color) &&
-    (!withVisibility || typeof style.visible === 'boolean')
+  return hasExactKeys(value, keys) &&
+    validTypefaceDescriptor(value.typeface) &&
+    validFontFaceDescriptor(value.fontStyle) &&
+    isFontSizePx(value.sizePx) &&
+    isHexColor(value.color) &&
+    (!withVisibility || typeof value.visible === 'boolean')
 }
 
-export function decodeFontFace(value: unknown, path: string): FontFaceDescriptor {
+function decodeFontFace(value, path) {
   const source = record(value, path)
   exactKeys(source, FACE_KEYS, path)
   const face = {
@@ -175,7 +202,7 @@ export function decodeFontFace(value: unknown, path: string): FontFaceDescriptor
   return face
 }
 
-export function decodeTypeface(value: unknown, path: string): FontTypefaceDescriptor {
+function decodeTypeface(value, path) {
   const source = record(value, path)
   exactKeys(source, TYPEFACE_KEYS, path)
   const typeface = {
@@ -191,7 +218,7 @@ export function decodeTypeface(value: unknown, path: string): FontTypefaceDescri
   return typeface
 }
 
-function decodeTextStyle(value: unknown, path: string, withVisibility = false) {
+function decodeTextStyle(value, path, withVisibility = false) {
   const source = record(value, path)
   exactKeys(
     source,
@@ -213,7 +240,7 @@ function decodeTextStyle(value: unknown, path: string, withVisibility = false) {
   return decoded
 }
 
-export function decodeStageStyle(value: unknown): StageStyle {
+function decodeStageStyle(value) {
   const source = record(value, 'project.stageStyle')
   exactKeys(source, ['background', 'lyrics', 'titleCard', 'stageFrame'], 'project.stageStyle')
   const background = record(source.background, 'project.stageStyle.background')
@@ -277,42 +304,35 @@ export function decodeStageStyle(value: unknown): StageStyle {
         title.eyebrow,
         'project.stageStyle.titleCard.eyebrow',
         true,
-      ) as StageStyle['titleCard']['eyebrow'],
-      title: decodeTextStyle(
-        title.title,
-        'project.stageStyle.titleCard.title',
-        true,
-      ) as StageStyle['titleCard']['title'],
-      artist: decodeTextStyle(
-        title.artist,
-        'project.stageStyle.titleCard.artist',
-        true,
-      ) as StageStyle['titleCard']['artist'],
+      ),
+      title: decodeTextStyle(title.title, 'project.stageStyle.titleCard.title', true),
+      artist: decodeTextStyle(title.artist, 'project.stageStyle.titleCard.artist', true),
     },
     stageFrame: {
       enabled: boolean(frame, 'enabled', 'project.stageStyle.stageFrame'),
       lineColor: color(frame, 'lineColor', 'project.stageStyle.stageFrame'),
       lineWidthPx: boundedInteger(frame, 'lineWidthPx', 'project.stageStyle.stageFrame', 0, 32),
-      brand: decodeTextStyle(
-        frame.brand,
-        'project.stageStyle.stageFrame.brand',
-        true,
-      ) as StageStyle['stageFrame']['brand'],
-      clock: decodeTextStyle(
-        frame.clock,
-        'project.stageStyle.stageFrame.clock',
-        true,
-      ) as StageStyle['stageFrame']['clock'],
-      footer: decodeTextStyle(
-        frame.footer,
-        'project.stageStyle.stageFrame.footer',
-        true,
-      ) as StageStyle['stageFrame']['footer'],
+      brand: decodeTextStyle(frame.brand, 'project.stageStyle.stageFrame.brand', true),
+      clock: decodeTextStyle(frame.clock, 'project.stageStyle.stageFrame.clock', true),
+      footer: decodeTextStyle(frame.footer, 'project.stageStyle.stageFrame.footer', true),
     },
   }
 }
 
-export function decodeVocalStyle(value: unknown, path: string): VocalStyle {
+function isValidSyncAid(style) {
+  const { previewMs, syncAid } = style
+  return typeof syncAid.enabled === 'boolean' &&
+    Number.isSafeInteger(previewMs) &&
+    Number.isSafeInteger(syncAid.minLeadMs) &&
+    Number.isSafeInteger(syncAid.maxLeadMs) &&
+    previewMs >= 0 &&
+    syncAid.minLeadMs >= 0 &&
+    syncAid.minLeadMs <= syncAid.maxLeadMs &&
+    syncAid.maxLeadMs <= previewMs &&
+    previewMs <= 60_000
+}
+
+function decodeVocalStyle(value, path) {
   const source = record(value, path)
   exactKeys(
     source,
@@ -328,14 +348,14 @@ export function decodeVocalStyle(value: unknown, path: string): VocalStyle {
     ],
     path,
   )
-  const nullableColor = (key: 'unsungColor' | 'sungColor') => {
+  const nullableColor = (key) => {
     if (source[key] !== null && typeof source[key] !== 'string') {
       throw new TypeError(`${path}.${key} must be a string or null.`)
     }
     if (typeof source[key] === 'string' && !isHexColor(source[key])) {
       throw new TypeError(`${path}.${key} must be a six-digit hex color or null.`)
     }
-    return source[key] as string | null
+    return source[key]
   }
   if (source.sizePx !== null && !isFontSizePx(source.sizePx)) {
     throw new RangeError(`${path}.sizePx must be a supported font size or null.`)
@@ -346,14 +366,14 @@ export function decodeVocalStyle(value: unknown, path: string): VocalStyle {
   }
   const syncAid = record(source.syncAid, `${path}.syncAid`)
   exactKeys(syncAid, ['enabled', 'minLeadMs', 'maxLeadMs'], `${path}.syncAid`)
-  const style: VocalStyle = {
+  const style = {
     typeface: source.typeface === null
       ? null
       : decodeTypeface(source.typeface, `${path}.typeface`),
     fontStyle: source.fontStyle === null
       ? null
       : decodeFontFace(source.fontStyle, `${path}.fontStyle`),
-    sizePx: source.sizePx as FontSizePx | null,
+    sizePx: source.sizePx,
     unsungColor: nullableColor('unsungColor'),
     sungColor: nullableColor('sungColor'),
     alignment,
@@ -368,30 +388,12 @@ export function decodeVocalStyle(value: unknown, path: string): VocalStyle {
   return style
 }
 
-export function videoStyleValidationErrors(
-  stageStyle: unknown,
-  vocalStyles: Array<{ path: string; style: unknown }>,
-): Array<{ code: string; path: string; message: string }> {
-  const errors: Array<{ code: string; path: string; message: string }> = []
-  try {
-    decodeStageStyle(stageStyle)
-  } catch (error) {
-    errors.push({
-      code: 'stage-style-invalid',
-      path: 'stageStyle',
-      message: error instanceof Error ? error.message : 'Stage style is invalid.',
-    })
-  }
-  vocalStyles.forEach(({ path, style }) => {
-    try {
-      decodeVocalStyle(style, path)
-    } catch (error) {
-      errors.push({
-        code: 'vocal-style-invalid',
-        path,
-        message: error instanceof Error ? error.message : 'Vocal style is invalid.',
-      })
-    }
-  })
-  return errors
+const normalizeStageStyle = decodeStageStyle
+const normalizeVocalStyle = decodeVocalStyle
+
+module.exports = {
+  decodeStageStyle,
+  decodeVocalStyle,
+  normalizeStageStyle,
+  normalizeVocalStyle,
 }
