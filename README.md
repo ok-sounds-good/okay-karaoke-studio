@@ -83,7 +83,7 @@ bun run dist:dir
 bun run test:video
 ```
 
-- `bun run test` runs project-model and schema-migration coverage, synchronization
+- `bun run test` runs strict current-schema coverage, synchronization
   semantics/history, preview/video display planning, validation, LRC, ASS, and
   renderer tests through Vitest.
 - `bun run build` performs a strict TypeScript check and production renderer build.
@@ -120,7 +120,7 @@ bun run test:video
    undoable edits.
 8. Use the TimeBoard's **Clear Timing** or **Clear Timing After Cursor** controls
    when resynchronizing. Use transport **Stop** to pause and return to `0:00`.
-9. Review the timing status, save the schema-v3 `.oks` project, and export LRC,
+9. Review the timing status, save the schema-v4 `.oks` project, and export LRC,
    ASS, or an MP4 karaoke video. Video export requires attached audio and offers
    240p (426 x 240), 360p (640 x 360), 480p (854 x 480), 720p (1280 x 720),
    1080p (1920 x 1080), 1440p (2560 x 1440), and 2160p (3840 x 2160), each at
@@ -128,7 +128,7 @@ bun run test:video
    export dialog, closing the application, quitting, or choosing Cancel during an
    active export asks for confirmation; a confirmed cancellation preserves a
    UUID-named partial file beside the destination.
-   Schema-v1 and schema-v2 projects open with the 3-line/Clear display defaults.
+   This clean-slate v0 build rejects schema-v1 through schema-v3 projects.
 
 ## Keyboard controls
 
@@ -153,7 +153,7 @@ electron/              Secure Electron main process and preload bridge
 src/
   components/          Unified workspace panels, dialogs, and transport
   hooks/               Audio playback and waveform decoding
-  lib/                 Project model, migration, validation, LRC, and ASS
+  lib/                 Project model, strict schema, validation, LRC, and ASS
   App.tsx               Application state, commands, sync, and file workflows
 tests/                  Pure model and interchange tests
 docs/MVP.md             Active version 0.1 product-acceptance contract
@@ -161,10 +161,10 @@ docs/ROADMAP.md         Prioritized future capabilities and product boundaries
 docs/SDLC.md            Pull-request, verification, ruleset, and release policy
 ```
 
-The canonical schema-v3 model stores integer-millisecond word timings, blank-row
-section separators, and shared Live Preview/MP4 lyric-display settings inside
-the project. Schema-v1 and schema-v2 projects migrate to 3 visible lines and
-Clear advance mode. The active MVP authors one lead track; adding new singer
+The canonical schema-v4 model stores integer-millisecond word timings, blank-row
+section separators, stage/vocal styles, and shared Live Preview/MP4
+lyric-display settings inside the project. Earlier schemas are rejected without
+migration. The active MVP authors one lead track; adding new singer
 tracks remains deferred. The renderer does not receive Node.js access. Electron
 exposes a small typed bridge for project dialogs, audio import,
 project-authorized audio restoration, text/video export, and menu commands.

@@ -2,6 +2,7 @@ import { useMemo, type CSSProperties } from 'react'
 import { Edit3, MonitorPlay, ShieldCheck } from 'lucide-react'
 import type { KaraokeProject, LyricDisplaySettings, LyricLine, LyricWord, VocalTrack } from '../lib/model'
 import { formatTime, planLyricDisplayLines } from '../lib/model'
+import { resolveVocalSungColor } from '../lib/video-style'
 import { Button } from './ui'
 
 interface KaraokePreviewProps {
@@ -35,17 +36,17 @@ function adjustedLineStart(line: LyricLine, offsetMs: number) {
 
 function PreviewLine({
   line,
-  track,
   lyricMs,
   selectedWordIds,
+  sungColor,
 }: {
   line: LyricLine
-  track: VocalTrack
   lyricMs: number
   selectedWordIds: Set<string>
+  sungColor: string
 }) {
   return (
-    <div className="stage-line" style={{ '--track-color': track.color } as CSSProperties}>
+    <div className="stage-line" style={{ '--track-color': sungColor } as CSSProperties}>
       <p>
         {line.words.map((word) => {
           const progress = wordProgress(word, lyricMs)
@@ -179,9 +180,9 @@ export function KaraokePreview({
                 <PreviewLine
                   key={`${track.id}-${line.id}`}
                   line={line}
-                  track={track}
                   lyricMs={lyricMs}
                   selectedWordIds={selectedWordIds}
+                  sungColor={resolveVocalSungColor(project.stageStyle, track.vocalStyle)}
                 />
               ))}
             </div>

@@ -2,6 +2,7 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type C
 import { AudioWaveform, ChevronLeft, ChevronRight, Minus, Plus, RotateCcw, SkipBack, TimerReset, Zap, ZoomIn } from 'lucide-react'
 import type { KaraokeProject, LyricLine, LyricWord, VocalTrack } from '../lib/model'
 import { formatTime } from '../lib/model'
+import { resolveVocalSungColor } from '../lib/video-style'
 import {
   constrainWordResizeTiming,
   constrainWordShiftDelta,
@@ -820,7 +821,9 @@ export function Timeline({
                 className={`timeline-track-label ${track.id === activeTrackId ? 'is-active' : ''}`}
                 style={{ height: trackLayoutById.get(track.id)?.height ?? TIMELINE_MIN_TRACK_HEIGHT_PX }}
               >
-                <span style={{ background: track.color }}>{index + 1}</span>
+                <span style={{
+                  background: resolveVocalSungColor(project.stageStyle, track.vocalStyle),
+                }}>{index + 1}</span>
                 <div><strong>{track.name}</strong><small>Voice {index + 1}</small></div>
               </div>
             ))}
@@ -882,7 +885,7 @@ export function Timeline({
                             left: lineLayout.intervalStart,
                             width: Math.max(1, lineLayout.intervalEnd - lineLayout.intervalStart),
                             height: lineLayout.height - 2,
-                            '--track-color': track.color,
+                            '--track-color': resolveVocalSungColor(project.stageStyle, track.vocalStyle),
                           } as CSSProperties}
                         />
                         <span
@@ -891,7 +894,7 @@ export function Timeline({
                             top: lineLayout.top + TIMELINE_LABEL_TOP_PX,
                             left: lineLayout.labelLeft,
                             width: lineLayout.labelWidth,
-                            '--track-color': track.color,
+                            '--track-color': resolveVocalSungColor(project.stageStyle, track.vocalStyle),
                           } as CSSProperties}
                           aria-hidden="true"
                         >
@@ -924,7 +927,7 @@ export function Timeline({
                                 left: wordLayout.left,
                                 width: wordLayout.width,
                                 height: TIMELINE_WORD_HEIGHT_PX,
-                                '--track-color': track.color,
+                                '--track-color': resolveVocalSungColor(project.stageStyle, track.vocalStyle),
                               } as CSSProperties}
                               aria-label={`${timelineWordLabel(word)} timing block, ${timingLabel}`}
                               aria-pressed={selected}
@@ -976,7 +979,9 @@ export function Timeline({
             <button
               key={word.id}
               className={`${syncWordId === word.id ? 'is-sync-target' : ''} ${selectedWordIds.has(word.id) ? 'is-selected' : ''}`}
-              style={{ '--track-color': track.color } as CSSProperties}
+              style={{
+                '--track-color': resolveVocalSungColor(project.stageStyle, track.vocalStyle),
+              } as CSSProperties}
               title={`Select untimed word: ${timelineWordLabel(word)}`}
               onClick={(event) => onSelectWord(word.id, event.shiftKey || event.metaKey || event.ctrlKey)}
             >{word.text.replaceAll('/', '·')}</button>

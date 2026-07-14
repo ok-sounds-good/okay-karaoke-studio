@@ -322,6 +322,24 @@ describe('mounted first-time workflow', () => {
     })
   })
 
+  it('stores the inspector color shortcut as a vocal sung-color override', async () => {
+    const input = document.querySelector<HTMLInputElement>('[aria-label="Track 1 color"]')!
+    await act(async () => {
+      const nativeValueSetter = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        'value',
+      )?.set
+      if (!nativeValueSetter) throw new Error('Input value setter is unavailable')
+      nativeValueSetter.call(input, '#123456')
+      input.dispatchEvent(new InputEvent('input', { bubbles: true, data: '#123456' }))
+    })
+    await act(async () => harness.sendMenuAction('save'))
+
+    const saved = parseProject(harness.saveProject.mock.calls.at(-1)?.[0].contents)
+    expect(saved.tracks[0].vocalStyle.sungColor).toBe('#123456')
+    expect(saved.tracks[0]).not.toHaveProperty('color')
+  })
+
   it('reserves bare Space, uses Shift+Space for playback, and wires Stop to reset transport', async () => {
     const bareSpace = new KeyboardEvent('keydown', {
       bubbles: true,

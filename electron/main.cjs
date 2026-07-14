@@ -11,6 +11,7 @@ const {
   readUtf8FileWithinLimit,
   writeUtf8FileAtomically,
 } = require('./project-files.cjs')
+const { withParsedProject } = require('./project-schema.cjs')
 const {
   createVideoExportCommitState,
   exportKaraokeVideo,
@@ -441,25 +442,13 @@ function mediaRequestIsCurrent(ownerId, sequence) {
   return mediaRequestSequences.get(ownerId) === sequence
 }
 
-function authorizeProjectAudio(ownerId, projectPath, contents) {
+function authorizeProjectAudio(ownerId, projectPath, project) {
   let audioPath = null
-  try {
-    const project = JSON.parse(contents)
-    if (isRecord(project)) {
-      const rawAudioPath = typeof project.audioPath === 'string'
-        ? project.audioPath
-        : typeof project.audioFile === 'string'
-          ? project.audioFile
-          : null
-      if (rawAudioPath) {
-        const candidate = path.isAbsolute(rawAudioPath)
-          ? path.resolve(rawAudioPath)
-          : path.resolve(path.dirname(projectPath), rawAudioPath)
-        if (AUDIO_EXTENSIONS.has(path.extname(candidate).toLowerCase())) audioPath = candidate
-      }
-    }
-  } catch {
-    // The renderer performs full schema parsing and will report malformed data.
+  if (project.audioPath) {
+    const candidate = path.isAbsolute(project.audioPath)
+      ? path.resolve(project.audioPath)
+      : path.resolve(path.dirname(projectPath), project.audioPath)
+    if (AUDIO_EXTENSIONS.has(path.extname(candidate).toLowerCase())) audioPath = candidate
   }
   restorableProjectAudioByOwner.set(ownerId, { projectPath, audioPath })
 }
@@ -497,6 +486,23 @@ function normalizeExportRequest(value) {
     suggestedName: optionalString(value.suggestedName, 'suggestedName'),
     contents: requireString(value.contents, 'contents'),
   }
+}
+
+async function writeTextExport(owner, request) {
+  const defaultName = ensureExportExtension(
+    safeFileName(request.suggestedName, `lyrics.${request.format}`),
+    request.format,
+  )
+  const filePath = await showCanonicalSaveDialog(dialog.showSaveDialog.bind(dialog), owner, {
+    title: `Export ${request.format.toUpperCase()}`,
+    buttonLabel: 'Export',
+    defaultPath: documentsPath(defaultName),
+    filters: EXPORT_FILTERS[request.format],
+  }, request.format)
+
+  if (!filePath) return null
+  await writeUtf8FileAtomically(filePath, request.contents)
+  return { path: filePath }
 }
 
 function normalizeVideoExportRequest(value) {
@@ -630,45 +636,49 @@ function registerIpcHandlers() {
       MAX_PROJECT_FILE_BYTES,
       'Project file',
     )
-    authorizeProjectAudio(event.sender.id, filePath, contents)
-    writableProjectPaths.add(filePath)
-    return { path: filePath, contents }
+    return withParsedProject(contents, (project) => {
+      authorizeProjectAudio(event.sender.id, filePath, project)
+      writableProjectPaths.add(filePath)
+      return { path: filePath, contents }
+    })
   })
 
   ipcMain.handle(CHANNELS.saveProject, async (event, value) => {
     const owner = assertTrustedSender(event)
     const request = normalizeProjectRequest(value)
-    const requestedPath = request.path ? path.resolve(request.path) : null
-    const requestedPathIsWritable = requestedPath
-      ? writableProjectPaths.has(requestedPath)
-      : false
+    return withParsedProject(request.contents, async () => {
+      const requestedPath = request.path ? path.resolve(request.path) : null
+      const requestedPathIsWritable = requestedPath
+        ? writableProjectPaths.has(requestedPath)
+        : false
 
-    let filePath = requestedPath &&
-      isCanonicalSavePath(requestedPath, 'oks') &&
-      requestedPathIsWritable
-      ? requestedPath
-      : null
+      let filePath = requestedPath &&
+        isCanonicalSavePath(requestedPath, 'oks') &&
+        requestedPathIsWritable
+        ? requestedPath
+        : null
 
-    if (!filePath) {
-      const defaultName = ensureExportExtension(
-        safeFileName(request.suggestedName, 'Untitled Karaoke Project.oks'),
-        'oks',
-      )
-      const defaultPath = requestedPath && requestedPathIsWritable
-        ? canonicalSavePath(requestedPath, 'oks')
-        : documentsPath(defaultName)
-      filePath = await showCanonicalSaveDialog(dialog.showSaveDialog.bind(dialog), owner, {
-        title: 'Save Karaoke Project',
-        buttonLabel: 'Save Project',
-        defaultPath,
-        filters: PROJECT_SAVE_FILTERS,
-      }, 'oks')
-      if (!filePath) return null
-    }
+      if (!filePath) {
+        const defaultName = ensureExportExtension(
+          safeFileName(request.suggestedName, 'Untitled Karaoke Project.oks'),
+          'oks',
+        )
+        const defaultPath = requestedPath && requestedPathIsWritable
+          ? canonicalSavePath(requestedPath, 'oks')
+          : documentsPath(defaultName)
+        filePath = await showCanonicalSaveDialog(dialog.showSaveDialog.bind(dialog), owner, {
+          title: 'Save Karaoke Project',
+          buttonLabel: 'Save Project',
+          defaultPath,
+          filters: PROJECT_SAVE_FILTERS,
+        }, 'oks')
+        if (!filePath) return null
+      }
 
-    await queueProjectWrite(filePath, request.contents)
-    writableProjectPaths.add(filePath)
-    return { path: filePath }
+      await queueProjectWrite(filePath, request.contents)
+      writableProjectPaths.add(filePath)
+      return { path: filePath }
+    })
   })
 
   ipcMain.handle(CHANNELS.importAudio, async (event) => {
@@ -743,82 +753,74 @@ function registerIpcHandlers() {
   ipcMain.handle(CHANNELS.exportText, async (event, value) => {
     const owner = assertTrustedSender(event)
     const request = normalizeExportRequest(value)
-    const defaultName = ensureExportExtension(
-      safeFileName(request.suggestedName, `lyrics.${request.format}`),
-      request.format,
-    )
-    const filePath = await showCanonicalSaveDialog(dialog.showSaveDialog.bind(dialog), owner, {
-      title: `Export ${request.format.toUpperCase()}`,
-      buttonLabel: 'Export',
-      defaultPath: documentsPath(defaultName),
-      filters: EXPORT_FILTERS[request.format],
-    }, request.format)
-
-    if (!filePath) return null
-    await writeUtf8FileAtomically(filePath, request.contents)
-    return { path: filePath }
+    if (request.format === 'oks') {
+      return withParsedProject(request.contents, () => writeTextExport(owner, request))
+    }
+    return writeTextExport(owner, request)
   })
 
   ipcMain.handle(CHANNELS.exportVideo, async (event, value) => {
     const owner = assertTrustedSender(event)
-    if (activeVideoExport) throw new Error('Another karaoke video export is already running')
     const request = normalizeVideoExportRequest(value)
-    const operation = beginVideoExport(event.sender.id)
-    const abortWhenOwnerCloses = () => {
-      if (operation.commitState.tryBeginCancellation()) operation.controller.abort()
-    }
-    event.sender.once('destroyed', abortWhenOwnerCloses)
-
-    try {
-      const ffmpegPath = await ensureFfmpegForExport({
-        openExternal: openExternalUrl,
-        showMessageBox: (options) => dialog.showMessageBox(owner, options),
-        signal: operation.controller.signal,
-      })
-      if (!ffmpegPath) return null
-      if (operation.controller.signal.aborted) throw canceledVideoExportError()
-
-      const defaultName = ensureExportExtension(
-        safeFileName(request.suggestedName, 'karaoke-video.mp4'),
-        'mp4',
-      )
-      const selectedOutputPath = await showCanonicalSaveDialog(
-        dialog.showSaveDialog.bind(dialog),
-        owner,
-        {
-          title: 'Export Karaoke Video',
-          buttonLabel: 'Render Video',
-          defaultPath: documentsPath(defaultName),
-          filters: VIDEO_FILTERS,
-        },
-        'mp4',
-      )
-      if (!selectedOutputPath) return null
-      if (operation.controller.signal.aborted) throw canceledVideoExportError()
-
-      const sendProgress = (progress) => {
-        if (!event.sender.isDestroyed()) {
-          event.sender.send(CHANNELS.videoExportProgress, progress)
-        }
+    return withParsedProject(request.projectJson, async () => {
+      if (activeVideoExport) throw new Error('Another karaoke video export is already running')
+      const operation = beginVideoExport(event.sender.id)
+      const abortWhenOwnerCloses = () => {
+        if (operation.commitState.tryBeginCancellation()) operation.controller.abort()
       }
-      return await exportKaraokeVideo({
-        BrowserWindow,
-        projectJson: request.projectJson,
-        durationMs: request.durationMs,
-        audioPath: request.audioPath,
-        outputPath: path.resolve(selectedOutputPath),
-        ffmpegPath,
-        resolution: request.resolution,
-        fps: request.fps,
-        onProgress: sendProgress,
-        onPromotionStart: () => operation.commitState.beginPromotion(),
-        onPromotionComplete: () => operation.commitState.finishPromotion(),
-        signal: operation.controller.signal,
-      })
-    } finally {
-      event.sender.removeListener('destroyed', abortWhenOwnerCloses)
-      finishVideoExport(operation)
-    }
+      event.sender.once('destroyed', abortWhenOwnerCloses)
+
+      try {
+        const ffmpegPath = await ensureFfmpegForExport({
+          openExternal: openExternalUrl,
+          showMessageBox: (options) => dialog.showMessageBox(owner, options),
+          signal: operation.controller.signal,
+        })
+        if (!ffmpegPath) return null
+        if (operation.controller.signal.aborted) throw canceledVideoExportError()
+
+        const defaultName = ensureExportExtension(
+          safeFileName(request.suggestedName, 'karaoke-video.mp4'),
+          'mp4',
+        )
+        const selectedOutputPath = await showCanonicalSaveDialog(
+          dialog.showSaveDialog.bind(dialog),
+          owner,
+          {
+            title: 'Export Karaoke Video',
+            buttonLabel: 'Render Video',
+            defaultPath: documentsPath(defaultName),
+            filters: VIDEO_FILTERS,
+          },
+          'mp4',
+        )
+        if (!selectedOutputPath) return null
+        if (operation.controller.signal.aborted) throw canceledVideoExportError()
+
+        const sendProgress = (progress) => {
+          if (!event.sender.isDestroyed()) {
+            event.sender.send(CHANNELS.videoExportProgress, progress)
+          }
+        }
+        return await exportKaraokeVideo({
+          BrowserWindow,
+          projectJson: request.projectJson,
+          durationMs: request.durationMs,
+          audioPath: request.audioPath,
+          outputPath: path.resolve(selectedOutputPath),
+          ffmpegPath,
+          resolution: request.resolution,
+          fps: request.fps,
+          onProgress: sendProgress,
+          onPromotionStart: () => operation.commitState.beginPromotion(),
+          onPromotionComplete: () => operation.commitState.finishPromotion(),
+          signal: operation.controller.signal,
+        })
+      } finally {
+        event.sender.removeListener('destroyed', abortWhenOwnerCloses)
+        finishVideoExport(operation)
+      }
+    })
   })
 
   ipcMain.handle(CHANNELS.cancelVideoExport, async (event) => {

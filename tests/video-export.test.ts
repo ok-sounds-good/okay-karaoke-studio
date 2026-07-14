@@ -4,6 +4,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Script } from 'node:vm'
 import { describe, expect, it } from 'vitest'
+import {
+  createLyricLine,
+  createLyricWord,
+  createProject,
+  createVocalTrack,
+} from '../src/lib/karaoke'
+import { cloneVocalStyle } from '../src/lib/video-style'
 
 const require = createRequire(import.meta.url)
 const videoExport = require('../electron/video-export.cjs') as {
@@ -54,51 +61,53 @@ const videoExport = require('../electron/video-export.cjs') as {
 }
 
 function videoProject() {
-  return {
+  const vocalStyle = cloneVocalStyle()
+  vocalStyle.sungColor = '#d7fa4a'
+  return createProject({
+    id: 'video-project',
     title: 'Video Test',
     artist: 'Okay Singer',
     audioPath: '/music/test.mp3',
     durationMs: 5_000,
     offsetMs: 1_000,
     lyricDisplay: { lineCount: 3, advanceMode: 'clear' },
-    tracks: [
-      {
-        name: 'Lead',
-        color: '#d7fa4a',
-        muted: false,
-        solo: false,
-        lines: [
-          {
-            text: 'Hello world',
-            startMs: 1_000,
-            endMs: 3_000,
-            words: [
-              { text: 'Hello', startMs: 1_000, endMs: 2_000 },
-              { text: 'world', startMs: 2_000, endMs: 3_000 },
-            ],
-          },
+    createdAt: '2026-07-14T00:00:00.000Z',
+    updatedAt: '2026-07-14T00:00:00.000Z',
+    tracks: [createVocalTrack({
+      id: 'video-lead',
+      name: 'Lead',
+      vocalStyle,
+      muted: false,
+      solo: false,
+      lines: [createLyricLine('Hello world', {
+        id: 'video-line',
+        startMs: 1_000,
+        endMs: 3_000,
+        words: [
+          createLyricWord('Hello', {
+            id: 'video-word-1', startMs: 1_000, endMs: 2_000,
+          }),
+          createLyricWord('world', {
+            id: 'video-word-2', startMs: 2_000, endMs: 3_000,
+          }),
         ],
-      },
-    ],
-  }
+      })],
+    })],
+  })
 }
 
 function timedVideoLine(text: string, startMs: number, endMs: number) {
-  return {
-    text,
+  const key = `${text.toLowerCase().replaceAll(' ', '-')}-${startMs}`
+  return createLyricLine(text, {
+    id: `line-${key}`,
     startMs,
     endMs,
-    words: [{ text, startMs, endMs }],
-  }
+    words: [createLyricWord(text, { id: `word-${key}`, startMs, endMs })],
+  })
 }
 
 function blankVideoLine() {
-  return {
-    text: '',
-    startMs: null,
-    endMs: null,
-    words: [],
-  }
+  return createLyricLine('', { id: 'line-separator', words: [] })
 }
 
 describe('karaoke video frame planning', () => {
@@ -317,13 +326,16 @@ describe('karaoke video frame planning', () => {
         { ...base.tracks[0], name: 'Lead', lines },
         {
           ...base.tracks[0],
+          id: 'video-harmony',
           name: 'Harmony',
-          color: '#58d6de',
+          vocalStyle: { ...base.tracks[0].vocalStyle, sungColor: '#58d6de' },
           lines: lines.map((line) => ({
             ...line,
+            id: `harmony-${line.id}`,
             text: line.text.replace('Lead', 'Harmony'),
             words: line.words.map((word) => ({
               ...word,
+              id: `harmony-${word.id}`,
               text: word.text.replace('Lead', 'Harmony'),
             })),
           })),
@@ -338,16 +350,17 @@ describe('karaoke video frame planning', () => {
     )
   })
 
-  it('rejects malformed and unbounded project payloads', () => {
-    expect(() => videoExport.parseProjectForVideo('{oops')).toThrow('project JSON is invalid')
-    expect(() => videoExport.parseProjectForVideo(JSON.stringify({ tracks: [] }))).toThrow(
-      'between 1 and 2 vocal tracks',
-    )
+  it('rejects malformed and semantically invalid current projects', () => {
+    expect(() => videoExport.parseProjectForVideo('{oops')).toThrow('Invalid project JSON')
+    expect(videoExport.parseProjectForVideo(JSON.stringify({
+      ...videoProject(),
+      tracks: [],
+    }))).toMatchObject({ tracks: [] })
 
     const invalidTiming = videoProject()
     invalidTiming.tracks[0].lines[0].words[0].startMs = -1
     expect(() => videoExport.parseProjectForVideo(JSON.stringify(invalidTiming))).toThrow(
-      'must be between zero and thirty minutes',
+      'cannot be negative',
     )
 
     const incompleteTiming = videoProject()
@@ -359,7 +372,7 @@ describe('karaoke video frame planning', () => {
     expect(() => videoExport.parseProjectForVideo(JSON.stringify({
       ...videoProject(),
       lyricDisplay: { lineCount: 6, advanceMode: 'clear' },
-    }))).toThrow('lineCount must be between 1 and 5')
+    }))).toThrow('line count must be an integer from 1 to 5')
   })
 
   it('renders neither track labels, mini upcoming lines, nor an instrumental fallback', () => {
@@ -389,25 +402,30 @@ describe('karaoke video frame planning', () => {
     expect(document).toContain('color:var(--accent)')
 
     const project = videoProject()
-    project.tracks[0].color = '#A1b2C3'
+    project.tracks[0].vocalStyle.sungColor = '#A1b2C3'
     expect(videoExport.frameStateAt(project, 2_000).lines[0].color).toBe('#A1b2C3')
+    project.tracks[0].vocalStyle.sungColor = null
+    project.stageStyle.lyrics.sungColor = '#C3b2A1'
+    expect(videoExport.frameStateAt(project, 2_000).lines[0].color).toBe('#C3b2A1')
   })
 
   it('uses only visible tracks when extending duration', () => {
     const project = videoProject()
-    project.durationMs = 1_000
-    project.tracks.push({
+    project.durationMs = null
+    project.tracks.push(createVocalTrack({
+      id: 'muted-guide',
       name: 'Muted guide',
-      color: '#ffffff',
       muted: true,
       solo: false,
-      lines: [{
-        text: 'Hidden',
+      lines: [createLyricLine('Hidden', {
+        id: 'muted-line',
         startMs: 20_000,
         endMs: 25_000,
-        words: [{ text: 'Hidden', startMs: 20_000, endMs: 25_000 }],
-      }],
-    })
+        words: [createLyricWord('Hidden', {
+          id: 'muted-word', startMs: 20_000, endMs: 25_000,
+        })],
+      })],
+    }))
 
     expect(videoExport.effectiveVideoDuration(project, 1_000)).toBe(4_000)
   })
@@ -417,13 +435,18 @@ describe('karaoke video frame planning', () => {
     project.offsetMs = 0
     project.durationMs = 23_000
     const untimedWords = [
-      { text: 'Line', startMs: null as unknown as number, endMs: null as unknown as number },
-      { text: 'timed', startMs: null as unknown as number, endMs: null as unknown as number },
-      { text: 'only', startMs: null as unknown as number, endMs: null as unknown as number },
+      createLyricWord('Line', { id: 'untimed-line' }),
+      createLyricWord('timed', { id: 'untimed-timed' }),
+      createLyricWord('only', { id: 'untimed-only' }),
     ]
     project.tracks[0].lines = [
-      { text: 'Line timed only', startMs: 0, endMs: 2_000, words: untimedWords },
-      { text: 'After the break', startMs: 20_000, endMs: 22_000, words: untimedWords },
+      createLyricLine('Line timed only', {
+        id: 'untimed-line-one', startMs: 0, endMs: 2_000, words: untimedWords,
+      }),
+      createLyricLine('After the break', {
+        id: 'untimed-line-two', startMs: 20_000, endMs: 22_000,
+        words: untimedWords.map((word) => ({ ...word, id: `later-${word.id}` })),
+      }),
     ]
 
     expect(videoExport.frameStateAt(project, 1_000).lines[0].words).toEqual([

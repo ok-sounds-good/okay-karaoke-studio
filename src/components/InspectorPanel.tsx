@@ -2,6 +2,7 @@ import { memo, useMemo } from 'react'
 import { FileAudio2, Import, Mic2, Music2, SlidersHorizontal, UsersRound } from 'lucide-react'
 import type { KaraokeProject, VocalTrack } from '../lib/model'
 import { formatTime } from '../lib/model'
+import { resolveVocalSungColor } from '../lib/video-style'
 import { effectiveDuration, flattenProject, flattenTrack } from '../utils'
 import { Button } from './ui'
 
@@ -10,7 +11,7 @@ interface InspectorPanelProps {
   activeTrackId: string
   onSelectTrack: (trackId: string) => void
   onUpdateProject: (patch: Partial<Pick<KaraokeProject, 'title' | 'artist' | 'offsetMs'>>) => void
-  onUpdateTrack: (trackId: string, patch: Partial<Pick<VocalTrack, 'name' | 'color' | 'muted' | 'solo'>>) => void
+  onUpdateTrack: (trackId: string, patch: Partial<Pick<VocalTrack, 'name' | 'vocalStyle' | 'muted' | 'solo'>>) => void
   onImportAudio: () => void
   onImportLrc: () => void
 }
@@ -104,6 +105,7 @@ export const InspectorPanel = memo(function InspectorPanel({
           <div className="vocal-track-list">
             {project.tracks.map((track, index) => {
               const { total, complete } = trackStats.get(track.id) ?? { total: 0, complete: 0 }
+              const sungColor = resolveVocalSungColor(project.stageStyle, track.vocalStyle)
               return (
                 <article
                   key={track.id}
@@ -111,7 +113,7 @@ export const InspectorPanel = memo(function InspectorPanel({
                   onClick={() => onSelectTrack(track.id)}
                 >
                   <div className="vocal-track-card__top">
-                    <span className="vocal-track-card__number" style={{ background: track.color }}>
+                    <span className="vocal-track-card__number" style={{ background: sungColor }}>
                       <Mic2 size={13} />
                     </span>
                     <input
@@ -125,9 +127,11 @@ export const InspectorPanel = memo(function InspectorPanel({
                       aria-label={`Track ${index + 1} color`}
                       title={`Choose color for ${track.name}`}
                       type="color"
-                      value={track.color}
+                      value={sungColor}
                       onClick={(event) => event.stopPropagation()}
-                      onChange={(event) => onUpdateTrack(track.id, { color: event.target.value })}
+                      onChange={(event) => onUpdateTrack(track.id, {
+                        vocalStyle: { ...track.vocalStyle, sungColor: event.target.value },
+                      })}
                     />
                   </div>
                   <div className="vocal-track-card__status">

@@ -6,6 +6,7 @@ const fs = require('node:fs/promises')
 const path = require('node:path')
 const { randomUUID } = require('node:crypto')
 const { ffmpegExecutableCandidates } = require('./ffmpeg-setup.cjs')
+const { decodeProject, parseProjectJson } = require('./project-schema.cjs')
 
 const VIDEO_RESOLUTION_PRESETS = Object.freeze({
   '240p': Object.freeze({ width: 426, height: 240 }),
@@ -22,13 +23,6 @@ const DEFAULT_VIDEO_FPS = 30
 const VIDEO_RENDER_FPS = DEFAULT_VIDEO_FPS
 const MAX_VIDEO_DURATION_MS = 30 * 60 * 1000
 const MAX_VIDEO_FRAMES = Math.ceil(MAX_VIDEO_DURATION_MS * Math.max(...VIDEO_FRAME_RATES) / 1_000)
-const MAX_TRACKS = 2
-const MAX_LINES = 20_000
-const MAX_WORDS = 150_000
-const MIN_LYRIC_DISPLAY_LINES = 1
-const MAX_LYRIC_DISPLAY_LINES = 5
-const DEFAULT_LYRIC_DISPLAY = Object.freeze({ lineCount: 3, advanceMode: 'clear' })
-
 function normalizeVideoSettings(value = {}) {
   if (!isRecord(value)) throw new TypeError('Video settings must be an object')
   const resolution = value.resolution ?? DEFAULT_VIDEO_RESOLUTION
@@ -54,133 +48,8 @@ function limitedText(value, fallback, maximumLength = 500) {
   return value.replaceAll('\0', '').slice(0, maximumLength)
 }
 
-function normalizeTiming(value, label) {
-  if (value === null || value === undefined) return null
-  if (!Number.isSafeInteger(value)) throw new TypeError(`${label} must be an integer or null`)
-  if (value < 0 || value > MAX_VIDEO_DURATION_MS) {
-    throw new RangeError(`${label} must be between zero and thirty minutes`)
-  }
-  return value
-}
-
-function validateTimingPair(startMs, endMs, label) {
-  if ((startMs === null) !== (endMs === null)) {
-    throw new TypeError(`${label} must have both a start and end time, or neither`)
-  }
-  if (startMs !== null && endMs <= startMs) {
-    throw new RangeError(`${label} must end after it starts`)
-  }
-}
-
-function normalizeLyricDisplay(value) {
-  if (value === undefined) return { ...DEFAULT_LYRIC_DISPLAY }
-  if (!isRecord(value)) throw new TypeError('lyricDisplay must be an object')
-  if (!Number.isSafeInteger(value.lineCount)) {
-    throw new TypeError('lyricDisplay.lineCount must be an integer')
-  }
-  if (value.lineCount < MIN_LYRIC_DISPLAY_LINES || value.lineCount > MAX_LYRIC_DISPLAY_LINES) {
-    throw new RangeError(
-      `lyricDisplay.lineCount must be between ${MIN_LYRIC_DISPLAY_LINES} and ${MAX_LYRIC_DISPLAY_LINES}`,
-    )
-  }
-  if (value.advanceMode !== 'clear' && value.advanceMode !== 'scroll') {
-    throw new TypeError('lyricDisplay.advanceMode must be clear or scroll')
-  }
-  return { lineCount: value.lineCount, advanceMode: value.advanceMode }
-}
-
 function normalizeProjectForVideo(value) {
-  if (!isRecord(value)) throw new TypeError('Video export requires a project object')
-  if (!Array.isArray(value.tracks) || value.tracks.length === 0 || value.tracks.length > MAX_TRACKS) {
-    throw new TypeError(`Video export supports between 1 and ${MAX_TRACKS} vocal tracks`)
-  }
-
-  let lineCount = 0
-  let wordCount = 0
-  const tracks = value.tracks.map((rawTrack, trackIndex) => {
-    if (!isRecord(rawTrack) || !Array.isArray(rawTrack.lines)) {
-      throw new TypeError(`tracks[${trackIndex}] is invalid`)
-    }
-    lineCount += rawTrack.lines.length
-    if (lineCount > MAX_LINES) throw new RangeError(`Video export supports at most ${MAX_LINES} lyric lines`)
-
-    const lines = rawTrack.lines.map((rawLine, lineIndex) => {
-      if (!isRecord(rawLine) || !Array.isArray(rawLine.words)) {
-        throw new TypeError(`tracks[${trackIndex}].lines[${lineIndex}] is invalid`)
-      }
-      wordCount += rawLine.words.length
-      if (wordCount > MAX_WORDS) throw new RangeError(`Video export supports at most ${MAX_WORDS} words`)
-
-      const words = rawLine.words.map((rawWord, wordIndex) => {
-        if (!isRecord(rawWord)) {
-          throw new TypeError(`tracks[${trackIndex}].lines[${lineIndex}].words[${wordIndex}] is invalid`)
-        }
-        const startMs = normalizeTiming(
-          rawWord.startMs,
-          `tracks[${trackIndex}].lines[${lineIndex}].words[${wordIndex}].startMs`,
-        )
-        const endMs = normalizeTiming(
-          rawWord.endMs,
-          `tracks[${trackIndex}].lines[${lineIndex}].words[${wordIndex}].endMs`,
-        )
-        validateTimingPair(
-          startMs,
-          endMs,
-          `tracks[${trackIndex}].lines[${lineIndex}].words[${wordIndex}]`,
-        )
-        return {
-          text: limitedText(rawWord.text, '', 250),
-          startMs,
-          endMs,
-        }
-      })
-
-      const startMs = normalizeTiming(
-        rawLine.startMs,
-        `tracks[${trackIndex}].lines[${lineIndex}].startMs`,
-      )
-      const endMs = normalizeTiming(
-        rawLine.endMs,
-        `tracks[${trackIndex}].lines[${lineIndex}].endMs`,
-      )
-      validateTimingPair(startMs, endMs, `tracks[${trackIndex}].lines[${lineIndex}]`)
-      return {
-        text: limitedText(rawLine.text, words.map((word) => word.text).join(' '), 2_000),
-        startMs,
-        endMs,
-        words,
-      }
-    })
-
-    return {
-      name: limitedText(rawTrack.name, `Vocal ${trackIndex + 1}`, 120),
-      color: /^#[0-9a-f]{6}$/iu.test(rawTrack.color) ? rawTrack.color : '#d7fa4a',
-      muted: rawTrack.muted === true,
-      solo: rawTrack.solo === true,
-      lines,
-    }
-  })
-
-  const durationMs = value.durationMs === null || value.durationMs === undefined
-    ? 0
-    : finiteInteger(value.durationMs, Number.NaN)
-  if (!Number.isSafeInteger(durationMs) || durationMs < 0 || durationMs > MAX_VIDEO_DURATION_MS) {
-    throw new RangeError('Project duration must be between zero and thirty minutes')
-  }
-  const offsetMs = finiteInteger(value.offsetMs, Number.NaN)
-  if (!Number.isSafeInteger(offsetMs) || Math.abs(offsetMs) > MAX_VIDEO_DURATION_MS) {
-    throw new RangeError('Project offset must be within thirty minutes')
-  }
-
-  return {
-    title: limitedText(value.title, 'Untitled song', 300),
-    artist: limitedText(value.artist, 'Unknown artist', 300),
-    audioPath: limitedText(value.audioPath, '', 8_192),
-    durationMs,
-    offsetMs,
-    lyricDisplay: normalizeLyricDisplay(value.lyricDisplay),
-    tracks,
-  }
+  return decodeProject(value)
 }
 
 function parseProjectForVideo(json) {
@@ -188,13 +57,7 @@ function parseProjectForVideo(json) {
   if (Buffer.byteLength(json, 'utf8') > 50 * 1024 * 1024) {
     throw new RangeError('The project is too large to render as video')
   }
-  let parsed
-  try {
-    parsed = JSON.parse(json)
-  } catch {
-    throw new TypeError('The project JSON is invalid')
-  }
-  return normalizeProjectForVideo(parsed)
+  return parseProjectJson(json)
 }
 
 function rawLineRange(line) {
@@ -315,6 +178,10 @@ function wordProgress(word, lyricMs) {
   return Math.max(0, Math.min(1, (lyricMs - word.startMs) / Math.max(1, word.endMs - word.startMs)))
 }
 
+function vocalSungColor(project, track) {
+  return track.vocalStyle.sungColor ?? project.stageStyle.lyrics.sungColor
+}
+
 function createFrameCursor(index) {
   return {
     trackPositions: index.tracks.map(() => 0),
@@ -368,7 +235,7 @@ function frameStateAtIndex(index, playbackMs, cursor) {
       const line = trackLines[lineIndex]
       if (line && lines.length < project.lyricDisplay.lineCount) {
         lines.push({
-          color: track.color,
+          color: vocalSungColor(project, track),
           text: line.text.replaceAll('/', '·'),
           words: line.words
             .filter((word) => word.text)

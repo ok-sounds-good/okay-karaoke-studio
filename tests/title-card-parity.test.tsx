@@ -67,7 +67,7 @@ describe('Live Preview and MP4 title-card parity', () => {
 
   it('keeps the title card visible when no valid timed line exists', () => {
     const project = createProject({
-      tracks: [createVocalTrack({ lines: [createLyricLine('Still untimed')] })],
+      tracks: [createVocalTrack({ id: 'untimed-lead', lines: [createLyricLine('Still untimed')] })],
     })
     const markup = renderToStaticMarkup(
       <KaraokePreview

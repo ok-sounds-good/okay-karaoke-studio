@@ -329,6 +329,10 @@ export function resolveVocalStyle(
   }
 }
 
+export function resolveVocalSungColor(stage: StageStyle, vocal: VocalStyle): string {
+  return vocal.sungColor ?? stage.lyrics.sungColor
+}
+
 function compareOrdinal(left: string, right: string): number {
   if (left < right) return -1
   if (left > right) return 1

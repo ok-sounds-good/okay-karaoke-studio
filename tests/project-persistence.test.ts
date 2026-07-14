@@ -13,6 +13,7 @@ import {
   serializeProject,
   type KaraokeProject,
 } from '../src/lib/karaoke'
+import { cloneStageStyle, cloneVocalStyle } from '../src/lib/video-style'
 
 const require = createRequire(import.meta.url)
 const projectFiles = require('../electron/project-files.cjs') as {
@@ -35,6 +36,16 @@ async function temporaryProjectPath() {
 }
 
 function completeProjectFixture(): KaraokeProject {
+  const stageStyle = cloneStageStyle()
+  stageStyle.background = {
+    ...stageStyle.background,
+    mode: 'image',
+    imagePath: '/linked/background image.png',
+  }
+  const leadStyle = cloneVocalStyle()
+  leadStyle.sungColor = '#12aBcD'
+  const guideStyle = cloneVocalStyle()
+  guideStyle.sungColor = '#fedcba'
   const leadLine = createLyricLine('Café lights', {
     id: 'line-lead-1',
     startMs: 1_001,
@@ -65,11 +76,12 @@ function completeProjectFixture(): KaraokeProject {
     createdAt: '2026-02-03T04:05:06.789Z',
     updatedAt: '2026-07-12T17:18:19.123Z',
     lyricDisplay: { lineCount: 5, advanceMode: 'scroll' },
+    stageStyle,
     tracks: [
       createVocalTrack({
         id: 'track-lead',
         name: 'Lead Vocal',
-        color: '#12aBcD',
+        vocalStyle: leadStyle,
         muted: false,
         solo: true,
         lines: [leadLine],
@@ -77,7 +89,7 @@ function completeProjectFixture(): KaraokeProject {
       createVocalTrack({
         id: 'track-guide',
         name: 'Guide / Harmony',
-        color: '#fedcba',
+        vocalStyle: guideStyle,
         muted: true,
         solo: false,
         lines: [guideLine],
@@ -103,6 +115,9 @@ describe('Electron project file persistence', () => {
     expect(reopened.tracks[0].lines[0].words[0]).not.toBe(original.tracks[0].lines[0].words[0])
     expect(reopened.lyricDisplay).toEqual({ lineCount: 5, advanceMode: 'scroll' })
     expect(reopened.lyricDisplay).not.toBe(original.lyricDisplay)
+    expect(reopened.stageStyle.background.imagePath).toBe('/linked/background image.png')
+    expect(reopened.stageStyle).not.toBe(original.stageStyle)
+    expect(reopened.tracks[0].vocalStyle).not.toBe(original.tracks[0].vocalStyle)
     expect(await readdir(directory)).toEqual(['round-trip.oks'])
   })
 

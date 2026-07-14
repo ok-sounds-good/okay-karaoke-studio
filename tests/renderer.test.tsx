@@ -129,6 +129,7 @@ describe('offset-aware renderer state', () => {
     const project = offsetProject()
     const props = {
       tracks: project.tracks,
+      stageStyle: project.stageStyle,
       activeTrackId: project.tracks[0].id,
       selectedWordIds: new Set<string>(),
       syncWordId: null,
@@ -143,6 +144,23 @@ describe('offset-aware renderer state', () => {
     expect(before).not.toContain('is-current')
     expect(during).toContain('is-current')
     expect(during).toContain('title="Select the first word and seek to 0:01.000"')
+  })
+
+  it('renders the lyric editor safely when a valid project has no vocal tracks', () => {
+    const project = createProject({ tracks: [] })
+    const markup = renderToStaticMarkup(<LyricsPanel
+      tracks={project.tracks}
+      stageStyle={project.stageStyle}
+      activeTrackId=""
+      lyricMs={0}
+      selectedWordIds={new Set()}
+      syncWordId={null}
+      onSelectTrack={() => undefined}
+      onSelectWord={() => undefined}
+      onEditLyrics={() => undefined}
+    />)
+
+    expect(markup).toBe('')
   })
 
   it('matches video export by showing only soloed preview tracks', () => {

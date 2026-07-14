@@ -1,4 +1,15 @@
-export const PROJECT_SCHEMA_VERSION = 3 as const
+import { decodeStageStyle, decodeVocalStyle, videoStyleValidationErrors } from './video-style-codec'
+import {
+  DEFAULT_STAGE_STYLE,
+  DEFAULT_VOCAL_STYLE,
+  cloneStageStyle,
+  cloneVocalStyle,
+  resolveVocalSungColor,
+  type StageStyle,
+  type VocalStyle,
+} from './video-style'
+
+export const PROJECT_SCHEMA_VERSION = 4 as const
 export const MAX_PROJECT_DURATION_MS = 4 * 60 * 60 * 1_000
 export const MAX_PROJECT_TRACKS = 8
 export const MAX_PROJECT_LINES = 20_000
@@ -26,7 +37,7 @@ export interface LyricLine {
 export interface VocalTrack {
   id: string
   name: string
-  color: string
+  vocalStyle: VocalStyle
   muted: boolean
   solo: boolean
   lines: LyricLine[]
@@ -55,6 +66,7 @@ export interface KaraokeProject {
   createdAt: string
   updatedAt: string
   lyricDisplay: LyricDisplaySettings
+  stageStyle: StageStyle
   tracks: VocalTrack[]
 }
 
@@ -91,10 +103,10 @@ export interface CreateProjectOptions {
   createdAt?: string
   updatedAt?: string
   lyricDisplay?: LyricDisplaySettings
+  stageStyle?: StageStyle
   tracks?: VocalTrack[]
 }
 
-const DEFAULT_TRACK_COLOR = '#22d3ee'
 const DEFAULT_LRC_LINE_DURATION_MS = 3_000
 const MAX_LYRIC_ALIGNMENT_CELLS = 4_000_000
 let idSequence = 0
@@ -107,40 +119,6 @@ function createId(prefix: string): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function asString(value: unknown, fallback = ''): string {
-  return typeof value === 'string' ? value : fallback
-}
-
-function asBoolean(value: unknown, fallback = false): boolean {
-  return typeof value === 'boolean' ? value : fallback
-}
-
-function asFiniteNumber(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null
-}
-
-function asIntegerMs(value: unknown): number | null {
-  const number = asFiniteNumber(value)
-  return number === null ? null : Math.round(number)
-}
-
-function legacySecondsToMs(value: unknown): number | null {
-  const number = asFiniteNumber(value)
-  return number === null ? null : Math.round(number * 1_000)
-}
-
-function timingFromRecord(
-  record: Record<string, unknown>,
-  msKey: string,
-  legacySecondKeys: string[],
-): number | null {
-  if (msKey in record) return asIntegerMs(record[msKey])
-  for (const key of legacySecondKeys) {
-    if (key in record) return legacySecondsToMs(record[key])
-  }
-  return null
 }
 
 function normalizeText(text: string): string {
@@ -203,7 +181,7 @@ export function createVocalTrack(
   return {
     id: options.id,
     name: options.name ?? 'Lead Vocal',
-    color: options.color ?? DEFAULT_TRACK_COLOR,
+    vocalStyle: cloneVocalStyle(options.vocalStyle ?? DEFAULT_VOCAL_STYLE),
     muted: options.muted ?? false,
     solo: options.solo ?? false,
     lines: options.lines?.map(cloneLine) ?? [],
@@ -220,6 +198,7 @@ function cloneLine(line: LyricLine): LyricLine {
 function cloneTrack(track: VocalTrack): VocalTrack {
   return {
     ...track,
+    vocalStyle: cloneVocalStyle(track.vocalStyle),
     lines: track.lines.map(cloneLine),
   }
 }
@@ -239,6 +218,7 @@ export function createProject(options: CreateProjectOptions = {}): KaraokeProjec
     lyricDisplay: {
       ...(options.lyricDisplay ?? DEFAULT_LYRIC_DISPLAY_SETTINGS),
     },
+    stageStyle: cloneStageStyle(options.stageStyle ?? DEFAULT_STAGE_STYLE),
     tracks:
       options.tracks?.map(cloneTrack) ??
       [createVocalTrack({ id: createId('track'), name: 'Lead Vocal' })],
@@ -330,7 +310,6 @@ export function createDemoProject(): KaraokeProject {
   const lead = createVocalTrack({
     id: 'demo-lead',
     name: 'Lead Vocal',
-    color: '#22d3ee',
     lines: [
       demoLine('demo-line-1', 'City lights are calling out my name', 2_000, 5_400),
       demoLine('demo-line-2', 'Every heartbeat lands right on the one', 6_100, 9_700),
@@ -564,7 +543,7 @@ export function parseLyrics(
   return createVocalTrack({
     id: trackId,
     name: existing?.name ?? 'Lead Vocal',
-    color: existing?.color ?? DEFAULT_TRACK_COLOR,
+    vocalStyle: cloneVocalStyle(existing?.vocalStyle ?? DEFAULT_VOCAL_STYLE),
     muted: existing?.muted ?? false,
     solo: existing?.solo ?? false,
     lines,
@@ -788,6 +767,13 @@ export function validateProject(project: KaraokeProject): ValidationIssue[] {
       'lyricDisplay.advanceMode',
     )
   }
+  videoStyleValidationErrors(
+    project.stageStyle,
+    project.tracks.map((track, trackIndex) => ({
+      path: `project.tracks[${trackIndex}].vocalStyle`,
+      style: track.vocalStyle,
+    })),
+  ).forEach((error) => issue(issues, 'error', error.code, error.message, error.path))
   if (
     project.durationMs !== null &&
     (!Number.isSafeInteger(project.durationMs) ||
@@ -1320,7 +1306,6 @@ export function importLrc(
   const track = createVocalTrack({
     id: trackId,
     name: 'Imported LRC',
-    color: DEFAULT_TRACK_COLOR,
     lines,
   })
   const validationProject = createProject({
@@ -1500,7 +1485,7 @@ export function exportAss(project: KaraokeProject, trackId?: string): string {
     'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
     ...tracks.map((track, index) => {
       const name = styleNames[index]
-      const primary = assColor(track.color)
+      const primary = assColor(resolveVocalSungColor(project.stageStyle, track.vocalStyle))
       return `Style: ${name},Arial,72,${primary},&H0000FFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,4,1,2,80,80,80,1`
     }),
     '',
@@ -1532,103 +1517,21 @@ export function exportAss(project: KaraokeProject, trackId?: string): string {
   return [...header, ...events].join('\n')
 }
 
-function migrateWord(value: unknown, fallbackId: string): LyricWord {
-  if (typeof value === 'string') return createLyricWord(value, { id: fallbackId })
-  const record = isRecord(value) ? value : {}
-  return createLyricWord(asString(record.text, asString(record.value)), {
-    id: asString(record.id, fallbackId),
-    startMs: timingFromRecord(record, 'startMs', ['start', 'startTime']),
-    endMs: timingFromRecord(record, 'endMs', ['end', 'endTime']),
-  })
-}
-
-function migrateLine(value: unknown, fallbackId: string): LyricLine {
-  const record = isRecord(value) ? value : {}
-  const rawText = asString(record.text, asString(record.lyric, asString(record.value)))
-  const rawWords = Array.isArray(record.words) ? record.words : null
-  const words = rawWords
-    ? rawWords.map((word, index) => migrateWord(word, `${fallbackId}-word-${index + 1}`))
-    : tokenizeLyricLine(rawText).map((word, index) =>
-        createLyricWord(word, { id: `${fallbackId}-word-${index + 1}` }),
-      )
-  const text = normalizeText(rawText || words.map((word) => word.text).join(' '))
-  let startMs = timingFromRecord(record, 'startMs', ['start', 'startTime'])
-  let endMs = timingFromRecord(record, 'endMs', ['end', 'endTime'])
-  const timedWords = words.filter(
-    (word): word is LyricWord & TimingRange => word.startMs !== null && word.endMs !== null,
-  )
-  startMs ??= timedWords[0]?.startMs ?? null
-  endMs ??= timedWords.at(-1)?.endMs ?? null
-
-  return createLyricLine(text, {
-    id: asString(record.id, fallbackId),
-    startMs,
-    endMs,
-    words,
-  })
-}
-
-function migrateTrack(value: unknown, fallbackId: string): VocalTrack {
-  const record = isRecord(value) ? value : {}
-  const rawLines = Array.isArray(record.lines)
-    ? record.lines
-    : Array.isArray(record.lyrics)
-      ? record.lyrics
-      : []
-  return createVocalTrack({
-    id: asString(record.id, fallbackId),
-    name: asString(record.name, asString(record.label, 'Lead Vocal')),
-    color: asString(record.color, DEFAULT_TRACK_COLOR),
-    muted: asBoolean(record.muted),
-    solo: asBoolean(record.solo),
-    lines: rawLines.map((line, index) =>
-      migrateLine(line, `${fallbackId}-line-${index + 1}`),
-    ),
-  })
-}
-
-function assertRawProjectCardinality(rawTracks: unknown[]): void {
-  if (rawTracks.length > MAX_PROJECT_TRACKS) {
-    throw new RangeError(`Projects are limited to ${MAX_PROJECT_TRACKS} vocal tracks.`)
-  }
-  let lineCount = 0
-  let wordCount = 0
-  rawTracks.forEach((rawTrack) => {
-    if (!isRecord(rawTrack)) return
-    const rawLines = Array.isArray(rawTrack.lines)
-      ? rawTrack.lines
-      : Array.isArray(rawTrack.lyrics)
-        ? rawTrack.lyrics
-        : []
-    lineCount += rawLines.length
-    if (lineCount > MAX_PROJECT_LINES) {
-      throw new RangeError(`Projects are limited to ${MAX_PROJECT_LINES} lyric lines.`)
-    }
-    rawLines.forEach((rawLine) => {
-      if (!isRecord(rawLine)) return
-      if (Array.isArray(rawLine.words)) {
-        wordCount += rawLine.words.length
-      } else {
-        const rawText = asString(
-          rawLine.text,
-          asString(rawLine.lyric, asString(rawLine.value)),
-        )
-        wordCount += countLyricWordsWithinLimit(
-          rawText,
-          MAX_PROJECT_WORDS - wordCount,
-          'Project lyrics',
-        )
-      }
-      if (wordCount > MAX_PROJECT_WORDS) {
-        throw new RangeError(`Projects are limited to ${MAX_PROJECT_WORDS} lyric words.`)
-      }
-    })
-  })
-}
-
 function requireCurrentRecord(value: unknown, path: string): Record<string, unknown> {
   if (!isRecord(value)) throw new TypeError(`${path} must be an object.`)
   return value
+}
+
+function requireExactKeys(
+  record: Record<string, unknown>,
+  expected: readonly string[],
+  path: string,
+): void {
+  const allowed = new Set(expected)
+  const unexpected = Object.keys(record).find((key) => !allowed.has(key))
+  if (unexpected) throw new TypeError(`${path}.${unexpected} is not supported.`)
+  const missing = expected.find((key) => !Object.hasOwn(record, key))
+  if (missing) throw new TypeError(`${path}.${missing} is required.`)
 }
 
 function requireCurrentString(
@@ -1682,11 +1585,22 @@ function requireCurrentArray(
 ): unknown[] {
   const value = record[key]
   if (!Array.isArray(value)) throw new TypeError(`${path}.${key} must be an array.`)
+  for (let index = 0; index < value.length; index += 1) {
+    if (!Object.hasOwn(value, index)) {
+      throw new TypeError(`${path}.${key}[${index}] is required.`)
+    }
+  }
   return value
+}
+
+interface ProjectCardinality {
+  lines: number
+  words: number
 }
 
 function decodeCurrentWord(value: unknown, path: string): LyricWord {
   const record = requireCurrentRecord(value, path)
+  requireExactKeys(record, ['id', 'text', 'startMs', 'endMs'], path)
   return {
     id: requireCurrentString(record, 'id', path),
     text: requireCurrentString(record, 'text', path),
@@ -1695,35 +1609,56 @@ function decodeCurrentWord(value: unknown, path: string): LyricWord {
   }
 }
 
-function decodeCurrentLine(value: unknown, path: string): LyricLine {
+function decodeCurrentLine(
+  value: unknown,
+  path: string,
+  cardinality: ProjectCardinality,
+): LyricLine {
   const record = requireCurrentRecord(value, path)
+  requireExactKeys(record, ['id', 'text', 'startMs', 'endMs', 'words'], path)
+  const words = requireCurrentArray(record, 'words', path)
+  cardinality.words += words.length
+  if (cardinality.words > MAX_PROJECT_WORDS) {
+    throw new RangeError(`Projects are limited to ${MAX_PROJECT_WORDS} lyric words.`)
+  }
   return {
     id: requireCurrentString(record, 'id', path),
     text: requireCurrentString(record, 'text', path),
     startMs: requireCurrentNullableNumber(record, 'startMs', path),
     endMs: requireCurrentNullableNumber(record, 'endMs', path),
-    words: requireCurrentArray(record, 'words', path).map((word, index) =>
+    words: words.map((word, index) =>
       decodeCurrentWord(word, `${path}.words[${index}]`),
     ),
   }
 }
 
-function decodeCurrentTrack(value: unknown, path: string): VocalTrack {
+function decodeCurrentTrack(
+  value: unknown,
+  path: string,
+  cardinality: ProjectCardinality,
+): VocalTrack {
   const record = requireCurrentRecord(value, path)
+  requireExactKeys(record, ['id', 'name', 'vocalStyle', 'muted', 'solo', 'lines'], path)
+  const lines = requireCurrentArray(record, 'lines', path)
+  cardinality.lines += lines.length
+  if (cardinality.lines > MAX_PROJECT_LINES) {
+    throw new RangeError(`Projects are limited to ${MAX_PROJECT_LINES} lyric lines.`)
+  }
   return {
     id: requireCurrentString(record, 'id', path),
     name: requireCurrentString(record, 'name', path),
-    color: requireCurrentString(record, 'color', path),
+    vocalStyle: decodeVocalStyle(record.vocalStyle, `${path}.vocalStyle`),
     muted: requireCurrentBoolean(record, 'muted', path),
     solo: requireCurrentBoolean(record, 'solo', path),
-    lines: requireCurrentArray(record, 'lines', path).map((line, index) =>
-      decodeCurrentLine(line, `${path}.lines[${index}]`),
+    lines: lines.map((line, index) =>
+      decodeCurrentLine(line, `${path}.lines[${index}]`, cardinality),
     ),
   }
 }
 
 function decodeCurrentLyricDisplay(value: unknown): LyricDisplaySettings {
   const record = requireCurrentRecord(value, 'project.lyricDisplay')
+  requireExactKeys(record, ['lineCount', 'advanceMode'], 'project.lyricDisplay')
   const advanceMode = requireCurrentString(
     record,
     'advanceMode',
@@ -1738,12 +1673,16 @@ function decodeCurrentLyricDisplay(value: unknown): LyricDisplaySettings {
   }
 }
 
-function decodePersistedProject(
-  value: Record<string, unknown>,
-  lyricDisplay: LyricDisplaySettings,
-): KaraokeProject {
+function decodeCurrentProject(value: Record<string, unknown>): KaraokeProject {
+  requireExactKeys(value, [
+    'schemaVersion', 'id', 'title', 'artist', 'audioPath', 'durationMs', 'offsetMs',
+    'createdAt', 'updatedAt', 'lyricDisplay', 'stageStyle', 'tracks',
+  ], 'project')
   const rawTracks = requireCurrentArray(value, 'tracks', 'project')
-  assertRawProjectCardinality(rawTracks)
+  if (rawTracks.length > MAX_PROJECT_TRACKS) {
+    throw new RangeError(`Projects are limited to ${MAX_PROJECT_TRACKS} vocal tracks.`)
+  }
+  const cardinality = { lines: 0, words: 0 }
   const audioPath = value.audioPath
   if (audioPath !== null && typeof audioPath !== 'string') {
     throw new TypeError('project.audioPath must be a string or null.')
@@ -1762,98 +1701,42 @@ function decodePersistedProject(
     })(),
     createdAt: requireCurrentString(value, 'createdAt', 'project'),
     updatedAt: requireCurrentString(value, 'updatedAt', 'project'),
-    lyricDisplay: { ...lyricDisplay },
+    lyricDisplay: decodeCurrentLyricDisplay(value.lyricDisplay),
+    stageStyle: decodeStageStyle(value.stageStyle),
     tracks: rawTracks.map((track, index) =>
-      decodeCurrentTrack(track, `project.tracks[${index}]`),
+      decodeCurrentTrack(track, `project.tracks[${index}]`, cardinality),
     ),
   }
 }
 
-function decodeCurrentProject(value: Record<string, unknown>): KaraokeProject {
-  return decodePersistedProject(
-    value,
-    decodeCurrentLyricDisplay(value.lyricDisplay),
-  )
-}
-
-/**
- * Migrates version 1 and 2 project objects and strictly clones current projects.
- * Legacy un-suffixed timing fields (`start`, `end`, `duration`, `offset`) are
- * interpreted as seconds.
- */
-export function migrateProject(value: unknown): KaraokeProject {
+export function decodeProject(value: unknown): KaraokeProject {
   if (!isRecord(value)) throw new TypeError('Project data must be a JSON object.')
-  const hasDeclaredVersion = 'schemaVersion' in value || 'version' in value
-  const rawDeclaredVersion = value.schemaVersion ?? value.version
-  const declaredVersion = hasDeclaredVersion ? rawDeclaredVersion : 1
-  const supportedVersion =
-    typeof declaredVersion === 'number' &&
-    Number.isInteger(declaredVersion) &&
-    (declaredVersion === 1 || declaredVersion === 2 || declaredVersion === PROJECT_SCHEMA_VERSION)
-  if (!supportedVersion) {
+  const declaredVersion = value.schemaVersion
+  if (declaredVersion !== PROJECT_SCHEMA_VERSION) {
     if (typeof declaredVersion === 'number' && declaredVersion > PROJECT_SCHEMA_VERSION) {
       throw new Error(
         `Project schema version ${declaredVersion} is newer than supported version ${PROJECT_SCHEMA_VERSION}.`,
       )
     }
     throw new Error(
-      `Unsupported project schema version ${String(declaredVersion)}. Supported versions are 1, 2, and ${PROJECT_SCHEMA_VERSION}.`,
+      `Unsupported project schema version ${String(declaredVersion)}. This build accepts only version ${PROJECT_SCHEMA_VERSION}.`,
     )
   }
-
-  if (declaredVersion === PROJECT_SCHEMA_VERSION) return decodeCurrentProject(value)
-  if (declaredVersion === 2) {
-    return decodePersistedProject(value, DEFAULT_LYRIC_DISPLAY_SETTINGS)
-  }
-
-  const rawTracks = Array.isArray(value.tracks)
-    ? value.tracks
-    : Array.isArray(value.vocalTracks)
-      ? value.vocalTracks
-      : []
-  assertRawProjectCardinality(rawTracks)
-  const projectId = asString(value.id, createId('project'))
-  const createdAt = asString(value.createdAt, new Date().toISOString())
-  const durationMs =
-    'durationMs' in value
-      ? asIntegerMs(value.durationMs)
-      : legacySecondsToMs(value.duration)
-  const offsetMs =
-    'offsetMs' in value
-      ? (asIntegerMs(value.offsetMs) ?? 0)
-      : (legacySecondsToMs(value.offset) ?? 0)
-
-  return createProject({
-    id: projectId,
-    title: asString(value.title, asString(value.name, 'Untitled Song')),
-    artist: asString(value.artist, asString(value.performer, 'Unknown Artist')),
-    audioPath:
-      typeof value.audioPath === 'string'
-        ? value.audioPath
-        : typeof value.audioFile === 'string'
-          ? value.audioFile
-          : null,
-    durationMs,
-    offsetMs,
-    createdAt,
-    updatedAt: asString(value.updatedAt, createdAt),
-    tracks:
-      rawTracks.length > 0
-        ? rawTracks.map((track, index) =>
-            migrateTrack(track, `${projectId}-track-${index + 1}`),
-          )
-        : [createVocalTrack({ id: `${projectId}-track-1` })],
-  })
+  const project = decodeCurrentProject(value)
+  const firstError = validateProject(project).find((validationIssue) => (
+    validationIssue.severity === 'error'
+  ))
+  if (firstError) throw new Error(`Invalid karaoke project: ${firstError.message}`)
+  return project
 }
 
 export function serializeProject(project: KaraokeProject): string {
-  const errors = validateProject(project).filter(
-    (validationIssue) => validationIssue.severity === 'error',
-  )
-  if (errors.length > 0) {
-    throw new Error(`Cannot serialize an invalid project: ${errors[0].message}`)
+  try {
+    return JSON.stringify(decodeProject(project), null, 2)
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    throw new Error(`Cannot serialize an invalid project: ${detail}`)
   }
-  return JSON.stringify(project, null, 2)
 }
 
 export function parseProject(json: string): KaraokeProject {
@@ -1864,12 +1747,5 @@ export function parseProject(json: string): KaraokeProject {
     const detail = error instanceof Error ? error.message : String(error)
     throw new SyntaxError(`Invalid project JSON: ${detail}`)
   }
-  const project = migrateProject(data)
-  const errors = validateProject(project).filter(
-    (validationIssue) => validationIssue.severity === 'error',
-  )
-  if (errors.length > 0) {
-    throw new Error(`Invalid karaoke project: ${errors[0].message}`)
-  }
-  return project
+  return decodeProject(data)
 }

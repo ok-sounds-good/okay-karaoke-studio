@@ -10,6 +10,7 @@ import {
   serializeProject,
   validateProject,
 } from './lib/model'
+import { cloneVocalStyle } from './lib/video-style'
 import { TopBar } from './components/TopBar'
 import { InspectorPanel } from './components/InspectorPanel'
 import { KaraokePreview } from './components/KaraokePreview'
@@ -420,7 +421,7 @@ export default function App() {
     }))
   }, [commit])
 
-  const updateTrack = useCallback((trackId: string, patch: Partial<Pick<VocalTrack, 'name' | 'color' | 'muted' | 'solo'>>) => {
+  const updateTrack = useCallback((trackId: string, patch: Partial<Pick<VocalTrack, 'name' | 'vocalStyle' | 'muted' | 'solo'>>) => {
     commit((current) => ({
       ...current,
       updatedAt: new Date().toISOString(),
@@ -576,7 +577,11 @@ export default function App() {
     if (!activeTrack) return
     try {
       const imported = importLrc(contents, activeTrack.id, project.offsetMs)
-      replaceTrack(activeTrack.id, { ...imported, name: activeTrack.name, color: activeTrack.color })
+      replaceTrack(activeTrack.id, {
+        ...imported,
+        name: activeTrack.name,
+        vocalStyle: cloneVocalStyle(activeTrack.vocalStyle),
+      })
       setSelectedWordIds(new Set())
       syncHeldRef.current = null
       syncSessionHasCommitRef.current = false

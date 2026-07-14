@@ -13,7 +13,6 @@ import {
   importLrc,
   MAX_PROJECT_DURATION_MS,
   MAX_PROJECT_WORDS,
-  migrateProject,
   parseLyrics,
   parseProject,
   planLyricDisplayLines,
@@ -22,17 +21,20 @@ import {
   validateProject,
   type KaraokeProject,
 } from '../src/lib/karaoke'
+import { DEFAULT_STAGE_STYLE, DEFAULT_VOCAL_STYLE } from '../src/lib/video-style'
 import { effectiveDuration, motionAwareScrollBehavior, recalculateLine } from '../src/utils'
 
 describe('karaoke project model', () => {
   it('creates a valid seeded project with integer word timings', () => {
     const project = createDemoProject()
 
-    expect(project.schemaVersion).toBe(3)
+    expect(project.schemaVersion).toBe(4)
     expect(project.lyricDisplay).toEqual({ lineCount: 3, advanceMode: 'clear' })
     expect(project.title).toBe('Neon Afterglow')
-    expect(project.tracks[0].color).toBe('#22d3ee')
-    expect(createVocalTrack({ id: 'default-color' }).color).toBe('#22d3ee')
+    expect(project.stageStyle).toEqual(DEFAULT_STAGE_STYLE)
+    expect(project.stageStyle).not.toBe(DEFAULT_STAGE_STYLE)
+    expect(project.tracks[0].vocalStyle).toEqual(DEFAULT_VOCAL_STYLE)
+    expect(project.tracks[0].vocalStyle).not.toBe(DEFAULT_VOCAL_STYLE)
     expect(project.tracks[0].lines.length).toBeGreaterThan(3)
     expect(
       project.tracks[0].lines.flatMap((line) => line.words).every(
@@ -530,7 +532,7 @@ describe('ASS export', () => {
 
     expect(output).toContain('[V4+ Styles]')
     expect(output).toContain('[Events]')
-    expect(output).toContain('Style: Lead Vocal,Arial,72,&H00EED322')
+    expect(output).toContain('Style: Lead Vocal,Arial,72,&H002B8AFF')
     expect(output).toMatch(/Dialogue: 0,0:00:02\.00,0:00:05\.40,Lead Vocal/)
     expect(output).toContain('{\\kf')
   })
@@ -615,7 +617,7 @@ describe('ASS export', () => {
   })
 })
 
-describe('project serialization and migration', () => {
+describe('strict current project serialization', () => {
   it('round-trips current project JSON', () => {
     const project = createProject({
       lyricDisplay: { lineCount: 5, advanceMode: 'scroll' },
@@ -631,67 +633,19 @@ describe('project serialization and migration', () => {
     expect(parseProject(serializeProject(project))).toEqual(project)
   })
 
-  it('migrates version 1 second timings and legacy field names', () => {
-    const legacy = {
-      version: 1,
-      id: 'legacy-project',
-      name: 'Old Song',
-      performer: 'Old Singer',
-      audioFile: '/music/song.mp3',
-      duration: 12.5,
-      offset: -0.25,
-      vocalTracks: [
-        {
-          id: 'old-lead',
-          label: 'Lead',
-          lyrics: [
-            {
-              id: 'old-line',
-              text: 'Old words',
-              start: 1.25,
-              end: 3.5,
-              words: [
-                { id: 'old-word-1', text: 'Old', start: 1.25, end: 2 },
-                { id: 'old-word-2', text: 'words', start: 2, end: 3.5 },
-              ],
-            },
-          ],
-        },
-      ],
+  it('rejects every earlier v0 schema and the legacy track color field', () => {
+    for (const schemaVersion of [1, 2, 3]) {
+      expect(() => parseProject(JSON.stringify({
+        ...createDemoProject(),
+        schemaVersion,
+      }))).toThrow(`Unsupported project schema version ${schemaVersion}`)
     }
-
-    const migrated = migrateProject(legacy)
-    expect(migrated).toMatchObject({
-      schemaVersion: 3,
-      title: 'Old Song',
-      artist: 'Old Singer',
-      audioPath: '/music/song.mp3',
-      durationMs: 12_500,
-      offsetMs: -250,
-      lyricDisplay: { lineCount: 3, advanceMode: 'clear' },
-    })
-    expect(migrated.tracks[0].lines[0].words[1].startMs).toBe(2_000)
-    expect(validateProject(migrated).filter((issue) => issue.severity === 'error')).toEqual([])
-  })
-
-  it('migrates strict version 2 projects to default lyric display settings', () => {
-    const current = createDemoProject()
-    const { lyricDisplay: _lyricDisplay, ...versionTwoFields } = current
-    const versionTwo = { ...versionTwoFields, schemaVersion: 2 }
-
-    const migrated = migrateProject(versionTwo)
-
-    expect(migrated.schemaVersion).toBe(3)
-    expect(migrated.lyricDisplay).toEqual({ lineCount: 3, advanceMode: 'clear' })
-    expect(migrated.tracks).toEqual(current.tracks)
-  })
-
-  it('rejects compact legacy lyrics before allocating over the word cap', () => {
-    const tooManyWords = Array.from({ length: MAX_PROJECT_WORDS + 1 }, () => 'x').join(' ')
-    expect(() => migrateProject({
-      version: 1,
-      vocalTracks: [{ lyrics: [{ text: tooManyWords }] }],
-    })).toThrow('word limit')
+    const legacy = structuredClone(createDemoProject()) as unknown as {
+      tracks: Array<Record<string, unknown>>
+    }
+    legacy.tracks[0].color = '#22d3ee'
+    delete legacy.tracks[0].vocalStyle
+    expect(() => parseProject(JSON.stringify(legacy))).toThrow('color is not supported')
   })
 
   it('rejects malformed, future, and invalid project JSON', () => {
@@ -712,7 +666,7 @@ describe('project serialization and migration', () => {
     }
     delete missingDisplay.lyricDisplay
     expect(() => parseProject(JSON.stringify(missingDisplay))).toThrow(
-      'project.lyricDisplay must be an object',
+      'project.lyricDisplay is required',
     )
     const invalidDisplay = {
       ...createDemoProject(),

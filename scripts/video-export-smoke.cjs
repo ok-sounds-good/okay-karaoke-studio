@@ -157,31 +157,38 @@ app.whenReady().then(async () => {
     // two-second lyric/video timeline.
     await fs.writeFile(audioPath, silentWav(1))
     const ffmpegPath = await findFfmpeg()
-    const project = {
+    const project = JSON.parse(await fs.readFile(
+      path.join(__dirname, '..', 'tests', 'fixtures', 'current-project-v4.json'),
+      'utf8',
+    ))
+    Object.assign(project, {
+      id: 'video-export-smoke',
       title: 'Video export smoke test',
       artist: 'Okay Karaoke Studio',
       audioPath,
       durationMs: 2_000,
       offsetMs: 0,
-      tracks: [{
-        name: 'Lead Vocal',
-        color: '#d7fa4a',
-        muted: false,
-        solo: false,
-        lines: [{
-          text: 'Smoke test',
-          startMs: 500,
-          endMs: 1_500,
-          words: [
-            // These exact 30/60 fps boundaries make the first post-boundary
-            // frame visibly different, so a stale or one-frame-late capture
-            // fails the decoded-output assertions below.
-            { text: 'Smoke', startMs: 500, endMs: 700 },
-            { text: 'test', startMs: 700, endMs: 900 },
-          ],
-        }],
+    })
+    Object.assign(project.stageStyle.background, {
+      mode: 'gradient',
+      imagePath: null,
+    })
+    Object.assign(project.tracks[0], {
+      id: 'smoke-track',
+      lines: [{
+        id: 'smoke-line',
+        text: 'Smoke test',
+        startMs: 500,
+        endMs: 1_500,
+        words: [
+          // These exact 30/60 fps boundaries make the first post-boundary
+          // frame visibly different, so a stale or one-frame-late capture
+          // fails the decoded-output assertions below.
+          { id: 'smoke-word-1', text: 'Smoke', startMs: 500, endMs: 700 },
+          { id: 'smoke-word-2', text: 'test', startMs: 700, endMs: 900 },
+        ],
       }],
-    }
+    })
     const result = await exportKaraokeVideo({
       BrowserWindow,
       projectJson: JSON.stringify(project),

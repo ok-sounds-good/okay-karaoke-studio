@@ -2,11 +2,13 @@ import { useEffect, useMemo, useRef } from 'react'
 import { Captions, Check, Edit3, Mic2, TimerReset } from 'lucide-react'
 import type { LyricWord, VocalTrack } from '../lib/model'
 import { formatTime } from '../lib/model'
+import { resolveVocalSungColor, type StageStyle } from '../lib/video-style'
 import { flattenTrack, getActiveLine, motionAwareScrollBehavior } from '../utils'
 import { Button } from './ui'
 
 interface LyricsPanelProps {
   tracks: VocalTrack[]
+  stageStyle: StageStyle
   activeTrackId: string
   lyricMs: number
   selectedWordIds: Set<string>
@@ -18,6 +20,7 @@ interface LyricsPanelProps {
 
 export function LyricsPanel({
   tracks,
+  stageStyle,
   activeTrackId,
   lyricMs,
   selectedWordIds,
@@ -31,6 +34,9 @@ export function LyricsPanel({
   const activeLine = activeTrack ? getActiveLine(activeTrack, lyricMs) : null
   const words = useMemo(() => (activeTrack ? flattenTrack(activeTrack) : []), [activeTrack])
   const timedCount = words.filter(({ word }) => word.startMs !== null).length
+  const activeColor = activeTrack
+    ? resolveVocalSungColor(stageStyle, activeTrack.vocalStyle)
+    : stageStyle.lyrics.sungColor
 
   useEffect(() => {
     if (!activeLine || !listRef.current) return
@@ -64,7 +70,9 @@ export function LyricsPanel({
             role="tab"
             aria-selected={track.id === activeTrack.id}
           >
-            <span style={{ background: track.color }}><Mic2 size={12} /></span>
+            <span style={{
+              background: resolveVocalSungColor(stageStyle, track.vocalStyle),
+            }}><Mic2 size={12} /></span>
             <b>{index + 1}</b>
             {track.name}
           </button>
@@ -77,7 +85,10 @@ export function LyricsPanel({
           <span>of {words.length} words timed</span>
         </div>
         <span className="lyrics-progress__bar">
-          <i style={{ width: `${words.length ? (timedCount / words.length) * 100 : 0}%`, background: activeTrack.color }} />
+          <i style={{
+            width: `${words.length ? (timedCount / words.length) * 100 : 0}%`,
+            background: activeColor,
+          }} />
         </span>
       </div>
 
