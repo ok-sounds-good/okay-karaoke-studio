@@ -1,0 +1,44 @@
+{
+  "stage": { "widthPx": 1920, "heightPx": 1080 },
+  "frame": {
+    "topPx": 64,
+    "rightPx": 96,
+    "bottomPx": 64,
+    "leftPx": 96,
+    "radiusPx": 30
+  },
+  "brand": { "topPx": 58, "leftPx": 86, "letterSpacingEm": 0.22 },
+  "clock": { "topPx": 56, "rightPx": 86, "letterSpacingEm": 0 },
+  "footer": {
+    "rightPx": 86,
+    "bottomPx": 53,
+    "leftPx": 86,
+    "letterSpacingEm": 0.05
+  },
+  "content": { "topPx": 140, "rightPx": 128, "bottomPx": 120, "leftPx": 128 },
+  "title": {
+    "eyebrowLetterSpacingEm": 0.2,
+    "marginTopPx": 34,
+    "marginRightPx": 0,
+    "marginBottomPx": 14,
+    "marginLeftPx": 0,
+    "lineHeight": 1.04,
+    "letterSpacingEm": 0,
+    "maxWidthPx": 1500,
+    "shadow": "none"
+  },
+  "lyric": {
+    "lineHeight": 1.12,
+    "lineBoxEm": 1.18,
+    "letterSpacingEm": 0.01,
+    "gapsPx": [0, 35, 32, 29, 26, 23],
+    "shadow": "none"
+  },
+  "grain": {
+    "color": "#000000",
+    "gridLinePx": 1,
+    "gridSizePx": 5,
+    "opacity": 0.08
+  },
+  "sync": { "topPercent": 48, "heightPx": 14, "shadow": "none" }
+}
