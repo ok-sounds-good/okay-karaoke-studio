@@ -339,7 +339,7 @@ function plannedTrackLines(trackIndex, lyricMs, settings, cursorPosition) {
 function frameStateAtIndex(index, playbackMs, cursor) {
   const { project } = index
   const lyricMs = playbackMs - project.offsetMs
-  const showTitle = Number.isFinite(index.firstStart) && playbackMs < Math.max(0, index.firstStart - 1_500)
+  const showTitle = !Number.isFinite(index.firstStart) || playbackMs < Math.max(0, index.firstStart - 1_500)
   const lines = []
 
   const trackWindows = index.tracks.map((trackIndex, trackPosition) => {
@@ -428,6 +428,42 @@ function createAbortError() {
 
 function throwIfAborted(signal) {
   if (signal?.aborted) throw createAbortError()
+}
+
+function createVideoExportCommitState() {
+  let state = 'cancellable'
+
+  return {
+    get state() {
+      return state
+    },
+    tryBeginCancellation() {
+      if (state !== 'cancellable') return false
+      state = 'canceling'
+      return true
+    },
+    beginPromotion() {
+      if (state !== 'cancellable') return false
+      state = 'promoting'
+      return true
+    },
+    finishPromotion() {
+      if (state !== 'promoting') {
+        throw new Error('Video export cannot be committed before promotion begins')
+      }
+      state = 'committed'
+    },
+  }
+}
+
+async function promoteVideoOutput(partialPath, outputPath, {
+  renameFile = fs.rename,
+  onPromotionStart,
+  onPromotionComplete,
+} = {}) {
+  if (onPromotionStart?.() === false) throw createAbortError()
+  await renameFile(partialPath, outputPath)
+  onPromotionComplete?.()
 }
 
 function waitForNextPaint(contents, update, signal) {
@@ -687,6 +723,8 @@ async function exportKaraokeVideo({
   resolution = DEFAULT_VIDEO_RESOLUTION,
   fps = DEFAULT_VIDEO_FPS,
   onProgress,
+  onPromotionStart,
+  onPromotionComplete,
   signal,
 }) {
   throwIfAborted(signal)
@@ -728,7 +766,10 @@ async function exportKaraokeVideo({
       },
     })
     throwIfAborted(signal)
-    await fs.rename(partialPath, resolvedOutputPath)
+    await promoteVideoOutput(partialPath, resolvedOutputPath, {
+      onPromotionStart,
+      onPromotionComplete,
+    })
     onProgress?.({ phase: 'complete', completed: 1, total: 1 })
     return {
       path: resolvedOutputPath,
@@ -758,6 +799,7 @@ module.exports = {
   VIDEO_RENDER_FPS,
   buildFfmpegArguments,
   buildFrameTimeline,
+  createVideoExportCommitState,
   effectiveVideoDuration,
   exportKaraokeVideo,
   findFfmpeg,
@@ -765,5 +807,6 @@ module.exports = {
   normalizeProjectForVideo,
   normalizeVideoSettings,
   parseProjectForVideo,
+  promoteVideoOutput,
   renderDocument,
 }

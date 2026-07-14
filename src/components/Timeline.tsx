@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { AudioWaveform, ChevronLeft, ChevronRight, Minus, Plus, RotateCcw, SkipBack, TimerReset, Zap, ZoomIn } from 'lucide-react'
 import type { KaraokeProject, LyricLine, LyricWord, VocalTrack } from '../lib/model'
 import { formatTime } from '../lib/model'
@@ -702,6 +702,31 @@ export function Timeline({
     gestureSessionRef.current!.captureLost(event.pointerId, event.currentTarget)
   }
 
+  const wordKeyDown = (
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+    word: LyricWord,
+    selected: boolean,
+  ) => {
+    const isEnter = event.key === 'Enter'
+    const isSpace = event.key === ' ' || event.code === 'Space'
+    const isBareSpace = isSpace
+      && !event.shiftKey
+      && !event.altKey
+      && !event.ctrlKey
+      && !event.metaKey
+    if ((!isEnter && !isBareSpace) || event.repeat) return
+    // Bare Space owns tap-sync while synchronization is active. Enter remains
+    // available for changing the editor selection without moving a timing block.
+    // Modified Space chords bubble to the app-level shortcut handler.
+    if (isBareSpace && syncMode) return
+    event.preventDefault()
+    event.stopPropagation()
+    onSelectWord(
+      word.id,
+      selected || event.shiftKey || event.metaKey || event.ctrlKey,
+    )
+  }
+
   const untimedWords = project.tracks.flatMap((track) =>
     flattenTrack(track)
       .filter(({ word }) => word.startMs === null)
@@ -902,7 +927,9 @@ export function Timeline({
                                 '--track-color': track.color,
                               } as CSSProperties}
                               aria-label={`${timelineWordLabel(word)} timing block, ${timingLabel}`}
+                              aria-pressed={selected}
                               title={`${timelineWordLabel(word)} · ${timingLabel}`}
+                              onKeyDown={(event) => wordKeyDown(event, word, selected)}
                               onPointerDown={(event) => pointerDown(event, word)}
                               onPointerMove={pointerMove}
                               onPointerUp={pointerUp}

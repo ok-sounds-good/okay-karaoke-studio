@@ -384,6 +384,67 @@ select:focus-visible {
   color: #a3470b;
 }
 
+.sync-cue__actions > span {
+  color: #70469e;
+}
+
+.sync-cue__lines {
+  background: linear-gradient(180deg, #fff, #fbf8fd);
+}
+
+.sync-cue__line {
+  padding: 5px 7px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+
+.sync-cue__line.is-current {
+  border-color: #ded1ec;
+  background: #f5effa;
+}
+
+.sync-cue__line.is-next {
+  background: #fff;
+  opacity: 1;
+}
+
+.sync-cue__line.is-current > span {
+  color: #70469e;
+}
+
+.sync-cue__line.is-next > span {
+  color: #62576e;
+}
+
+.sync-cue__line.is-current b {
+  color: #302b38;
+}
+
+.sync-cue__line.is-current b.is-timed {
+  color: #62576e;
+}
+
+.sync-cue__line.is-next b {
+  color: #504758;
+}
+
+.sync-cue__line.is-next b.is-timed {
+  color: #72677c;
+}
+
+.sync-cue__line b.is-target,
+.sync-cue__line b.is-target.is-timed {
+  border-color: #70469e;
+  background: #70469e;
+  box-shadow: 0 0 0 3px rgba(112, 70, 158, .12);
+  color: #fff;
+}
+
+.sync-cue__help {
+  background: #faf8fc;
+  color: #62576e;
+}
+
 .track-tabs {
   border-bottom-color: var(--line-soft);
   background: #fcfbfd;

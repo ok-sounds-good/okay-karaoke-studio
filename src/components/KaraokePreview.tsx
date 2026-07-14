@@ -21,6 +21,18 @@ function wordProgress(word: LyricWord, currentMs: number) {
   return (currentMs - word.startMs) / Math.max(1, endMs - word.startMs)
 }
 
+function adjustedLineStart(line: LyricLine, offsetMs: number) {
+  const timedWords = line.words.filter(
+    (word) => word.startMs !== null && word.endMs !== null,
+  )
+  const startMs = line.startMs ?? timedWords[0]?.startMs ?? null
+  const endMs = line.endMs ?? timedWords.at(-1)?.endMs ?? null
+  if (startMs === null || endMs === null || endMs <= startMs) return null
+  const adjustedStartMs = Math.max(0, startMs + offsetMs)
+  if (endMs + offsetMs <= adjustedStartMs) return null
+  return adjustedStartMs
+}
+
 function PreviewLine({
   line,
   track,
@@ -85,13 +97,17 @@ export function KaraokePreview({
       }
     })
   }
-  const firstTimedWord = useMemo(() => Math.min(
+  const firstTimedLineStart = useMemo(() => Math.min(
     ...visibleTracks.flatMap((track) =>
-      track.lines.flatMap((line) => line.words.flatMap((word) => (word.startMs === null ? [] : [word.startMs]))),
+      track.lines.flatMap((line) => {
+        const startMs = adjustedLineStart(line, project.offsetMs)
+        return startMs === null ? [] : [startMs]
+      }),
     ),
     Number.POSITIVE_INFINITY,
-  ), [visibleTracks])
-  const showTitle = lyricMs < firstTimedWord - 1500
+  ), [project.offsetMs, visibleTracks])
+  const showTitle = !Number.isFinite(firstTimedLineStart) ||
+    playbackMs < Math.max(0, firstTimedLineStart - 1_500)
 
   return (
     <section className="preview-panel panel" aria-label="Karaoke preview">

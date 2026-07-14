@@ -69,6 +69,33 @@ describe('video export lifecycle cancellation guard', () => {
     expect(fixture.closeWindow).not.toHaveBeenCalled()
   })
 
+  it('does not close when promotion starts while cancellation confirmation is open', async () => {
+    let resolveConfirmation = (_confirmed: boolean) => {}
+    const confirmation = new Promise<boolean>((resolve) => { resolveConfirmation = resolve })
+    const error = Object.assign(
+      new Error('Video export promotion has already begun and cannot be canceled'),
+      { code: 'VIDEO_EXPORT_NOT_CANCELLABLE' },
+    )
+    const closeWindow = vi.fn()
+    const abortActiveExport = vi.fn(async () => { throw error })
+    const onError = vi.fn()
+    const guard = createVideoExportLifecycleGuard({
+      confirmCancellation: () => confirmation,
+      abortActiveExport,
+      closeWindow,
+      quitApp: vi.fn(),
+      onError,
+    })
+
+    const closeRequest = guard.requestWindowClose()
+    resolveConfirmation(true)
+
+    await expect(closeRequest).resolves.toBe(false)
+    expect(abortActiveExport).toHaveBeenCalledOnce()
+    expect(closeWindow).not.toHaveBeenCalled()
+    expect(onError).toHaveBeenCalledWith(error)
+  })
+
   it('uses a non-destructive default and explains partial preservation', () => {
     expect(VIDEO_EXPORT_CANCEL_DIALOG_OPTIONS.buttons).toEqual(['Keep Exporting', 'Cancel Export'])
     expect(VIDEO_EXPORT_CANCEL_DIALOG_OPTIONS.defaultId).toBe(0)
@@ -85,6 +112,12 @@ describe('video export lifecycle cancellation guard', () => {
     )
     expect(electronMain).toMatch(
       /app\.on\('before-quit',[\s\S]{0,220}?preventDefault\(\)[\s\S]{0,220}?requestAppQuit\(\)/,
+    )
+    expect(electronMain).toMatch(
+      /onPromotionStart:\s*\(\)\s*=>\s*operation\.commitState\.beginPromotion\(\)/,
+    )
+    expect(electronMain).toMatch(
+      /cancelVideoExport,[\s\S]{0,280}?tryBeginCancellation\(\)[\s\S]{0,120}?return false/,
     )
   })
 })

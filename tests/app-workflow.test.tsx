@@ -388,6 +388,48 @@ describe('mounted first-time workflow', () => {
     expect(document.querySelector<HTMLInputElement>('[aria-label="Track 1 color"]')?.title).toBe('Choose color for Lead Vocal')
   })
 
+  it('keeps timing-block selection on bare Space while Shift+Space controls playback', async () => {
+    await clickButton('Edit text')
+    await replaceTextarea('Focused')
+    await clickButton('Apply lyrics')
+    await clickButton('Start sync')
+    await tapSyncWord()
+    await pressKey('Escape')
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[aria-label="Stop"]')?.click()
+    })
+
+    let timingBlock = document.querySelector<HTMLButtonElement>('.timeline-word')
+    if (!timingBlock) throw new Error('Timed word block was not mounted')
+    timingBlock.focus()
+
+    const bareSpace = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      code: 'Space',
+      key: ' ',
+    })
+    await act(async () => timingBlock?.dispatchEvent(bareSpace))
+
+    timingBlock = document.querySelector<HTMLButtonElement>('.timeline-word')
+    expect(bareSpace.defaultPrevented).toBe(true)
+    expect(timingBlock?.getAttribute('aria-pressed')).toBe('true')
+    expect(document.querySelector('[aria-label="Pause"]')).toBeNull()
+
+    const shiftedSpace = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      code: 'Space',
+      key: ' ',
+      shiftKey: true,
+    })
+    await act(async () => timingBlock?.dispatchEvent(shiftedSpace))
+
+    expect(shiftedSpace.defaultPrevented).toBe(true)
+    expect(document.querySelector('[aria-label="Pause"]')).not.toBeNull()
+    expect(document.querySelector<HTMLButtonElement>('.timeline-word')?.getAttribute('aria-pressed')).toBe('true')
+  })
+
   it.each([
     { modifier: 'Control', init: { ctrlKey: true } },
     { modifier: 'Command', init: { metaKey: true } },

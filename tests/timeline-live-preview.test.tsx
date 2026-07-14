@@ -216,6 +216,42 @@ function MarqueeHarness() {
   )
 }
 
+function KeyboardSelectionHarness({ syncMode = false }: { syncMode?: boolean }) {
+  const [selectedWordIds, setSelectedWordIds] = useState(new Set<string>())
+  return (
+    <>
+      <Timeline
+        project={initialProject()}
+        peaks={[]}
+        isAnalyzing={false}
+        durationMs={30_000}
+        currentMs={0}
+        zoom={1}
+        activeTrackId="lead"
+        selectedWordIds={selectedWordIds}
+        syncWordId={null}
+        syncMode={syncMode}
+        onSeek={() => undefined}
+        onZoom={() => undefined}
+        onSelectWord={(wordId, add) => setSelectedWordIds((current) => {
+          const next = add ? new Set(current) : new Set<string>()
+          if (add && next.has(wordId)) next.delete(wordId)
+          else next.add(wordId)
+          return next
+        })}
+        onSelectWords={setSelectedWordIds}
+        onShiftWords={() => undefined}
+        onResizeWord={() => undefined}
+        onTimingDraftChange={() => undefined}
+        onToggleSync={() => undefined}
+        onClearTiming={() => undefined}
+        onClearTimingAfterCursor={() => undefined}
+      />
+      <output data-testid="keyboard-selection">{[...selectedWordIds].sort().join(',')}</output>
+    </>
+  )
+}
+
 function renderHarness() {
   container = document.createElement('div')
   document.body.append(container)
@@ -229,6 +265,14 @@ function renderShortBlockHarness() {
   document.body.append(container)
   root = createRoot(container)
   act(() => root!.render(<ShortBlockHarness />))
+  return container
+}
+
+function renderKeyboardSelectionHarness(syncMode = false) {
+  container = document.createElement('div')
+  document.body.append(container)
+  root = createRoot(container)
+  act(() => root!.render(<KeyboardSelectionHarness syncMode={syncMode} />))
   return container
 }
 
@@ -274,6 +318,77 @@ function timelineWord(scope: HTMLElement, word = 'Hold') {
 }
 
 describe('mounted Timeline live-preview wiring', () => {
+  it('selects and toggles a timed word from the keyboard without starting a pointer gesture', () => {
+    const scope = renderKeyboardSelectionHarness()
+    let word = timelineWord(scope)
+    expect(word.getAttribute('aria-pressed')).toBe('false')
+
+    act(() => word.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      code: 'Enter',
+      key: 'Enter',
+    })))
+    word = timelineWord(scope)
+    expect(scope.querySelector('[data-testid="keyboard-selection"]')?.textContent).toBe('hold')
+    expect(word.getAttribute('aria-pressed')).toBe('true')
+    expect(captures.get(word)?.size ?? 0).toBe(0)
+
+    act(() => word.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      code: 'Space',
+      key: ' ',
+    })))
+    word = timelineWord(scope)
+    expect(scope.querySelector('[data-testid="keyboard-selection"]')?.textContent).toBe('')
+    expect(word.getAttribute('aria-pressed')).toBe('false')
+    expect(captures.get(word)?.size ?? 0).toBe(0)
+  })
+
+  it('leaves bare Space available to the global tap-sync handler while sync is active', () => {
+    const scope = renderKeyboardSelectionHarness(true)
+    const word = timelineWord(scope)
+    const globalKeyDown = vi.fn()
+    window.addEventListener('keydown', globalKeyDown)
+    try {
+      const event = new KeyboardEvent('keydown', {
+        bubbles: true,
+        cancelable: true,
+        code: 'Space',
+        key: ' ',
+      })
+      act(() => word.dispatchEvent(event))
+      expect(event.defaultPrevented).toBe(false)
+      expect(globalKeyDown).toHaveBeenCalledOnce()
+      expect(scope.querySelector('[data-testid="keyboard-selection"]')?.textContent).toBe('')
+    } finally {
+      window.removeEventListener('keydown', globalKeyDown)
+    }
+  })
+
+  it('leaves modified Space chords available to app-level shortcuts', () => {
+    const scope = renderKeyboardSelectionHarness()
+    const word = timelineWord(scope)
+    const globalKeyDown = vi.fn()
+    window.addEventListener('keydown', globalKeyDown)
+    try {
+      const event = new KeyboardEvent('keydown', {
+        bubbles: true,
+        cancelable: true,
+        code: 'Space',
+        key: ' ',
+        shiftKey: true,
+      })
+      act(() => word.dispatchEvent(event))
+      expect(event.defaultPrevented).toBe(false)
+      expect(globalKeyDown).toHaveBeenCalledOnce()
+      expect(scope.querySelector('[data-testid="keyboard-selection"]')?.textContent).toBe('')
+    } finally {
+      window.removeEventListener('keydown', globalKeyDown)
+    }
+  })
+
   it('keeps both edge-resize targets usable on a very short timing block', () => {
     const scope = renderShortBlockHarness()
     const word = timelineWord(scope, 'Short')

@@ -12,6 +12,7 @@ const {
   writeUtf8FileAtomically,
 } = require('./project-files.cjs')
 const {
+  createVideoExportCommitState,
   exportKaraokeVideo,
   MAX_VIDEO_DURATION_MS,
   normalizeVideoSettings,
@@ -554,6 +555,7 @@ function beginVideoExport(ownerId) {
   const operation = {
     ownerId,
     controller: new AbortController(),
+    commitState: createVideoExportCommitState(),
     finished: new Promise((resolve) => { resolveFinished = resolve }),
     resolveFinished,
   }
@@ -573,8 +575,15 @@ function finishVideoExport(operation) {
 }
 
 function abortActiveVideoExport() {
-  activeVideoExport?.controller.abort()
-  return activeVideoExport?.finished || Promise.resolve()
+  const operation = activeVideoExport
+  if (!operation) return Promise.resolve()
+  if (!operation.commitState.tryBeginCancellation()) {
+    const error = new Error('Video export promotion has already begun and cannot be canceled')
+    error.code = 'VIDEO_EXPORT_NOT_CANCELLABLE'
+    return Promise.reject(error)
+  }
+  operation.controller.abort()
+  return operation.finished
 }
 
 async function confirmLifecycleVideoExportCancellation() {
@@ -596,7 +605,11 @@ const videoExportLifecycleGuard = createVideoExportLifecycleGuard({
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close()
   },
   quitApp: () => app.quit(),
-  onError: (error) => console.error('Unable to confirm video export cancellation:', error),
+  onError: (error) => {
+    if (error?.code !== 'VIDEO_EXPORT_NOT_CANCELLABLE') {
+      console.error('Unable to confirm video export cancellation:', error)
+    }
+  },
 })
 
 function registerIpcHandlers() {
@@ -751,7 +764,9 @@ function registerIpcHandlers() {
     if (activeVideoExport) throw new Error('Another karaoke video export is already running')
     const request = normalizeVideoExportRequest(value)
     const operation = beginVideoExport(event.sender.id)
-    const abortWhenOwnerCloses = () => operation.controller.abort()
+    const abortWhenOwnerCloses = () => {
+      if (operation.commitState.tryBeginCancellation()) operation.controller.abort()
+    }
     event.sender.once('destroyed', abortWhenOwnerCloses)
 
     try {
@@ -796,6 +811,8 @@ function registerIpcHandlers() {
         resolution: request.resolution,
         fps: request.fps,
         onProgress: sendProgress,
+        onPromotionStart: () => operation.commitState.beginPromotion(),
+        onPromotionComplete: () => operation.commitState.finishPromotion(),
         signal: operation.controller.signal,
       })
     } finally {
@@ -808,6 +825,7 @@ function registerIpcHandlers() {
     assertTrustedSender(event)
     const operation = activeVideoExport
     if (!operation || operation.ownerId !== event.sender.id) return false
+    if (!operation.commitState.tryBeginCancellation()) return false
     operation.controller.abort()
     await operation.finished
     return true

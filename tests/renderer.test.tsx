@@ -72,6 +72,22 @@ function findAction(root: ReactNode, label: string): ReactElement<ActionElementP
   throw new Error(`Could not find action: ${label}`)
 }
 
+function cssContrast(foreground: string, background: string) {
+  const luminance = (value: string) => {
+    const normalized = value.length === 4
+      ? value.slice(1).split('').map((digit) => digit.repeat(2)).join('')
+      : value.slice(1)
+    const [red, green, blue] = normalized.match(/.{2}/g)!.map((channel) => {
+      const srgb = Number.parseInt(channel, 16) / 255
+      return srgb <= 0.04045 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4
+    })
+    return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+  }
+  const first = luminance(foreground)
+  const second = luminance(background)
+  return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05)
+}
+
 describe('offset-aware renderer state', () => {
   it('delays positive offsets and advances negative offsets', () => {
     expect(lyricTimeAtPlayback(1_500, 500)).toBe(1_000)
@@ -260,6 +276,33 @@ describe('TimeBoard layout and selection geometry', () => {
     expect(styles).toMatch(
       /\.timeline-word\.is-compact \.timeline-word__handle--end\s*\{[^}]*right:\s*-4px;[^}]*bottom:\s*-4px;/,
     )
+  })
+
+  it('keeps Sync Focus text opaque and readable in the light identity theme', () => {
+    const identity = readFileSync(new URL('../src/identity.css', import.meta.url), 'utf8')
+    const colorFor = (selector: string) => {
+      const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const match = identity.match(new RegExp(`${escaped}\\s*\\{[^}]*color:\\s*(#[\\da-f]{3,6})`, 'i'))
+      expect(match, `Missing explicit color for ${selector}`).not.toBeNull()
+      return match![1]
+    }
+
+    expect(identity).toMatch(/\.sync-cue__line\.is-next\s*\{[^}]*opacity:\s*1;/)
+    for (const selector of [
+      '.sync-cue__line.is-current > span',
+      '.sync-cue__line.is-next > span',
+      '.sync-cue__line.is-current b',
+      '.sync-cue__line.is-current b.is-timed',
+      '.sync-cue__line.is-next b',
+      '.sync-cue__line.is-next b.is-timed',
+      '.sync-cue__help',
+    ]) {
+      expect(cssContrast(colorFor(selector), '#fff'), selector).toBeGreaterThanOrEqual(4.5)
+    }
+    expect(identity).toMatch(
+      /\.sync-cue__line b\.is-target,[\s\S]*?background:\s*#70469e;[\s\S]*?color:\s*#fff;/,
+    )
+    expect(cssContrast('#fff', '#70469e')).toBeGreaterThanOrEqual(4.5)
   })
 
   it('returns only active-layout timing blocks intersected by a marquee rectangle', () => {

@@ -1,4 +1,7 @@
 import { createRequire } from 'node:module'
+import { mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { Script } from 'node:vm'
 import { describe, expect, it } from 'vitest'
 
@@ -16,6 +19,12 @@ const videoExport = require('../electron/video-export.cjs') as {
     durationMs?: number,
     settings?: { resolution?: string; fps?: number },
   ): { durationMs: number; times: number[] }
+  createVideoExportCommitState(): {
+    readonly state: 'cancellable' | 'canceling' | 'promoting' | 'committed'
+    tryBeginCancellation(): boolean
+    beginPromotion(): boolean
+    finishPromotion(): void
+  }
   effectiveVideoDuration(project: unknown, durationMs?: number): number
   frameStateAt(project: unknown, playbackMs: number): {
     showTitle: boolean
@@ -32,6 +41,15 @@ const videoExport = require('../electron/video-export.cjs') as {
     fps: 30 | 60
   }
   parseProjectForVideo(json: string): unknown
+  promoteVideoOutput(
+    partialPath: string,
+    outputPath: string,
+    options?: {
+      renameFile?: (partialPath: string, outputPath: string) => Promise<void>
+      onPromotionStart?: () => boolean
+      onPromotionComplete?: () => void
+    },
+  ): Promise<void>
   renderDocument(settings?: { resolution?: string; fps?: number }): string
 }
 
@@ -84,6 +102,57 @@ function blankVideoLine() {
 }
 
 describe('karaoke video frame planning', () => {
+  it('refuses cancellation once an existing destination enters atomic promotion', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'okay-video-promotion-'))
+    const partialPath = join(directory, 'song.partial.mp4')
+    const outputPath = join(directory, 'song.mp4')
+    const commitState = videoExport.createVideoExportCommitState()
+    let releaseRename = () => {}
+    let reportRenameStarted = () => {}
+    const renameGate = new Promise<void>((resolve) => { releaseRename = resolve })
+    const renameStarted = new Promise<void>((resolve) => { reportRenameStarted = resolve })
+
+    await writeFile(partialPath, 'new complete video')
+    await writeFile(outputPath, 'existing destination')
+
+    const promotion = videoExport.promoteVideoOutput(partialPath, outputPath, {
+      onPromotionStart: () => commitState.beginPromotion(),
+      onPromotionComplete: () => commitState.finishPromotion(),
+      renameFile: async (source, destination) => {
+        reportRenameStarted()
+        await renameGate
+        await rename(source, destination)
+      },
+    })
+
+    try {
+      await renameStarted
+
+      expect(commitState.state).toBe('promoting')
+      expect(commitState.tryBeginCancellation()).toBe(false)
+      expect(await readFile(outputPath, 'utf8')).toBe('existing destination')
+
+      releaseRename()
+      await promotion
+
+      expect(commitState.state).toBe('committed')
+      expect(await readFile(outputPath, 'utf8')).toBe('new complete video')
+      await expect(readFile(partialPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+    } finally {
+      releaseRename()
+      await promotion.catch(() => {})
+      await rm(directory, { force: true, recursive: true })
+    }
+  })
+
+  it('keeps cancellation atomic before promotion begins', () => {
+    const commitState = videoExport.createVideoExportCommitState()
+
+    expect(commitState.tryBeginCancellation()).toBe(true)
+    expect(commitState.state).toBe('canceling')
+    expect(commitState.beginPromotion()).toBe(false)
+  })
+
   it('maps every supported resolution exactly and accepts only 30 or 60 fps', () => {
     expect(videoExport.VIDEO_RESOLUTION_PRESETS).toEqual({
       '240p': { width: 426, height: 240 },
