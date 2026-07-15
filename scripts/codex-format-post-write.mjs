@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 
-import { execFileSync, spawnSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
+
+export const hookProjectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 function readStdin() {
   return new Promise((resolve, reject) => {
@@ -44,18 +46,6 @@ export function collectToolPaths(toolInput = {}) {
   return [...paths]
 }
 
-function findRoot(cwd) {
-  try {
-    const root = execFileSync('git', ['-C', cwd, 'rev-parse', '--show-toplevel'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim()
-    return root ? realpathSync(root) : null
-  } catch {
-    return null
-  }
-}
-
 function isOkayKaraokeStudio(root) {
   try {
     const manifest = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'))
@@ -70,32 +60,48 @@ function isOkayKaraokeStudio(root) {
 
 function normalizePaths(root, cwd, values) {
   const results = []
-  const canonicalCwd = existsSync(cwd) ? realpathSync(cwd) : cwd
+  const normalizedRoot = realpathSync(root)
+  const normalizedCwd = existsSync(cwd) ? realpathSync(cwd) : path.resolve(cwd)
   for (const value of values) {
-    const cwdCandidate = path.isAbsolute(value) ? value : path.resolve(canonicalCwd, value)
-    const rootCandidate = path.isAbsolute(value) ? value : path.resolve(root, value)
+    const absoluteValue = path.isAbsolute(value) ? path.resolve(value) : null
+    const cwdCandidate = absoluteValue || path.resolve(normalizedCwd, value)
+    const rootCandidate = absoluteValue || path.resolve(normalizedRoot, value)
     const candidate = existsSync(cwdCandidate) ? cwdCandidate : rootCandidate
-    const relative = path.relative(root, candidate)
+    let normalizedCandidate
+    try {
+      normalizedCandidate = path.join(
+        realpathSync(path.dirname(candidate)),
+        path.basename(candidate),
+      )
+    } catch {
+      normalizedCandidate = path.resolve(candidate)
+    }
+    const relative = path.relative(normalizedRoot, normalizedCandidate)
     if (relative.startsWith('..') || path.isAbsolute(relative)) continue
     results.push(relative)
   }
   return [...new Set(results)]
 }
 
-export async function runHook(rawInput, { formatterPath = null } = {}) {
+export async function runHook(
+  rawInput,
+  { formatterPath = null, projectRoot = hookProjectRoot } = {},
+) {
   const event = JSON.parse(rawInput || '{}')
   if (event.hook_event_name !== 'PostToolUse') return null
   if (!['apply_patch', 'Edit', 'Write'].includes(event.tool_name)) return null
 
   const cwd = event.cwd || process.cwd()
-  const root = findRoot(cwd)
-  if (!root || !isOkayKaraokeStudio(root)) return null
+  const root = realpathSync(path.resolve(projectRoot))
+  if (!isOkayKaraokeStudio(root)) return null
 
   const paths = normalizePaths(root, cwd, collectToolPaths(event.tool_input))
   if (paths.length === 0) return null
 
   const formatter = formatterPath || path.join(root, 'scripts', 'format-diff.mjs')
-  if (!existsSync(formatter)) return null
+  if (!existsSync(formatter)) {
+    throw new Error(`Changed-range formatter is missing: ${formatter}`)
+  }
 
   const result = spawnSync(
     process.execPath,

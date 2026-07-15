@@ -1,10 +1,10 @@
 import { execFileSync, spawnSync } from 'node:child_process'
-import { link, lstat, mkdtemp, readFile, symlink, unlink, writeFile } from 'node:fs/promises'
+import { link, lstat, mkdir, mkdtemp, readFile, symlink, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
-import { collectToolPaths, runHook } from '../scripts/codex-format-post-write.mjs'
+import { collectToolPaths, hookProjectRoot, runHook } from '../scripts/codex-format-post-write.mjs'
 import { runCli } from '../scripts/format-diff.mjs'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -375,6 +375,10 @@ describe('range-formatting integration', () => {
 })
 
 describe('Codex hook path extraction', () => {
+  it('anchors the default project root to the checked-in hook', () => {
+    expect(hookProjectRoot).toBe(repositoryRoot)
+  })
+
   it('collects added, updated, moved, and structured tool paths but skips deletes', () => {
     const paths = collectToolPaths({
       file_path: 'src/structured.ts',
@@ -412,7 +416,74 @@ describe('Codex hook path extraction', () => {
         tool_name: 'apply_patch',
         tool_input: { command: '*** Update File: changed.ts' },
       }),
-      { formatterPath: formatterScript },
+      { formatterPath: formatterScript, projectRoot: root },
+    )
+
+    expect(output?.systemMessage).toContain('changed.ts (changed lines 1)')
+    expect(await readFile(path.join(root, 'changed.ts'), 'utf8')).toBe(
+      'const changed = { alpha: 1, beta: 2 }\n',
+    )
+  })
+
+  it('reports a missing formatter without relying on Git discovery', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'oks-format-hook-root-'))
+    await writeFile(
+      path.join(root, 'package.json'),
+      JSON.stringify({
+        name: 'okay-karaoke-studio',
+        scripts: { format: 'bun scripts/format-diff.mjs --write' },
+      }),
+    )
+    await writeFile(path.join(root, 'changed.ts'), 'const changed = true\n')
+    const missingFormatter = path.join(root, 'missing-formatter.mjs')
+
+    await expect(
+      runHook(
+        JSON.stringify({
+          cwd: root,
+          hook_event_name: 'PostToolUse',
+          tool_name: 'apply_patch',
+          tool_input: { command: '*** Update File: changed.ts' },
+        }),
+        { formatterPath: missingFormatter, projectRoot: root },
+      ),
+    ).rejects.toThrow(`Changed-range formatter is missing: ${missingFormatter}`)
+  })
+
+  it('keeps the anchored root for an aliased nested directory with the same marker', async () => {
+    const root = await createRepository()
+    await writeFile(
+      path.join(root, 'package.json'),
+      JSON.stringify({
+        name: 'okay-karaoke-studio',
+        scripts: { format: 'bun scripts/format-diff.mjs --write' },
+      }),
+    )
+    await writeFile(path.join(root, 'changed.ts'), 'const changed = true\n')
+    git(root, 'add', '.')
+    git(root, 'commit', '-qm', 'baseline')
+    await writeFile(path.join(root, 'changed.ts'), 'const changed={alpha:1,beta:2}\n')
+    const nested = path.join(root, 'nested')
+    await mkdir(nested)
+    await writeFile(
+      path.join(nested, 'package.json'),
+      JSON.stringify({
+        name: 'okay-karaoke-studio',
+        scripts: { format: 'bun scripts/format-diff.mjs --write' },
+      }),
+    )
+    const aliasParent = await mkdtemp(path.join(tmpdir(), 'oks-format-hook-alias-'))
+    const alias = path.join(aliasParent, 'repository')
+    await symlink(root, alias, process.platform === 'win32' ? 'junction' : 'dir')
+
+    const output = await runHook(
+      JSON.stringify({
+        cwd: path.join(alias, 'nested'),
+        hook_event_name: 'PostToolUse',
+        tool_name: 'apply_patch',
+        tool_input: { command: '*** Update File: ../changed.ts' },
+      }),
+      { formatterPath: formatterScript, projectRoot: root },
     )
 
     expect(output?.systemMessage).toContain('changed.ts (changed lines 1)')
@@ -457,7 +528,7 @@ describe('Codex hook path extraction', () => {
           tool_name: 'apply_patch',
           tool_input: { command: '*** Update File: changed.ts' },
         }),
-        { formatterPath: silentFormatter },
+        { formatterPath: silentFormatter, projectRoot: root },
       ),
     ).rejects.toThrow(
       'Changed-range formatting failed: formatter exited successfully without reporting a result',
