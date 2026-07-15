@@ -1,34 +1,58 @@
-## Problem and scope
+## Developer
 
-<!-- What problem does this solve? Link the issue or roadmap item. -->
+<!-- Keep the substantive author's role marker as the first nonblank line. -->
+<!-- If relayed, disclose verbatim Orchestrator transport here. -->
 
 Closes #
 
+## Issue contract
+
+- Delivery Issue:
+- Problem or evidence:
+- Acceptance criteria addressed:
+- Deliberate exclusions:
+
 ## Change
 
-<!-- Summarize the solution and note what is deliberately out of scope. -->
+<!-- Summarize the smallest coherent solution. -->
 
-## Verification
+## Validation
 
-- [ ] `bun run test`
-- [ ] `bun run build`
-- [ ] `bun run dist:dir` (Electron or packaging changes)
-- [ ] `bun run test:video` (video, audio muxing, or media-process changes)
-- [ ] Manual workflow check completed
-- [ ] Before/after evidence attached for visual changes
+<!-- Record exact commands/evidence and PASS, FAIL, UNAVAILABLE, or NOT RUN. -->
+
+| Gate                 | Exact command or evidence | Result         |
+| -------------------- | ------------------------- | -------------- |
+| Changed-range format | `bun run format:check`    |                |
+| Test suite           | `bun run test`            |                |
+| Build                | `bun run build`           |                |
+| Electron/package     | `bun run dist:dir`        | Not applicable |
+| Video/media          | `bun run test:video`      | Not applicable |
+| Manual workflow      |                           | Not applicable |
+| Visual evidence      |                           | Not applicable |
+
+- Environment-dependent or manual gaps:
+- Protected `macOS` check and evidence:
+- Protected `Windows` check and evidence:
+
+<!-- During the documented Actions outage, use UNAVAILABLE, never PASS. -->
 
 ## Impact review
 
 - Project-format or migration impact:
 - Export-format, codec, rights, or licensing impact:
 - Packaging or security-update impact:
-- Documentation updated:
+- Documentation impact:
 
-## Adversarial review
+## Adversarial review record
 
-- Reviewer and commit range:
-- Recommendation:
-- Accepted residual issues: None
+- Exact base and head:
+- Canonical `## Reviewer` review link and recommendation:
+- `## Developer` response or rebuttal links:
+- Exact-head rereview link:
+- Accepted residual Issues: None
+
+<!-- Keep later Reviewer, Developer, and Orchestrator judgment in separate -->
+<!-- role-marked reviews/comments instead of silently rewriting their history. -->
 
 ## Release note
 

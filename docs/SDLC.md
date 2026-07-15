@@ -19,18 +19,66 @@ documentation conflict. Start each delivery slice from current `main` and port
 only the cohesive implementation and tests that belong to that slice. Do not
 merge a checkpoint wholesale merely because its integrated test suite passed.
 
+## Durable Issue and authorship record
+
+The lead agent acts as the **Orchestrator** for repository lifecycle and required
+GitHub I/O. Before the Orchestrator assigns or resumes any implementation chunk,
+a durable, scoped GitHub Issue must exist. The Issue records the motivating
+problem or evidence, scope, deliberate exclusions, acceptance criteria,
+dependencies, and assignment. A roadmap entry, chat instruction, branch name,
+or local handoff is not a substitute.
+
+An existing active branch without that record must receive a reconciliation
+Issue before its implementation resumes. Preserve recovered assignment,
+validation, review, and decision context under a clearly labeled **Transcribed
+history** section, including its source and date when known; do not present
+reconstructed context as a contemporaneous GitHub exchange.
+
+The Issue and linked pull request collectively retain:
+
+- scope, exclusions, and acceptance criteria;
+- implementation assignment and status;
+- exact validation commands, results, and unrun or unavailable gates;
+- review findings, Developer responses or rebuttals, and exact-head rereviews;
+- accepted-residual decisions and their linked Issues; and
+- the Orchestrator's exact-head merge recommendation and rationale.
+
+The implementation pull request must link and close its delivery Issue with a
+GitHub closing keyword such as `Closes #123`. Related discovery or residual
+Issues may also be linked, but they do not replace that primary delivery record.
+
+Every agent-authored GitHub Issue body, pull-request body, review, comment,
+rebuttal, status update, and merge rationale starts with the substantive
+author's role marker as its first nonblank line: `## Orchestrator`,
+`## Developer`, or `## Reviewer`. The marker identifies who made the analysis or
+decision, not whose credentials transported it.
+
+Developer and Reviewer execution never depends on GitHub, a connector, a
+browser, `gh`, or direct network access. The Orchestrator supplies the scoped
+Issue/PR snapshot and exact local commits or diff, then transports GitHub-ready
+text when needed. A relay preserves the originating `## Developer` or
+`## Reviewer` marker and the authored text verbatim. When the authored text does
+not already disclose transport, an immediately adjacent `## Orchestrator` post
+must state that the content was relayed verbatim and identify its originating
+role. Any new Orchestrator interpretation, acceptance, or decision belongs in a
+separate `## Orchestrator` post. Transport never grants the originating agent or
+the Orchestrator authority beyond the user's task, and it does not transfer the
+lead-owned lifecycle operations listed in `AGENTS.md`.
+
 ## Change flow
 
-1. Start nontrivial work from an observed MVP workflow blocker, a roadmap item,
-   or an issue with acceptance criteria.
+1. Establish the scoped delivery Issue above before assigning implementation.
+   Start its work from an observed MVP workflow blocker, roadmap decision, bug,
+   or other recorded evidence.
 2. Create a short-lived branch from current `main`. Use a descriptive prefix such
    as `feature/`, `fix/`, `docs/`, or `chore/`.
-3. Open a draft pull request early. Keep unrelated changes in separate pull
-   requests. Aim for 750–1000 changed lines, counting additions and deletions,
-   so an adversarial reviewer can understand the complete diff. This is a soft
-   limit: a documented invariant class may exceed it when splitting schema,
-   trust-boundary, persistence, or renderer/export parity changes would make the
-   result less safe or less reviewable.
+3. Open a draft pull request early, and link and close the delivery Issue. Keep
+   unrelated changes in separate pull requests. Aim for 750–1000 changed lines,
+   counting additions and deletions, so an adversarial reviewer can understand
+   the complete diff. This is a soft limit: a documented invariant class may
+   exceed it when splitting schema, trust-boundary, persistence, or
+   renderer/export parity changes would make the result less safe or less
+   reviewable.
    Formatting never counts as a way to meet this target. A dedicated
    whole-repository formatter pass may receive a complete-invariant exception
    only after full behavior-preservation gates and an independent adversarial
@@ -47,13 +95,43 @@ merge a checkpoint wholesale merely because its integrated test suite passed.
    contract in [`REVIEWING.md`](./REVIEWING.md). A confirmed finding remains a
    merge blocker until it is fixed or the maintainer explicitly accepts it with
    a linked GitHub issue created before merge. Merge only after the review
-   passes, the required macOS and Windows CI checks pass, and all review
-   conversations are resolved.
+   passes at the exact head, all review conversations are resolved, and the
+   required macOS and Windows CI checks pass or the temporary protected-check
+   outage exception below applies.
 7. Squash merge, delete the branch, and leave `main` green and releasable.
 
 One human approval becomes required when a second maintainer is reliably available.
 Until then, pull requests still provide the change record, while a zero-approval
 requirement avoids a solo maintainer deadlock.
+
+## Temporary protected-check outage
+
+GitHub-hosted Actions capacity is currently exhausted. During this known outage,
+the protected `macOS` and `Windows` checks are recorded as **unavailable — not
+passed** and are temporarily suspended as merge blockers for an otherwise
+accepted pull request. This exception changes neither the check definitions nor
+the recommended ruleset, and it does not authorize a workflow runner-label,
+self-hosted-runner, or repository-ruleset change.
+
+All feasible local and environment-dependent gates required by the changed
+behavior remain mandatory. Record each exact command and result. If a required
+platform or environment is unavailable, name the unrun gate and blocker; never
+infer a pass from another platform or from static inspection. An outage-period
+merge rationale must begin with `## Orchestrator` and record the delivery Issue,
+exact head commit, exact-head Reviewer recommendation, feasible validation,
+unavailable `macOS` and `Windows` status with current capacity evidence, review
+resolution, and accepted-residual decisions.
+
+Once GitHub-hosted or approved self-hosted capacity returns, `macOS` and
+`Windows` resume prospectively as protected merge blockers for pull requests
+that have not yet merged. Newly exposed failures are handled at that point.
+Their discovery does not retroactively invalidate an authorized outage-period
+merge, but the outage record was never platform-pass evidence and may justify a
+new corrective Issue.
+
+This temporary delivery exception does not close Windows x64 MVP validation,
+the final user-held product-acceptance gate, or the public-distribution license
+and FFmpeg decisions in `MVP.md`.
 
 ## Definition of done
 

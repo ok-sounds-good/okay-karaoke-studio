@@ -31,6 +31,10 @@ roadmap boundary.
 
 ## Branches and worktrees
 
+- The lead agent is the Orchestrator for the Issue, repository lifecycle, and
+  GitHub record defined in `docs/SDLC.md`. Before assigning or resuming an
+  implementation chunk, confirm that its scoped delivery Issue exists; an
+  existing branch without one requires a reconciliation Issue first.
 - For nontrivial change work, the lead agent should create or use a short-lived
   branch in an isolated worktree before editing.
 - Place repository-local worktrees under `.worktrees/<task-slug>/`. The
@@ -110,6 +114,14 @@ delegating work.
   with a linked GitHub issue created before merge.
 - The lead agent waits for delegated results, resolves contradictions, and owns
   the final synthesis, validation statement, and merge recommendation.
+- Developer and Reviewer work must be possible from the assigned local
+  worktree, exact commit range, and supplied Issue/PR snapshot without GitHub, a
+  connector, a browser, `gh`, or direct network access. They return
+  GitHub-ready text to the Orchestrator instead of becoming repository gateways.
+- Follow the substantive-author role-marker and transparent-relay rules in
+  `docs/SDLC.md`. Relaying a `## Developer` or `## Reviewer` handoff does not
+  transfer worktree, branch, commit, pull-request, merge, or other lifecycle
+  authority.
 - Do not delegate trivial tasks where coordination cost exceeds likely value.
 
 ## Data, media, and licensing
@@ -124,6 +136,9 @@ delegating work.
 
 At completion, report:
 
+- the appropriate `## Orchestrator`, `## Developer`, or `## Reviewer` marker as
+  the first nonblank line when the handoff is intended for a GitHub post or
+  relay;
 - the behavior and files changed;
 - validation performed and its results;
 - manual or environment-dependent checks still required;

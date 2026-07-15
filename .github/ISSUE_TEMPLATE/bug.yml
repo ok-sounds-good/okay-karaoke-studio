@@ -7,6 +7,11 @@ body:
   - type: markdown
     attributes:
       value: |
+        Agent-authored submissions must follow the role and relay contract in
+        docs/SDLC.md. Because this generated form cannot place that role marker
+        first, agents construct a compliant role-marked Issue body instead of
+        submitting the form output unchanged.
+
         Do not attach copyrighted songs, lyrics, or media. Use a synthetic or redacted project when possible.
   - type: input
     id: version

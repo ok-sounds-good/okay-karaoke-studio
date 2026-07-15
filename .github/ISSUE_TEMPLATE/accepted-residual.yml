@@ -5,6 +5,11 @@ body:
   - type: markdown
     attributes:
       value: |
+        Agent-authored submissions must follow the role and relay contract in
+        docs/SDLC.md. Because this generated form cannot place that role marker
+        first, agents use these fields as a checklist and construct a compliant
+        role-marked Issue body instead of submitting the form output unchanged.
+
         Create this issue only for a confirmed finding that will remain after
         merge. Residual acceptance also requires explicit maintainer approval
         and links in both directions between this issue and the originating pull

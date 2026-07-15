@@ -12,6 +12,11 @@ unreadable, or cannot be read in full, stop and return NOT PASS with the exact
 validation gap. Do not reconstruct its rubric from memory, a summary, or this
 file.
 
+Review from the supplied local exact commits or diff and Issue/PR snapshot.
+GitHub, connectors, browsers, gh, and direct network access are never
+prerequisites. Return a GitHub-ready, role-marked handoff under
+docs/REVIEWING.md; do not post it or become a repository-lifecycle gateway.
+
 Prioritize actionable findings in this order:
 1. project corruption, data loss, unsafe save/export behavior, or partial destinations;
 2. Electron trust-boundary, IPC, filesystem, process, or packaging security regressions;
