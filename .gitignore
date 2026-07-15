@@ -2,6 +2,7 @@
 node_modules/
 dist/
 release/
+.ci-artifacts/
 .DS_Store
 *.log
 *.oks~

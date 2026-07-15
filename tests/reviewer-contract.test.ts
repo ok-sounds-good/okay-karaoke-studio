@@ -215,18 +215,17 @@ describe('reviewer infrastructure contract', () => {
     expect(reviewer).toContain('Return a GitHub-ready, role-marked handoff under')
   })
 
-  it('records the protected-check outage without manufacturing a pass', () => {
+  it('requires protected CircleCI checks without manufacturing a pass', () => {
     const sdlc = source('docs/SDLC.md')
     const pullRequestTemplate = source('.github/pull_request_template.md')
 
-    expect(sdlc).toMatch(
-      /protected `macOS` and `Windows` checks are recorded as \*\*unavailable — not\s+passed\*\*/i,
-    )
-    expect(sdlc).toContain('temporarily suspended as merge blockers')
-    expect(sdlc).toContain('All feasible local and environment-dependent gates')
-    expect(sdlc).toContain('never\ninfer a pass from another platform')
-    expect(sdlc).toContain('resume prospectively as protected merge blockers')
-    expect(sdlc).toContain('does not retroactively invalidate an authorized outage-period')
+    expect(sdlc).toContain('CircleCI is the active hosted provider')
+    expect(sdlc).toContain('`ci/circleci: macOS` and `ci/circleci: Windows`')
+    expect(sdlc).toContain('`.github/workflows/ci.yml.disabled`')
+    expect(sdlc).toContain('**unavailable — not passed**')
+    expect(sdlc).toContain('does not satisfy the platform gate')
+    expect(sdlc).toContain('never infer a pass')
+    expect(sdlc).toContain('there is no standing outage\nexception')
     expect(sdlc).toContain('does not close Windows x64 MVP validation')
     expect(pullRequestTemplate).toContain('Protected `macOS` check and evidence')
     expect(pullRequestTemplate).toContain('Protected `Windows` check and evidence')

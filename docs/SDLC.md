@@ -96,42 +96,39 @@ lead-owned lifecycle operations listed in `AGENTS.md`.
    merge blocker until it is fixed or the maintainer explicitly accepts it with
    a linked GitHub issue created before merge. Merge only after the review
    passes at the exact head, all review conversations are resolved, and the
-   required macOS and Windows CI checks pass or the temporary protected-check
-   outage exception below applies.
+   required macOS and Windows CI checks pass.
 7. Squash merge, delete the branch, and leave `main` green and releasable.
 
 One human approval becomes required when a second maintainer is reliably available.
 Until then, pull requests still provide the change record, while a zero-approval
 requirement avoids a solo maintainer deadlock.
 
-## Temporary protected-check outage
+## Protected hosted CI
 
-GitHub-hosted Actions capacity is currently exhausted. During this known outage,
-the protected `macOS` and `Windows` checks are recorded as **unavailable — not
-passed** and are temporarily suspended as merge blockers for an otherwise
-accepted pull request. This exception changes neither the check definitions nor
-the recommended ruleset, and it does not authorize a workflow runner-label,
-self-hosted-runner, or repository-ruleset change.
+CircleCI is the active hosted provider. The repository-owned
+`.circleci/config.yml` defines parallel `macOS` and `Windows` jobs, reported to
+GitHub as `ci/circleci: macOS` and `ci/circleci: Windows`. The previous GitHub
+Actions definition remains available, unchanged, at
+`.github/workflows/ci.yml.disabled`; its non-workflow extension keeps it from
+triggering or consuming GitHub-hosted capacity.
 
-All feasible local and environment-dependent gates required by the changed
-behavior remain mandatory. Record each exact command and result. If a required
-platform or environment is unavailable, name the unrun gate and blocker; never
-infer a pass from another platform or from static inspection. An outage-period
-merge rationale must begin with `## Orchestrator` and record the delivery Issue,
-exact head commit, exact-head Reviewer recommendation, feasible validation,
-unavailable `macOS` and `Windows` status with current capacity evidence, review
-resolution, and accepted-residual decisions.
+Both CircleCI contexts are merge blockers. A provider outage, unreachable
+executor, account-capacity failure, or job that never starts is recorded as
+**unavailable — not passed** and does not satisfy the platform gate. All feasible
+local and environment-dependent checks remain mandatory, but never infer a pass
+from another platform or from static inspection. A temporary exception requires
+a new explicit user decision and a linked Issue; there is no standing outage
+exception.
 
-Once GitHub-hosted or approved self-hosted capacity returns, `macOS` and
-`Windows` resume prospectively as protected merge blockers for pull requests
-that have not yet merged. Newly exposed failures are handled at that point.
-Their discovery does not retroactively invalidate an authorized outage-period
-merge, but the outage record was never platform-pass evidence and may justify a
-new corrective Issue.
+CircleCI stores each platform's validated production-window evidence directory.
+Artifact retention is controlled by the CircleCI plan rather than
+`.circleci/config.yml`; retain the prior 14-day target in **Plan → Usage Controls**
+when the active plan exposes that setting. Configure redundant-workflow
+auto-cancellation in the CircleCI project settings when available.
 
-This temporary delivery exception does not close Windows x64 MVP validation,
-the final user-held product-acceptance gate, or the public-distribution license
-and FFmpeg decisions in `MVP.md`.
+Changing CI providers does not close Windows x64 MVP validation, the final
+user-held product-acceptance gate, or the public-distribution license and FFmpeg
+decisions in `MVP.md`.
 
 ## Definition of done
 
@@ -169,8 +166,8 @@ A change is done when:
 
 Create one repository branch ruleset named `protect-main` in **Settings → Rules →
 Rulesets**. Target the default branch and set enforcement to **Active**. The
-required check names are `macOS` and `Windows`; use a protected pull request to
-confirm enforcement.
+required check names are `ci/circleci: macOS` and `ci/circleci: Windows`; use a
+protected pull request to confirm enforcement.
 
 Configure:
 
@@ -179,7 +176,8 @@ Configure:
 - Require a pull request before merging. Use zero required approvals when there
   is no reliable second maintainer; otherwise require one approval.
 - Require all conversations to be resolved.
-- Require the existing `macOS` and `Windows` status checks.
+- Require the existing `ci/circleci: macOS` and `ci/circleci: Windows` status
+  checks.
 - Require branches to be up to date before merging.
 - Require linear history and squash merges.
 - Do not grant Write or Maintain roles a bypass. If an emergency escape hatch is
