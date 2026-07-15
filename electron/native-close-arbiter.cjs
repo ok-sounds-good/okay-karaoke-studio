@@ -22,6 +22,11 @@ function createNativeCloseRendererReadiness() {
   })
 }
 
+function createNativeCloseOwnershipCleanup(contents, clearOwnership) {
+  const ownerId = contents.id
+  return () => clearOwnership(ownerId)
+}
+
 function createNativeCloseArbiter({
   createRequestId,
   hasActiveExport,
@@ -166,6 +171,7 @@ function createNativeCloseArbiter({
 
 module.exports = {
   createNativeCloseArbiter,
+  createNativeCloseOwnershipCleanup,
   createNativeCloseRendererReadiness,
   isNativeCloseRequestId,
 }

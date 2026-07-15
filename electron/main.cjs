@@ -42,6 +42,7 @@ const { createElectronNativeImageDecoder } = require('./native-image-adapter.cjs
 const { createProjectOpenCoordinator } = require('./project-open.cjs')
 const {
   createNativeCloseArbiter,
+  createNativeCloseOwnershipCleanup,
   createNativeCloseRendererReadiness,
   isNativeCloseRequestId,
 } = require('./native-close-arbiter.cjs')
@@ -1113,6 +1114,10 @@ async function createMainWindow() {
 
   mainWindow = window
   secureWebContents(window.webContents)
+  const clearNativeCloseOwnershipAfterWindowClosed = createNativeCloseOwnershipCleanup(
+    window.webContents,
+    clearNativeCloseOwnership,
+  )
 
   window.once('ready-to-show', () => {
     if (!window.isDestroyed()) window.show()
@@ -1128,7 +1133,7 @@ async function createMainWindow() {
     nativeCloseArbiter.requestWindowClose()
   })
   window.on('closed', () => {
-    clearNativeCloseOwnership(window.webContents.id)
+    clearNativeCloseOwnershipAfterWindowClosed()
     if (mainWindow === window) mainWindow = null
   })
 

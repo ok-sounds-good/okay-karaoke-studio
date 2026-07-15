@@ -1,26 +1,35 @@
+import { EventEmitter } from 'node:events'
 import { createRequire } from 'node:module'
 import { describe, expect, it, vi } from 'vitest'
 
 const require = createRequire(import.meta.url)
-const { createNativeCloseArbiter, createNativeCloseRendererReadiness, isNativeCloseRequestId } =
-  require('../electron/native-close-arbiter.cjs') as {
-    isNativeCloseRequestId(value: unknown): boolean
-    createNativeCloseRendererReadiness(): {
-      markReady(ownerId: number): void
-      isReady(ownerId: number): boolean
-      clear(ownerId?: number): boolean
-    }
-    createNativeCloseArbiter(options: Record<string, unknown>): {
-      requestWindowClose(): unknown
-      requestAppQuit(): unknown
-      getPendingRequest(): { requestId: string; action: 'window' | 'app' } | null
-      resolve(requestId: string, proceed: boolean): boolean
-      resumeAfterExport(action: 'window' | 'app'): boolean
-      consumeWindowCloseApproval(): boolean
-      consumeAppQuitApproval(): boolean
-      clear(): void
-    }
+const {
+  createNativeCloseArbiter,
+  createNativeCloseOwnershipCleanup,
+  createNativeCloseRendererReadiness,
+  isNativeCloseRequestId,
+} = require('../electron/native-close-arbiter.cjs') as {
+  isNativeCloseRequestId(value: unknown): boolean
+  createNativeCloseOwnershipCleanup(
+    contents: { readonly id: number },
+    clearOwnership: (ownerId: number) => void,
+  ): () => void
+  createNativeCloseRendererReadiness(): {
+    markReady(ownerId: number): void
+    isReady(ownerId: number): boolean
+    clear(ownerId?: number): boolean
   }
+  createNativeCloseArbiter(options: Record<string, unknown>): {
+    requestWindowClose(): unknown
+    requestAppQuit(): unknown
+    getPendingRequest(): { requestId: string; action: 'window' | 'app' } | null
+    resolve(requestId: string, proceed: boolean): boolean
+    resumeAfterExport(action: 'window' | 'app'): boolean
+    consumeWindowCloseApproval(): boolean
+    consumeAppQuitApproval(): boolean
+    clear(): void
+  }
+}
 
 const IDS = [
   '00000000-0000-4000-8000-000000000001',
@@ -153,5 +162,24 @@ describe('native close arbiter', () => {
     expect(readiness.isReady(7)).toBe(true)
     expect(readiness.clear(7)).toBe(true)
     expect(readiness.isReady(7)).toBe(false)
+  })
+
+  it('captures ownership before WebContents is destroyed and the window emits closed', () => {
+    let destroyed = false
+    const contents = {
+      get id() {
+        if (destroyed) throw new TypeError('Object has been destroyed')
+        return 7
+      },
+    }
+    const clearOwnership = vi.fn()
+    const window = new EventEmitter()
+    window.on('closed', createNativeCloseOwnershipCleanup(contents, clearOwnership))
+
+    destroyed = true
+
+    expect(() => window.emit('closed')).not.toThrow()
+    expect(clearOwnership).toHaveBeenCalledOnce()
+    expect(clearOwnership).toHaveBeenCalledWith(7)
   })
 })
