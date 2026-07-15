@@ -1,0 +1,256 @@
+.style-workspace {
+  display: grid;
+  grid-template-columns: minmax(340px, 380px) minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  gap: 9px;
+  padding: 9px;
+  overflow: hidden;
+  background: var(--canvas);
+}
+
+.style-editor {
+  display: flex;
+  flex-direction: column;
+}
+
+.style-editor__body {
+  flex: 1;
+  min-height: 0;
+  padding: 14px;
+  overflow-y: auto;
+}
+
+.style-control-group {
+  padding-bottom: 16px;
+}
+
+.style-control-group + .style-control-group,
+.style-control-row,
+.style-color-grid {
+  padding-top: 14px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.style-control-group > h3 {
+  margin: 0 0 8px;
+  color: var(--muted-strong);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.style-field > span,
+.style-color-field > span {
+  margin: 0;
+  color: var(--muted-strong);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.typeface-combobox {
+  position: relative;
+}
+
+.typeface-combobox > input,
+.style-field select {
+  width: 100%;
+  height: 36px;
+  border: 1px solid var(--control-line);
+  border-radius: 9px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.typeface-combobox > input {
+  padding: 0 11px;
+  cursor: text;
+}
+
+.typeface-popup {
+  position: absolute;
+  z-index: 12;
+  top: 40px;
+  right: 0;
+  left: 0;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.typeface-popup [role='listbox'] {
+  max-height: 230px;
+  overflow-y: auto;
+}
+
+.typeface-popup > .button {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.typeface-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 34px;
+  gap: 10px;
+  padding: 6px 9px;
+  border-radius: 7px;
+  color: var(--text-soft);
+  cursor: pointer;
+}
+
+.typeface-option.is-active,
+.typeface-option:hover {
+  background: var(--panel-strong);
+  color: var(--text);
+}
+
+.typeface-option > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.typeface-option small {
+  flex: 0 0 auto;
+  color: var(--coral);
+  font-family: inherit;
+  font-size: 8px;
+}
+
+.typeface-empty,
+.font-access-message {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.typeface-empty {
+  margin: 0;
+  padding: 12px 9px;
+}
+
+.font-access-message {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 7px 0 0;
+}
+
+.font-access-message--warning {
+  color: var(--coral);
+}
+
+.font-face-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.font-face-button {
+  min-height: 31px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text-soft);
+}
+
+.font-face-button[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--panel-strong);
+  color: var(--accent-soft);
+}
+
+.style-control-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  padding-bottom: 14px;
+}
+
+.style-field {
+  display: grid;
+  gap: 7px;
+}
+
+.style-field select {
+  padding: 0 28px 0 10px;
+}
+
+.style-color-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.style-color-field {
+  display: grid;
+  gap: 7px;
+}
+
+.style-color-field > div {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+  padding: 5px 7px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel);
+}
+
+.style-color-field input {
+  width: 31px;
+  height: 27px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.style-color-field output {
+  overflow: hidden;
+  color: var(--text-soft);
+  font-family: ui-monospace, monospace;
+  font-size: 9px;
+  text-overflow: ellipsis;
+}
+
+.style-editor__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--line-soft);
+  background: var(--panel);
+}
+
+@media (max-width: 1240px) {
+  .style-workspace {
+    grid-template-columns: 330px minmax(0, 1fr);
+    padding: 7px;
+    gap: 7px;
+  }
+}
+
+@media (max-height: 720px) {
+  .style-editor__body {
+    padding: 10px 12px;
+  }
+
+  .style-control-group {
+    padding-bottom: 12px;
+  }
+
+  .style-control-group + .style-control-group,
+  .style-control-row,
+  .style-color-grid {
+    padding-top: 10px;
+  }
+}
