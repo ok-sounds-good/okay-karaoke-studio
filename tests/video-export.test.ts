@@ -1,9 +1,10 @@
 import { createRequire } from 'node:module'
+import { readFileSync } from 'node:fs'
 import { mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Script } from 'node:vm'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   createLyricLine,
   createLyricWord,
@@ -11,6 +12,7 @@ import {
   createVocalTrack,
 } from '../src/lib/karaoke'
 import { cloneVocalStyle } from '../src/lib/video-style'
+import { previewFrameStateAt } from '../src/lib/stage-frame-state'
 
 const require = createRequire(import.meta.url)
 const videoExport = require('../electron/video-export.cjs') as {
@@ -36,7 +38,7 @@ const videoExport = require('../electron/video-export.cjs') as {
   frameStateAt(project: unknown, playbackMs: number): {
     showTitle: boolean
     lines: Array<{
-      color: string
+      style: { sungColor: string }
       text: string
       words: Array<{ text: string; progress: number }>
     }>
@@ -57,6 +59,7 @@ const videoExport = require('../electron/video-export.cjs') as {
       onPromotionComplete?: () => void
     },
   ): Promise<void>
+  prepareStyleRuntime(project: unknown, readLinkedImage?: (path: string) => Promise<unknown>): Promise<any>
   renderDocument(settings?: { resolution?: string; fps?: number }): string
 }
 
@@ -210,12 +213,12 @@ describe('karaoke video frame planning', () => {
   })
 
   it('renders title and per-word progress aligned to word starts and ends', () => {
-    expect(videoExport.frameStateAt(videoProject(), 0).showTitle).toBe(true)
+    expect(videoExport.frameStateAt(videoProject(), 0).showTitle).toBe(false)
 
     const firstStart = videoExport.frameStateAt(videoProject(), 2_000)
     expect(firstStart.showTitle).toBe(false)
     expect(firstStart.lines[0].text).toBe('Hello world')
-    expect(firstStart.lines[0].words).toEqual([
+    expect(firstStart.lines[0].words.map(({ text, progress }) => ({ text, progress }))).toEqual([
       { text: 'Hello', progress: 0 },
       { text: 'world', progress: 0 },
     ])
@@ -225,7 +228,7 @@ describe('karaoke video frame planning', () => {
     expect(firstMiddle.lines[0].words[1].progress).toBe(0)
 
     const secondStart = videoExport.frameStateAt(videoProject(), 3_000)
-    expect(secondStart.lines[0].words).toEqual([
+    expect(secondStart.lines[0].words.map(({ text, progress }) => ({ text, progress }))).toEqual([
       { text: 'Hello', progress: 1 },
       { text: 'world', progress: 0 },
     ])
@@ -380,33 +383,45 @@ describe('karaoke video frame planning', () => {
     expect(document).not.toContain('state.nextLine')
     expect(document).not.toContain('Next ·')
     expect(document).not.toContain('line-label')
-    expect(document).not.toContain('item.track')
     expect(document).not.toMatch(/instrumental/iu)
+    const source = readFileSync('electron/video-export.cjs', 'utf8')
+    expect(source).not.toContain('window.renderKaraokeFrame=')
+    expect(source).toContain('renderStyleDocument')
     const script = document.match(/<script>([\s\S]*)<\/script>/u)?.[1]
     expect(script).toBeTruthy()
     expect(() => new Script(script)).not.toThrow()
   })
 
+  it('installs the frozen planner without CommonJS globals for Vite/browser use', () => {
+    const browserGlobal = {}
+    new Script(readFileSync('electron/stage-frame-state.cjs', 'utf8'))
+      .runInNewContext({ globalThis: browserGlobal, Symbol })
+    const api = Reflect.get(
+      browserGlobal,
+      Symbol.for('studio.okay-karaoke.stage-frame-state'),
+    ) as { frameStateAt(project: unknown, playbackMs: number): { lines: Array<{ text: string }> } }
+    expect(Object.isFrozen(api)).toBe(true)
+    expect(api.frameStateAt(videoProject(), 2_000).lines[0].text).toBe('Hello world')
+    expect(readFileSync('src/lib/stage-frame-state.ts', 'utf8'))
+      .toContain("import '../../electron/stage-frame-state.cjs'")
+  })
+
   it('uses the app palette for stage chrome while preserving authored word accents', () => {
     const document = videoExport.renderDocument()
 
-    expect(document).toContain('#17111e')
-    expect(document).toContain('#21172b')
-    expect(document).toContain('#9b78cf')
-    expect(document).toContain('#ff8a2b')
-    expect(document).toContain('#f8f6fb')
-    expect(document).not.toMatch(/#(?:080a0e|171e1b|0e1217|171119|d7fa4a)/iu)
-    expect(document).not.toContain('rgba(215,250,74')
-    expect(document).not.toContain('rgba(88,214,222')
-    expect(document).toContain("lyric.style.setProperty('--accent',item.color)")
-    expect(document).toContain('color:var(--accent)')
+    expect(document).not.toMatch(/#(?:17111e|21172b|9b78cf)/iu)
+    expect(document).toContain('state.stageStyle.background')
 
     const project = videoProject()
+    project.stageStyle.background.solidColor = '#123456'
     project.tracks[0].vocalStyle.sungColor = '#A1b2C3'
-    expect(videoExport.frameStateAt(project, 2_000).lines[0].color).toBe('#A1b2C3')
+    expect(videoExport.frameStateAt(project, 2_000)).toMatchObject({
+      stageStyle: { background: { solidColor: '#123456' } },
+      lines: [{ style: { sungColor: '#A1b2C3' } }],
+    })
     project.tracks[0].vocalStyle.sungColor = null
     project.stageStyle.lyrics.sungColor = '#C3b2A1'
-    expect(videoExport.frameStateAt(project, 2_000).lines[0].color).toBe('#C3b2A1')
+    expect(videoExport.frameStateAt(project, 2_000).lines[0].style.sungColor).toBe('#C3b2A1')
   })
 
   it('uses only visible tracks when extending duration', () => {
@@ -449,7 +464,8 @@ describe('karaoke video frame planning', () => {
       }),
     ]
 
-    expect(videoExport.frameStateAt(project, 1_000).lines[0].words).toEqual([
+    expect(videoExport.frameStateAt(project, 1_000).lines[0].words
+      .map(({ text, progress }) => ({ text, progress }))).toEqual([
       { text: 'Line', progress: 0 },
       { text: 'timed', progress: 0 },
       { text: 'only', progress: 0 },
@@ -476,5 +492,54 @@ describe('karaoke video frame planning', () => {
     expect(args).not.toContain('concat')
     expect(args).not.toContain('-shortest')
     expect(args.at(-1)).toBe('/exports/video.mp4')
+  })
+
+  it('shares title, Clear/Scroll, section, resolved style, Preview, and sync-aid state', () => {
+    const project = videoProject()
+    const vocal = project.tracks[0].vocalStyle
+    project.durationMs = 10_000
+    project.offsetMs = 0
+    project.lyricDisplay = { lineCount: 2, advanceMode: 'clear' }
+    vocal.previewMs = 2_000
+    vocal.sizePx = 96
+    vocal.unsungColor = '#123456'
+    vocal.sungColor = null
+    vocal.alignment = 'right'
+    vocal.fontStyle = project.stageStyle.lyrics.typeface.faces.find(
+      ({ style }) => style === 'Bold',
+    ) ?? null
+    vocal.syncAid = { enabled: true, minLeadMs: 1_000, maxLeadMs: 2_000 }
+    project.tracks[0].lines = [
+      timedVideoLine('A', 3_000, 4_000), timedVideoLine('B', 4_000, 5_000),
+      timedVideoLine('C', 5_000, 6_000), blankVideoLine(),
+      timedVideoLine('D', 8_000, 9_000), timedVideoLine('E', 9_000, 10_000),
+    ]
+
+    for (const time of [999, 1_000, 2_500, 5_000, 6_000, 7_500, 10_000]) {
+      expect(previewFrameStateAt(project, time)).toEqual(videoExport.frameStateAt(project, time))
+    }
+    const first = previewFrameStateAt(project, 1_000)
+    expect(first.showTitle).toBe(false)
+    expect(first.lines[0]).toMatchObject({ text: 'A', style: {
+      alignment: 'right', sizePx: 96, unsungColor: '#123456',
+      sungColor: project.stageStyle.lyrics.sungColor,
+    } })
+    expect(first.syncAids[0]).toMatchObject({ lineId: project.tracks[0].lines[0].id, progress: 0 })
+    expect(previewFrameStateAt(project, 999).showTitle).toBe(true)
+    expect(previewFrameStateAt(project, 6_000).lines.map(({ text }) => text)).toEqual(['D', 'E'])
+
+    project.lyricDisplay.advanceMode = 'scroll'
+    expect(previewFrameStateAt(project, 4_000).lines.map(({ text }) => text)).toEqual(['B', 'C'])
+    expect(previewFrameStateAt(project, 6_000)).toEqual(videoExport.frameStateAt(project, 6_000))
+  })
+
+  it('prepares bounded image and font assets', async () => {
+    const project = videoProject()
+    project.stageStyle.background.mode = 'image'
+    project.stageStyle.background.imagePath = '/linked/background.png'
+    const readLinkedImage = vi.fn(async () => ({ bytes: Buffer.from('png'), format: 'png' }))
+    const runtime = await videoExport.prepareStyleRuntime(project, readLinkedImage)
+    expect(readLinkedImage).toHaveBeenCalledWith('/linked/background.png')
+    expect(runtime.backgroundDataUrl).toBe('data:image/png;base64,cG5n')
   })
 })

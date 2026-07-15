@@ -640,6 +640,7 @@ export default function App() {
     resolution,
     fps,
   }: Pick<StudioVideoExportOptions, 'resolution' | 'fps'>) => {
+    if (project.stageStyle.background.mode === 'image') return void showToast('Linked-image video export is deferred until Live Preview can verify the same image.', 'warning')
     if (!window.studio?.exportVideo) {
       showToast('Video export is available in the desktop app.', 'warning')
       return
@@ -663,7 +664,13 @@ export default function App() {
       })
       if (!result) return
       setExportDialogOpen(false)
-      showToast(`Video export created with ${result.frameCount} lyric frames`, 'success')
+      const fallback = result.fontFallbacks?.[0]
+      showToast(
+        fallback
+          ? `Video exported with ${fallback.effective} because ${fallback.requested} was unavailable`
+          : `Video export created with ${result.frameCount} lyric frames`,
+        fallback ? 'warning' : 'success',
+      )
     } catch (error) {
       const detail = error instanceof Error ? error.message : 'Video export failed.'
       const canceled = /cancel(?:led|ed|ing)/iu.test(detail)

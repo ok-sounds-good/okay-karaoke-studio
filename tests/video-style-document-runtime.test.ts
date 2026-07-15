@@ -56,6 +56,7 @@ describe('isolated video-style document boundary', () => {
     const frame = documentApi.frameInvocation(state, 7)
     const assets = documentApi.assetInvocation(runtime)
     expect(frame).not.toContain(state.lyric)
+    expect(frame).toContain('requestAnimationFrame')
     expect(assets).not.toContain(runtime.backgroundDataUrl)
     expect(decodedInvocationValue(frame)).toEqual(state)
     expect(decodedInvocationValue(assets)).toEqual(runtime)

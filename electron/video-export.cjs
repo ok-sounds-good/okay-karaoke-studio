@@ -7,6 +7,18 @@ const path = require('node:path')
 const { randomUUID } = require('node:crypto')
 const { ffmpegExecutableCandidates } = require('./ffmpeg-setup.cjs')
 const { decodeProject, parseProjectJson } = require('./project-schema.cjs')
+const {
+  createStageFramePlanner,
+  frameStateAt: styleFrameStateAt,
+  resolveVocalStyle,
+} = require('./stage-frame-state.cjs')
+const {
+  assetInvocation,
+  frameInvocation,
+  renderDocument: renderStyleDocument,
+} = require('./video-style-document.cjs')
+const STAGE_LAYOUT = require('./stage-layout.json')
+const SYNC_AID_GEOMETRY = require('./sync-aid-geometry.json')
 
 const VIDEO_RESOLUTION_PRESETS = Object.freeze({
   '240p': Object.freeze({ width: 426, height: 240 }),
@@ -261,31 +273,12 @@ function frameStateAtIndex(index, playbackMs, cursor) {
 
 function frameStateAt(projectValue, playbackMs) {
   const project = normalizeProjectForVideo(projectValue)
-  return frameStateAtIndex(createVideoIndex(project), playbackMs)
+  return styleFrameStateAt(project, playbackMs)
 }
 
 function renderDocument(settings = {}) {
   const { width, height } = normalizeVideoSettings(settings)
-  const scaleX = width / 1920
-  const scaleY = height / 1080
-  return `<!doctype html>
-<html><head><meta charset="utf-8"><style>
-*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#17111e;color:#f8f6fb;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}
-.scene{position:absolute;width:1920px;height:1080px;overflow:hidden;transform:scale(${scaleX},${scaleY});transform-origin:0 0;background:radial-gradient(circle at 18% 20%,rgba(155,120,207,.28),transparent 34%),radial-gradient(circle at 82% 35%,rgba(255,138,43,.16),transparent 38%),linear-gradient(155deg,#30223f 0%,#21172b 52%,#17111e 100%)}
-.grain{position:absolute;inset:0;opacity:.12;background-image:linear-gradient(rgba(248,246,251,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(248,246,251,.018) 1px,transparent 1px);background-size:5px 5px}.safe{position:absolute;inset:64px 96px;border:2px solid rgba(203,182,230,.16);border-radius:30px}
-.brand{position:absolute;left:86px;top:58px;font-size:25px;font-weight:800;letter-spacing:.22em;color:#9b78cf}.clock{position:absolute;right:86px;top:56px;font:600 27px ui-monospace,SFMono-Regular,Menlo,monospace;color:rgba(248,246,251,.62)}
-.content{position:absolute;inset:140px 130px 120px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}.title-card span{font-size:25px;letter-spacing:.2em;text-transform:uppercase;color:#ff8a2b}.title-card h1{margin:34px 0 14px;font-size:104px;line-height:1.04;max-width:1500px}.title-card p{margin:0;font-size:42px;color:rgba(248,246,251,.72)}
-.lines{width:100%;display:flex;flex-direction:column;gap:18px}.lyric{width:100%;height:1.18em;font-size:82px;line-height:1.12;font-weight:850;letter-spacing:.01em;white-space:nowrap}.word{position:relative;display:inline-block;color:rgba(248,246,251,.5);filter:drop-shadow(0 5px 5px rgba(0,0,0,.8))}.word-fill{position:absolute;inset:0 auto 0 0;width:0;overflow:hidden;color:var(--accent);white-space:nowrap}
-.footer{position:absolute;left:86px;right:86px;bottom:53px;display:flex;justify-content:space-between;font-size:24px;color:rgba(248,246,251,.54)}
-</style></head><body><div class="scene"><div class="grain"></div><div class="safe"></div><div class="brand">OKAY / STUDIO</div><div id="clock" class="clock"></div><main id="content" class="content"></main><footer class="footer"><span id="footer-song"></span><span>Okay Karaoke Studio</span></footer></div><script>
-const text=(tag,className,value)=>{const node=document.createElement(tag);if(className)node.className=className;node.textContent=value;return node}
-const fitSize=(value,count)=>Math.max(28,Math.min(88,Math.floor(1520/Math.max(12,value.length)*1.28),Math.floor(610/Math.max(1,count))))
-let layoutKey='';let wordNodes=[];let lastClock='';let lastFooter='';
-window.renderKaraokeFrame=(state,sequence)=>{document.body.dataset.frame=String(sequence);const clock=new Date(Math.max(0,state.playbackMs)).toISOString().slice(11,19);if(clock!==lastClock){document.querySelector('#clock').textContent=clock;lastClock=clock}const footer=state.artist+' · '+state.title;if(footer!==lastFooter){document.querySelector('#footer-song').textContent=footer;lastFooter=footer}const content=document.querySelector('#content');const nextKey=state.showTitle?'title:'+state.title+'|'+state.artist:'lines:'+JSON.stringify(state.lines.map((item)=>[item.color,item.text,item.words.map((word)=>word.text)]));
-if(nextKey!==layoutKey){layoutKey=nextKey;wordNodes=[];content.replaceChildren();if(state.showTitle){const card=text('div','title-card','');card.append(text('span','',"Tonight's performance"),text('h1','',state.title),text('p','',state.artist));content.append(card)}else if(state.lines.length){const group=text('div','lines','');group.style.gap=Math.max(8,38-state.lines.length*3)+'px';for(const item of state.lines){const line=text('div','line','');const lyric=text('div','lyric','');lyric.style.setProperty('--accent',item.color);lyric.style.fontSize=fitSize(item.text,state.lines.length)+'px';item.words.forEach((word,index)=>{const node=text('span','word','');const fill=text('span','word-fill',word.text);node.append(text('span','word-base',word.text),fill);lyric.append(node);wordNodes.push(fill);if(index<item.words.length-1)lyric.append(document.createTextNode(' '))});line.append(lyric);group.append(line)}content.append(group)}}
-let wordIndex=0;for(const item of state.lines){for(const word of item.words){wordNodes[wordIndex]?.style.setProperty('width',(word.progress*100).toFixed(3)+'%');wordIndex+=1}}
-return true}
-</script></body></html>`
+  return renderStyleDocument({ width, height })
 }
 
 function createAbortError() {
@@ -504,6 +497,42 @@ async function findFfmpeg(preferredPath, signal) {
   throw new Error('FFmpeg was not found. Install FFmpeg or set OKAY_KARAOKE_FFMPEG to its path.')
 }
 
+function projectFonts(project) {
+  const stage = project.stageStyle
+  const fonts = [
+    stage.lyrics,
+    stage.titleCard.eyebrow,
+    stage.titleCard.title,
+    stage.titleCard.artist,
+    stage.stageFrame.brand,
+    stage.stageFrame.clock,
+    stage.stageFrame.footer,
+    ...project.tracks.map((track) => resolveVocalStyle(stage.lyrics, track.vocalStyle)),
+  ]
+  return [...new Map(fonts.map(({ typeface, fontStyle }) => [
+    JSON.stringify([typeface, fontStyle]),
+    { typeface, fontStyle },
+  ])).values()]
+}
+
+async function prepareStyleRuntime(project, readLinkedImage) {
+  const runtime = {
+    backgroundDataUrl: '',
+    fonts: projectFonts(project),
+    stageLayout: STAGE_LAYOUT,
+    syncAidGeometry: SYNC_AID_GEOMETRY,
+  }
+  const background = project.stageStyle.background
+  if (background.mode !== 'image') return runtime
+  if (typeof readLinkedImage !== 'function') {
+    throw new Error('The linked background image decoder is unavailable')
+  }
+  const image = await readLinkedImage(background.imagePath)
+  const mime = image.format === 'jpeg' ? 'image/jpeg' : 'image/png'
+  runtime.backgroundDataUrl = `data:${mime};base64,${image.bytes.toString('base64')}`
+  return runtime
+}
+
 async function writeJpegFrame(stream, frame, signal) {
   throwIfAborted(signal)
   if (stream.destroyed) throw new Error('FFmpeg stopped accepting video frames')
@@ -513,7 +542,16 @@ async function writeJpegFrame(stream, frame, signal) {
   throwIfAborted(signal)
 }
 
-async function renderVideoFrames(BrowserWindow, project, timeline, stream, settings, onProgress, signal) {
+async function renderVideoFrames(
+  BrowserWindow,
+  project,
+  timeline,
+  stream,
+  settings,
+  runtime,
+  onProgress,
+  signal,
+) {
   throwIfAborted(signal)
   const window = new BrowserWindow({
     show: false,
@@ -540,21 +578,17 @@ async function renderVideoFrames(BrowserWindow, project, timeline, stream, setti
     await window.loadURL(documentUrl)
     throwIfAborted(signal)
     window.webContents.stopPainting()
-    const index = createVideoIndex(project)
-    const cursor = createFrameCursor(index)
+    const assetResult = await window.webContents.executeJavaScript(assetInvocation(runtime))
+    throwIfAborted(signal)
+    const planFrame = createStageFramePlanner(project)
     let lastProgressMs = Number.NEGATIVE_INFINITY
 
     for (let frameIndex = 0; frameIndex < timeline.times.length; frameIndex += 1) {
       throwIfAborted(signal)
       const currentMs = timeline.times[frameIndex]
-      const state = frameStateAtIndex(index, currentMs, cursor)
-      const stateJson = JSON.stringify(state)
+      const state = planFrame(currentMs)
       const frame = await presentRequestedFrame(window.webContents, () =>
-        window.webContents.executeJavaScript(
-          `(async()=>{const result=window.renderKaraokeFrame(${stateJson},${frameIndex});` +
-          'await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));' +
-          'return result})()',
-        ),
+        window.webContents.executeJavaScript(frameInvocation(state, frameIndex)),
       settings, signal)
       await writeJpegFrame(stream, frame, signal)
       if (
@@ -566,6 +600,7 @@ async function renderVideoFrames(BrowserWindow, project, timeline, stream, setti
         onProgress?.({ phase: 'frames', completed: frameIndex + 1, total: timeline.times.length })
       }
     }
+    return assetResult
   } finally {
     signal?.removeEventListener('abort', onAbort)
     if (!window.isDestroyed()) window.destroy()
@@ -608,6 +643,7 @@ async function exportKaraokeVideo({
   audioPath,
   outputPath,
   ffmpegPath,
+  readLinkedImage,
   resolution = DEFAULT_VIDEO_RESOLUTION,
   fps = DEFAULT_VIDEO_FPS,
   onProgress,
@@ -628,6 +664,9 @@ async function exportKaraokeVideo({
   const audioStats = await fs.stat(resolvedAudioPath).catch(() => null)
   if (!audioStats?.isFile()) throw new Error('The linked audio file could not be read')
   const timeline = buildFrameTimelineForProject(project, durationMs, settings.fps)
+  throwIfAborted(signal)
+  const runtime = await prepareStyleRuntime(project, readLinkedImage)
+  throwIfAborted(signal)
   const executable = ffmpegPath || await findFfmpeg(undefined, signal)
   const parsedOutput = path.parse(resolvedOutputPath)
   const partialPath = path.join(
@@ -635,6 +674,7 @@ async function exportKaraokeVideo({
     `${parsedOutput.name}.partial-${randomUUID()}${parsedOutput.ext || '.mp4'}`,
   )
   let preservePartial = false
+  let fontFallbacks = []
 
   try {
     throwIfAborted(signal)
@@ -647,7 +687,17 @@ async function exportKaraokeVideo({
     ), {
       signal,
       inputWriter: async (stream) => {
-        await renderVideoFrames(BrowserWindow, project, timeline, stream, settings, onProgress, signal)
+        const assets = await renderVideoFrames(
+          BrowserWindow,
+          project,
+          timeline,
+          stream,
+          settings,
+          runtime,
+          onProgress,
+          signal,
+        )
+        fontFallbacks = Array.isArray(assets?.fontFallbacks) ? assets.fontFallbacks : []
         throwIfAborted(signal)
         onProgress?.({ phase: 'encoding', completed: 0, total: 1 })
       },
@@ -666,6 +716,7 @@ async function exportKaraokeVideo({
       width: settings.width,
       height: settings.height,
       fps: settings.fps,
+      fontFallbacks,
     }
   } catch (error) {
     preservePartial = error?.name === 'AbortError' || signal?.aborted === true
@@ -693,6 +744,7 @@ module.exports = {
   normalizeProjectForVideo,
   normalizeVideoSettings,
   parseProjectForVideo,
+  prepareStyleRuntime,
   promoteVideoOutput,
   renderVideoFrames,
   renderDocument,
