@@ -16,6 +16,13 @@ declare global {
     | 'undo'
     | 'redo'
 
+  type StudioWindowCloseAction = 'window' | 'app'
+
+  interface StudioWindowCloseRequest {
+    readonly requestId: string
+    readonly action: StudioWindowCloseAction
+  }
+
   interface StudioOpenProjectResult {
     requestId: string
     path: string
@@ -94,6 +101,9 @@ declare global {
     exportText(options: StudioExportTextOptions): Promise<StudioPathResult | null>
     exportVideo(options: StudioVideoExportOptions): Promise<StudioVideoExportResult | null>
     cancelVideoExport(): Promise<boolean>
+    getPendingWindowClose(): Promise<StudioWindowCloseRequest | null>
+    resolveWindowClose(requestId: string, proceed: boolean): Promise<boolean>
+    onWindowCloseRequest(callback: (request: StudioWindowCloseRequest) => void): () => void
     onVideoExportProgress(callback: (progress: StudioVideoExportProgress) => void): () => void
     onMenuAction(callback: (action: StudioMenuAction) => void): () => void
   }

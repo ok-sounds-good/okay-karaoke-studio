@@ -25,6 +25,13 @@ const {
     requestWindowClose(): Promise<boolean>
   }
 }
+const { createNativeCloseArbiter } = require('../electron/native-close-arbiter.cjs') as {
+  createNativeCloseArbiter(options: Record<string, unknown>): {
+    requestWindowClose(): unknown
+    resumeAfterExport(action: 'window' | 'app'): boolean
+    getPendingRequest(): { requestId: string; action: 'window' | 'app' } | null
+  }
+}
 
 function lifecycleGuard(confirmed: boolean) {
   const actions: string[] = []
@@ -69,6 +76,71 @@ describe('video export lifecycle cancellation guard', () => {
     expect(fixture.closeWindow).not.toHaveBeenCalled()
   })
 
+  it('coalesces a window close into an application quit within one generation', async () => {
+    let confirm = (_accepted: boolean) => undefined
+    const confirmation = new Promise<boolean>((resolve) => {
+      confirm = resolve
+    })
+    const actions: string[] = []
+    const guard = createVideoExportLifecycleGuard({
+      confirmCancellation: () => confirmation,
+      abortActiveExport: async () => actions.push('abort'),
+      closeWindow: () => actions.push('close'),
+      quitApp: () => actions.push('quit'),
+    })
+
+    const windowRequest = guard.requestWindowClose()
+    const appRequest = guard.requestAppQuit()
+    confirm(true)
+
+    await expect(windowRequest).resolves.toBe(true)
+    await expect(appRequest).resolves.toBe(true)
+    expect(actions).toEqual(['abort', 'quit'])
+  })
+
+  it('queues a new cancellation generation when another export appears while resuming', async () => {
+    let activeExport: 'A' | 'B' | null = 'A'
+    let activateLateExport = true
+    const aborted: string[] = []
+    const sent: Array<{ requestId: string; action: 'window' | 'app' }> = []
+    const confirmCancellation = vi.fn(async () => true)
+    let arbiter!: ReturnType<typeof createNativeCloseArbiter>
+    const guard = createVideoExportLifecycleGuard({
+      confirmCancellation,
+      abortActiveExport: async () => {
+        if (activeExport) aborted.push(activeExport)
+        activeExport = null
+      },
+      closeWindow: () => arbiter.resumeAfterExport('window'),
+      quitApp: () => arbiter.resumeAfterExport('app'),
+    })
+    arbiter = createNativeCloseArbiter({
+      createRequestId: () => '00000000-0000-4000-8000-000000000001',
+      hasActiveExport: () => {
+        if (!activeExport && activateLateExport) {
+          activeExport = 'B'
+          activateLateExport = false
+        }
+        return activeExport !== null
+      },
+      requestExportCancellation: () => guard.requestWindowClose(),
+      sendRequest: (request: (typeof sent)[number]) => {
+        sent.push(request)
+        return true
+      },
+      closeWindow: vi.fn(),
+      quitApp: vi.fn(),
+    })
+
+    arbiter.requestWindowClose()
+
+    await vi.waitFor(() => expect(sent).toHaveLength(1))
+    expect(confirmCancellation).toHaveBeenCalledTimes(2)
+    expect(aborted).toEqual(['A', 'B'])
+    expect(sent).toEqual([{ requestId: '00000000-0000-4000-8000-000000000001', action: 'window' }])
+    expect(arbiter.getPendingRequest()).toEqual(sent[0])
+  })
+
   it('does not close when promotion starts while cancellation confirmation is open', async () => {
     let resolveConfirmation = (_confirmed: boolean) => {}
     const confirmation = new Promise<boolean>((resolve) => { resolveConfirmation = resolve })
@@ -108,10 +180,10 @@ describe('video export lifecycle cancellation guard', () => {
     const electronMain = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf8')
 
     expect(electronMain).toMatch(
-      /window\.on\('close',[\s\S]{0,220}?preventDefault\(\)[\s\S]{0,220}?requestWindowClose\(\)/,
+      /window\.on\('close',[\s\S]{0,360}?preventDefault\(\)[\s\S]{0,220}?requestWindowClose\(\)/,
     )
     expect(electronMain).toMatch(
-      /app\.on\('before-quit',[\s\S]{0,220}?preventDefault\(\)[\s\S]{0,220}?requestAppQuit\(\)/,
+      /app\.on\('before-quit',[\s\S]{0,420}?preventDefault\(\)[\s\S]{0,220}?requestAppQuit\(\)/,
     )
     expect(electronMain).toMatch(
       /onPromotionStart:\s*\(\)\s*=>\s*operation\.commitState\.beginPromotion\(\)/,

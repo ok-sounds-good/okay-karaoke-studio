@@ -20,6 +20,8 @@ import { TransportBar } from './components/TransportBar'
 import { ExportDialog, LyricsEditorDialog, ValidationDialog, WorkflowGuideDialog } from './components/Dialogs'
 import { usePlayback } from './hooks/usePlayback'
 import { useWaveform } from './hooks/useWaveform'
+import { useProjectActionArbiter } from './hooks/useProjectActionArbiter'
+import type { ProjectActionKind, ProjectActionRequest } from './lib/project-action-arbiter'
 import {
   downloadText,
   effectiveDuration,
@@ -910,6 +912,47 @@ export default function App() {
     history.redo()
   }, [cancelHeldSync, history.redo, projectMutationIsBlocked])
 
+  const nativeCloseBridge = useMemo(() => {
+    const studio = window.studio
+    if (
+      !studio?.onWindowCloseRequest ||
+      !studio.getPendingWindowClose ||
+      !studio.resolveWindowClose
+    ) {
+      return undefined
+    }
+    return {
+      onWindowCloseRequest: studio.onWindowCloseRequest,
+      getPendingWindowClose: studio.getPendingWindowClose,
+      resolveWindowClose: studio.resolveWindowClose,
+    }
+  }, [])
+
+  const { request: arbitrateProjectAction } = useProjectActionArbiter({
+    nativeClose: nativeCloseBridge,
+    executors: {
+      new: handleNew,
+      open: handleOpen,
+      save: () => handleSave(false),
+      'save-as': () => handleSave(true),
+      export: openExportDialog,
+      'import-audio': handleImportAudio,
+      'import-lrc': handleImportLrc,
+      undo: handleUndo,
+      redo: handleRedo,
+      'native-close': (request: ProjectActionRequest) =>
+        request.kind === 'native-close'
+          ? (nativeCloseBridge?.resolveWindowClose(request.nativeRequestId, true) ?? false)
+          : false,
+    },
+  })
+
+  const requestProjectAction = useCallback(
+    (kind: Exclude<ProjectActionKind, 'native-close'>, source: 'ui' | 'menu' = 'ui') =>
+      arbitrateProjectAction({ kind, source }),
+    [arbitrateProjectAction],
+  )
+
   const selectAllActiveTrackWords = useCallback(() => {
     setSelectedWordIds(new Set(activeTrack ? flattenTrack(activeTrack).map(({ word }) => word.id) : []))
   }, [activeTrack])
@@ -1165,35 +1208,23 @@ export default function App() {
         showToast('Cancel the video export before changing projects or media.', 'warning')
         return
       }
-      if (action === 'new') handleNew()
-      else if (action === 'open') void handleOpen()
-      else if (action === 'save') void handleSave(false)
-      else if (action === 'save-as') void handleSave(true)
-      else if (action === 'import-audio') void handleImportAudio()
-      else if (action === 'import-lrc') void handleImportLrc()
-      else if (action === 'export') openExportDialog()
+      if (action === 'new') requestProjectAction('new', 'menu')
+      else if (action === 'open') requestProjectAction('open', 'menu')
+      else if (action === 'save') requestProjectAction('save', 'menu')
+      else if (action === 'save-as') requestProjectAction('save-as', 'menu')
+      else if (action === 'import-audio') requestProjectAction('import-audio', 'menu')
+      else if (action === 'import-lrc') requestProjectAction('import-lrc', 'menu')
+      else if (action === 'export') requestProjectAction('export', 'menu')
       else if (action === 'play-toggle') playback.toggle()
       else if (action === 'select-all') {
         const editorHandledSelection = selectAllInFocusedEditor()
         if (!editorHandledSelection && !document.querySelector('[role="dialog"]')) {
           selectAllActiveTrackWords()
         }
-      } else if (action === 'undo') handleUndo()
-      else if (action === 'redo') handleRedo()
+      } else if (action === 'undo') requestProjectAction('undo', 'menu')
+      else if (action === 'redo') requestProjectAction('redo', 'menu')
     })
-  }, [
-    handleImportAudio,
-    handleImportLrc,
-    handleNew,
-    handleOpen,
-    handleRedo,
-    handleSave,
-    handleUndo,
-    openExportDialog,
-    playback.toggle,
-    selectAllActiveTrackWords,
-    showToast,
-  ])
+  }, [playback.toggle, requestProjectAction, selectAllActiveTrackWords, showToast])
 
   const handleSelectTrack = useCallback((trackId: string) => {
     cancelHeldSync()
@@ -1206,14 +1237,14 @@ export default function App() {
   const workflowGuideActions = createWorkflowGuideActions({
     canStartSync: syncWords.length > 0,
     close: () => setWorkflowGuideOpen(false),
-    startNew: handleNew,
-    open: () => void handleOpen(),
-    attachAudio: () => void handleImportAudio(),
+    startNew: () => requestProjectAction('new'),
+    open: () => requestProjectAction('open'),
+    attachAudio: () => requestProjectAction('import-audio'),
     editLyrics: () => setLyricsDialogOpen(true),
-    importLrc: () => void handleImportLrc(),
+    importLrc: () => requestProjectAction('import-lrc'),
     startSync: toggleSyncMode,
-    save: () => void handleSave(false),
-    exportProject: openExportDialog,
+    save: () => requestProjectAction('save'),
+    exportProject: () => requestProjectAction('export'),
   })
 
   const syncWordId = syncMode ? syncWords[syncCursor]?.id ?? null : null
@@ -1227,14 +1258,14 @@ export default function App() {
         canRedo={history.canRedo}
         issueCount={reviewIssues.length}
         hasLyrics={projectHasLyrics}
-        onNew={handleNew}
-        onOpen={() => void handleOpen()}
-        onSave={() => void handleSave(false)}
-        onUndo={handleUndo}
-        onRedo={handleRedo}
+        onNew={() => requestProjectAction('new')}
+        onOpen={() => requestProjectAction('open')}
+        onSave={() => requestProjectAction('save')}
+        onUndo={() => requestProjectAction('undo')}
+        onRedo={() => requestProjectAction('redo')}
         onShowWorkflow={() => setWorkflowGuideOpen(true)}
         onValidate={() => setValidationDialogOpen(true)}
-        onExport={openExportDialog}
+        onExport={() => requestProjectAction('export')}
       />
 
       <main className="studio-main">
@@ -1244,8 +1275,8 @@ export default function App() {
           onSelectTrack={handleSelectTrack}
           onUpdateProject={updateProject}
           onUpdateTrack={updateTrack}
-          onImportAudio={handleImportAudio}
-          onImportLrc={handleImportLrc}
+          onImportAudio={() => requestProjectAction('import-audio')}
+          onImportLrc={() => requestProjectAction('import-lrc')}
         />
 
         <div className={`unified-workspace ${syncMode ? 'is-syncing' : ''}`}>

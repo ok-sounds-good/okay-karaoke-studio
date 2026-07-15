@@ -40,6 +40,11 @@ const { createLocalFontPermissionPolicy } = require('./local-font-access.cjs')
 const { readLinkedImage } = require('./linked-image-decoder.cjs')
 const { createElectronNativeImageDecoder } = require('./native-image-adapter.cjs')
 const { createProjectOpenCoordinator } = require('./project-open.cjs')
+const {
+  createNativeCloseArbiter,
+  createNativeCloseRendererReadiness,
+  isNativeCloseRequestId,
+} = require('./native-close-arbiter.cjs')
 
 const APP_NAME = 'Okay Karaoke Studio'
 const APP_SCHEME = 'studio-app'
@@ -66,6 +71,9 @@ const CHANNELS = Object.freeze({
   cancelVideoExport: 'studio:cancel-video-export',
   videoExportProgress: 'studio:video-export-progress',
   menuAction: 'studio:menu-action',
+  windowCloseRequest: 'studio:window-close-request',
+  getPendingWindowClose: 'studio:get-pending-window-close',
+  resolveWindowClose: 'studio:resolve-window-close',
 })
 
 const MENU_ACTIONS = new Set([
@@ -650,6 +658,38 @@ const videoExportOperation = createVideoExportOperation({
   sendProgress: (sender, progress) => sender.send(CHANNELS.videoExportProgress, progress),
 })
 
+let videoExportLifecycleGuard
+const nativeCloseRendererReadiness = createNativeCloseRendererReadiness()
+
+const nativeCloseArbiter = createNativeCloseArbiter({
+  createRequestId: randomUUID,
+  hasActiveExport: videoExportOperation.hasActiveExport,
+  requestExportCancellation: (action) =>
+    action === 'app'
+      ? videoExportLifecycleGuard.requestAppQuit()
+      : videoExportLifecycleGuard.requestWindowClose(),
+  sendRequest: (request) => {
+    if (
+      !mainWindow ||
+      mainWindow.isDestroyed() ||
+      mainWindow.webContents.isDestroyed() ||
+      !nativeCloseRendererReadiness.isReady(mainWindow.webContents.id)
+    )
+      return false
+    mainWindow.webContents.send(CHANNELS.windowCloseRequest, request)
+    return true
+  },
+  closeWindow: () => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close()
+  },
+  quitApp: () => app.quit(),
+  onError: (error) => console.error('Unable to arbitrate native close:', error),
+})
+
+function clearNativeCloseOwnership(ownerId) {
+  if (nativeCloseRendererReadiness.clear(ownerId)) nativeCloseArbiter.clear()
+}
+
 async function confirmLifecycleVideoExportCancellation() {
   const owner = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null
   const options = {
@@ -662,13 +702,11 @@ async function confirmLifecycleVideoExportCancellation() {
   return result.response === 1
 }
 
-const videoExportLifecycleGuard = createVideoExportLifecycleGuard({
+videoExportLifecycleGuard = createVideoExportLifecycleGuard({
   confirmCancellation: confirmLifecycleVideoExportCancellation,
   abortActiveExport: videoExportOperation.abortActiveExport,
-  closeWindow: () => {
-    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close()
-  },
-  quitApp: () => app.quit(),
+  closeWindow: () => nativeCloseArbiter.resumeAfterExport('window'),
+  quitApp: () => nativeCloseArbiter.resumeAfterExport('app'),
   onError: (error) => {
     if (error?.code !== 'VIDEO_EXPORT_NOT_CANCELLABLE') {
       console.error('Unable to confirm video export cancellation:', error)
@@ -720,6 +758,24 @@ async function saveValidatedProject(owner, ownerId, request) {
 }
 
 function registerIpcHandlers() {
+  ipcMain.handle(CHANNELS.getPendingWindowClose, async (event) => {
+    assertTrustedSender(event)
+    nativeCloseRendererReadiness.markReady(event.sender.id)
+    return nativeCloseArbiter.getPendingRequest()
+  })
+
+  ipcMain.handle(CHANNELS.resolveWindowClose, async (event, value) => {
+    assertTrustedSender(event)
+    if (!isRecord(value)) throw new TypeError('resolveWindowClose requires an options object')
+    if (!isNativeCloseRequestId(value.requestId)) {
+      throw new TypeError('resolveWindowClose.requestId must be a UUID')
+    }
+    if (typeof value.proceed !== 'boolean') {
+      throw new TypeError('resolveWindowClose.proceed must be a boolean')
+    }
+    return nativeCloseArbiter.resolve(value.requestId, value.proceed)
+  })
+
   ipcMain.handle(CHANNELS.openProject, async (event) => {
     const owner = assertTrustedSender(event)
     const ownerId = event.sender.id
@@ -1019,10 +1075,13 @@ function secureWebContents(contents) {
   })
   contents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
     if (isMainFrame && !isInPlace) {
+      clearNativeCloseOwnership(ownerId)
       projectOpens.releaseOwner(ownerId)
     }
   })
+  contents.once('render-process-gone', () => clearNativeCloseOwnership(ownerId))
   contents.once('destroyed', () => {
+    clearNativeCloseOwnership(ownerId)
     projectOpens.releaseOwner(ownerId)
     mediaRequestSequences.delete(ownerId)
   })
@@ -1059,11 +1118,17 @@ async function createMainWindow() {
     if (!window.isDestroyed()) window.show()
   })
   window.on('close', (event) => {
-    if (!videoExportOperation.hasActiveExport()) return
+    if (nativeCloseArbiter.consumeWindowCloseApproval()) return
+    if (
+      window.webContents.isDestroyed() ||
+      !nativeCloseRendererReadiness.isReady(window.webContents.id)
+    )
+      return
     event.preventDefault()
-    void videoExportLifecycleGuard.requestWindowClose()
+    nativeCloseArbiter.requestWindowClose()
   })
   window.on('closed', () => {
+    clearNativeCloseOwnership(window.webContents.id)
     if (mainWindow === window) mainWindow = null
   })
 
@@ -1116,9 +1181,16 @@ if (!hasSingleInstanceLock) {
 } else {
   app.on('second-instance', focusMainWindow)
   app.on('before-quit', (event) => {
-    if (!videoExportOperation.hasActiveExport()) return
+    if (nativeCloseArbiter.consumeAppQuitApproval()) return
+    if (
+      !mainWindow ||
+      mainWindow.isDestroyed() ||
+      mainWindow.webContents.isDestroyed() ||
+      !nativeCloseRendererReadiness.isReady(mainWindow.webContents.id)
+    )
+      return
     event.preventDefault()
-    void videoExportLifecycleGuard.requestAppQuit()
+    nativeCloseArbiter.requestAppQuit()
   })
 
   app.whenReady().then(async () => {
@@ -1138,6 +1210,7 @@ if (!hasSingleInstanceLock) {
   }).catch((error) => {
     console.error('Failed to start Okay Karaoke Studio:', error)
     dialog.showErrorBox('Unable to start Okay Karaoke Studio', String(error?.message || error))
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.destroy()
     app.quit()
   })
 

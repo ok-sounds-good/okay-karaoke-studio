@@ -20,37 +20,65 @@ function createVideoExportLifecycleGuard({
 }) {
   let pendingAction = null
   let inFlight = null
+  let generationClosed = false
+  let queued = null
 
-  const request = (action) => {
-    if (action !== 'window' && action !== 'app') {
-      return Promise.reject(new TypeError('Video export lifecycle action must be window or app'))
+  const strongerAction = (left, right) => (left === 'app' || right === 'app' ? 'app' : 'window')
+
+  const queueNextGeneration = (action) => {
+    if (queued) {
+      queued.action = strongerAction(queued.action, action)
+      return queued.promise
     }
-    if (action === 'app' || pendingAction === null) pendingAction = action
-    if (inFlight) return inFlight
+    let resolve
+    const promise = new Promise((accept) => {
+      resolve = accept
+    })
+    queued = { action, promise, resolve }
+    return promise
+  }
 
+  const start = (action) => {
+    pendingAction = action
+    generationClosed = false
     inFlight = Promise.resolve()
       .then(confirmCancellation)
       .then(async (confirmed) => {
         if (!confirmed) {
           pendingAction = null
+          generationClosed = true
           return false
         }
         await abortActiveExport()
         const acceptedAction = pendingAction
         pendingAction = null
+        generationClosed = true
         if (acceptedAction === 'app') quitApp()
         else if (acceptedAction === 'window') closeWindow()
         return true
       })
       .catch((error) => {
         pendingAction = null
+        generationClosed = true
         onError(error)
         return false
       })
       .finally(() => {
         inFlight = null
+        const next = queued
+        queued = null
+        if (next) void start(next.action).then(next.resolve)
       })
+    return inFlight
+  }
 
+  const request = (action) => {
+    if (action !== 'window' && action !== 'app') {
+      return Promise.reject(new TypeError('Video export lifecycle action must be window or app'))
+    }
+    if (!inFlight) return start(action)
+    if (generationClosed) return queueNextGeneration(action)
+    pendingAction = strongerAction(pendingAction, action)
     return inFlight
   }
 
