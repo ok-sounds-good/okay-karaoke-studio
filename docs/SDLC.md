@@ -112,6 +112,14 @@ Actions definition remains available, unchanged, at
 `.github/workflows/ci.yml.disabled`; its non-workflow extension keeps it from
 triggering or consuming GitHub-hosted capacity.
 
+Automatic hosted workflows run only for GitHub pushes to `main` and pull-request
+events whose base branch is `main`. Configure the CircleCI GitHub App project
+trigger with **PR opened or pushed to, default branch and tag pushes** so open,
+reopen, and synchronize events reach the repository workflow guard. The guard
+rejects tag pushes, ordinary non-`main` branch pushes, and pull requests targeting
+another branch. It also excludes manual and API pipelines; broadening that
+contract requires an explicit repository change.
+
 Both CircleCI contexts are merge blockers. A provider outage, unreachable
 executor, account-capacity failure, or job that never starts is recorded as
 **unavailable — not passed** and does not satisfy the platform gate. All feasible

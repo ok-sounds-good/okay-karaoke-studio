@@ -153,6 +153,10 @@ jobs:
 
 workflows:
   ci:
+    when: >-
+      (pipeline.event.name == "push" and pipeline.git.branch == "main") or
+      (pipeline.event.name == "pull_request" and
+      pipeline.event.github.pull_request.base.ref == "main")
     jobs:
       - macOS
       - Windows
