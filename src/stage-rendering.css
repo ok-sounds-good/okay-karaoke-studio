@@ -102,6 +102,11 @@
   gap: var(--stage-lyric-gap);
 }
 
+.karaoke-stage.is-designing .active-lines {
+  align-content: center;
+  height: 100%;
+}
+
 .karaoke-stage .stage-line p,
 .karaoke-stage .active-lines--duet .stage-line p {
   width: 100%;

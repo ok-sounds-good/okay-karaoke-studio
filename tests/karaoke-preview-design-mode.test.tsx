@@ -1,0 +1,454 @@
+// @vitest-environment happy-dom
+
+import { act } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { KaraokePreview, type KaraokePreviewDesignMode } from '../src/components/KaraokePreview'
+import { createProject } from '../src/lib/model'
+import { previewFrameStateAt } from '../src/lib/stage-frame-state'
+import { logicalStagePx } from '../src/lib/stage-layout'
+import {
+  SYSTEM_MONOSPACE_TYPEFACE,
+  fontFaceKey,
+  fontTypefaceKey,
+  genericFontFace,
+  type FontFaceDescriptor,
+  type FontSizeStyle,
+  type FontTypefaceDescriptor,
+  type LyricTextStyle,
+} from '../src/lib/video-style'
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((onResolve, onReject) => {
+    resolve = onResolve
+    reject = onReject
+  })
+  return { promise, reject, resolve }
+}
+
+function localLyricStyle(
+  family: string,
+  postscriptName: string,
+  style = 'Regular',
+  weight = 400,
+): LyricTextStyle {
+  const face: FontFaceDescriptor = {
+    fullName: `${family} ${style}`,
+    style,
+    postscriptName,
+    weight,
+    slant: 'normal',
+  }
+  const typeface: FontTypefaceDescriptor = { kind: 'local', family, faces: [face] }
+  return {
+    typeface,
+    fontStyle: face,
+    sizePx: 82,
+    sungColor: '#FF8A2B',
+    unsungColor: '#72687D',
+  }
+}
+
+function applyFont(target: FontSizeStyle, source: FontSizeStyle) {
+  target.typeface = source.typeface
+  target.fontStyle = source.fontStyle
+}
+
+function previewMarkup(
+  designMode: KaraokePreviewDesignMode,
+  project = createProject(),
+  playbackMs = 0,
+  onEditLyrics?: () => void,
+) {
+  return renderToStaticMarkup(
+    <KaraokePreview
+      project={project}
+      playbackMs={playbackMs}
+      lyricMs={playbackMs}
+      selectedWordIds={new Set()}
+      designMode={designMode}
+      onEditLyrics={onEditLyrics}
+    />,
+  )
+}
+
+describe('Karaoke Preview project-lyrics design mode', () => {
+  beforeEach(() => {
+    ;(
+      globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }
+    ).IS_REACT_ACT_ENVIRONMENT = true
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+    document.body.replaceChildren()
+  })
+
+  it('renders one fixed-stage representative line with draft typography and mixed progress', () => {
+    const project = createProject({ title: 'Project title', artist: 'Project artist' })
+    project.stageStyle.background.mode = 'solid'
+    project.stageStyle.background.solidColor = '#123456'
+    const style: LyricTextStyle = {
+      typeface: SYSTEM_MONOSPACE_TYPEFACE,
+      fontStyle: genericFontFace(SYSTEM_MONOSPACE_TYPEFACE, 'Bold'),
+      sizePx: 104,
+      sungColor: '#ABCDEF',
+      unsungColor: '#234567',
+    }
+    const markup = previewMarkup({ target: 'project-lyrics', style }, project, 0, vi.fn())
+    const rendered = document.createElement('div')
+    rendered.innerHTML = markup
+    const panel = rendered.querySelector<HTMLElement>(
+      '[aria-label="Project lyrics design preview"]',
+    )
+    const stage = panel?.querySelector<HTMLElement>('.karaoke-stage')
+    const design = stage?.querySelector<HTMLElement>('[data-design-preview="project-lyrics"]')
+    const line = design?.querySelector<HTMLElement>('.stage-line')
+    const words = [...(design?.querySelectorAll<HTMLElement>('.stage-word') ?? [])]
+
+    expect(stage?.dataset.logicalStage).toBe('1920x1080')
+    expect(stage?.classList.contains('is-designing')).toBe(true)
+    expect(stage?.style.background).toBe('#123456')
+    expect(stage?.querySelector('.karaoke-stage__safe-area')).not.toBeNull()
+    expect(stage?.textContent).toContain('OKAY / STUDIO')
+    expect(stage?.textContent).toContain('Project artist · Project title')
+    expect(design?.textContent).toBe('Sing the first words and see the rest')
+    expect(design?.textContent).not.toContain(`This is ${style.typeface.family}`)
+    expect(line?.style.fontFamily).toContain('ui-monospace')
+    expect(line?.style.fontWeight).toBe('700')
+    expect(line?.getAttribute('style')).toContain(`font-size:${logicalStagePx(104)}`)
+    expect(line?.style.getPropertyValue('--track-color')).toBe('#ABCDEF')
+    expect(line?.style.getPropertyValue('--unsung-color')).toBe('#234567')
+    expect(words.map((word) => word.style.getPropertyValue('--word-progress'))).toEqual([
+      '100%',
+      '50%',
+      '0%',
+      '0%',
+      '0%',
+      '0%',
+      '0%',
+      '0%',
+    ])
+    expect(panel?.querySelector('[aria-label="Visible lyric lines"]')).toBeNull()
+    expect(panel?.querySelector('[aria-label="Lyric line advance mode"]')).toBeNull()
+    expect(panel?.textContent).not.toContain('Edit text')
+    expect(panel?.querySelector('.title-card')).toBeNull()
+  })
+
+  it('hides sync aids even when the ordinary frame planner produces one', () => {
+    const project = createProject()
+    const track = project.tracks[0]!
+    track.vocalStyle.syncAid = { enabled: true, minLeadMs: 2_000, maxLeadMs: 3_000 }
+    track.lines = [
+      {
+        id: 'design-hidden-sync-line',
+        text: 'Timed words',
+        startMs: 3_000,
+        endMs: 5_000,
+        words: [
+          { id: 'design-hidden-sync-word-1', text: 'Timed', startMs: 3_000, endMs: 4_000 },
+          { id: 'design-hidden-sync-word-2', text: 'words', startMs: 4_000, endMs: 5_000 },
+        ],
+      },
+    ]
+    expect(previewFrameStateAt(project, 1_000).syncAids).toHaveLength(1)
+
+    const markup = previewMarkup(
+      { target: 'project-lyrics', style: project.stageStyle.lyrics },
+      project,
+      1_000,
+    )
+    expect(markup).not.toContain('class="sync-aid"')
+  })
+
+  it('preserves ordinary preloading for project, title, frame, and vocal timeline roles', async () => {
+    const sources: string[] = []
+    vi.stubGlobal(
+      'FontFace',
+      class {
+        constructor(_family: string, source: string) {
+          sources.push(source)
+        }
+
+        async load() {
+          return this
+        }
+      },
+    )
+    Object.defineProperty(document, 'fonts', {
+      configurable: true,
+      value: { add: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn() },
+    })
+    const project = createProject()
+    const lyrics = localLyricStyle('Ordinary Lyrics', 'OrdinaryLyrics-Regular')
+    const title = localLyricStyle('Future Title', 'FutureTitle-Regular')
+    const frame = localLyricStyle('Future Frame', 'FutureFrame-Regular')
+    const vocal = localLyricStyle('Future Vocal', 'FutureVocal-Regular')
+    project.stageStyle.lyrics = lyrics
+    applyFont(project.stageStyle.titleCard.title, title)
+    project.stageStyle.titleCard.title.visible = false
+    applyFont(project.stageStyle.stageFrame.brand, frame)
+    project.stageStyle.stageFrame.enabled = false
+    project.tracks[0]!.vocalStyle.typeface = vocal.typeface
+    project.tracks[0]!.vocalStyle.fontStyle = vocal.fontStyle
+    const container = document.createElement('div')
+    document.body.append(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(
+        <KaraokePreview project={project} playbackMs={0} lyricMs={0} selectedWordIds={new Set()} />,
+      )
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(sources).toEqual([
+      'local("OrdinaryLyrics-Regular")',
+      'local("FutureTitle-Regular")',
+      'local("FutureFrame-Regular")',
+      'local("FutureVocal-Regular")',
+    ])
+    expect(container.querySelector('[data-design-preview]')).toBeNull()
+    expect(container.querySelector('[aria-label="Visible lyric lines"]')).not.toBeNull()
+    await act(async () => root.unmount())
+  })
+
+  it('loads only rendered design roles and uses the effective draft face on failure', async () => {
+    const sources: string[] = []
+    vi.stubGlobal(
+      'FontFace',
+      class {
+        constructor(
+          _family: string,
+          private source: string,
+        ) {
+          sources.push(source)
+        }
+
+        async load() {
+          if (this.source.includes('MissingDesign')) throw new Error('font unavailable')
+          if (this.source.includes('Stale')) throw new Error('stale font must not be loaded')
+          return this
+        }
+      },
+    )
+    Object.defineProperty(document, 'fonts', {
+      configurable: true,
+      value: { add: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn() },
+    })
+    const project = createProject()
+    const staleLyrics = localLyricStyle('Stale Lyrics', 'StaleLyrics-Regular')
+    const staleVocal = localLyricStyle('Stale Vocal', 'StaleVocal-Regular')
+    const staleTitle = localLyricStyle('Stale Title', 'StaleTitle-Regular')
+    const renderedBrand = localLyricStyle('Rendered Brand', 'RenderedBrand-Regular')
+    project.stageStyle.lyrics = staleLyrics
+    applyFont(project.stageStyle.titleCard.title, staleTitle)
+    applyFont(project.stageStyle.stageFrame.brand, renderedBrand)
+    project.tracks[0]!.vocalStyle.typeface = staleVocal.typeface
+    project.tracks[0]!.vocalStyle.fontStyle = staleVocal.fontStyle
+    const available = localLyricStyle('Available Design', 'AvailableDesign-Regular')
+    const container = document.createElement('div')
+    document.body.append(container)
+    const root: Root = createRoot(container)
+
+    await act(async () => {
+      root.render(
+        <KaraokePreview
+          project={project}
+          playbackMs={0}
+          lyricMs={0}
+          selectedWordIds={new Set()}
+          designMode={{ target: 'project-lyrics', style: available }}
+        />,
+      )
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(sources).toEqual(['local("RenderedBrand-Regular")', 'local("AvailableDesign-Regular")'])
+    expect(
+      container.querySelector<HTMLElement>('[data-design-preview] .stage-line')?.style.fontFamily,
+    ).toContain('OKSLocalFont')
+
+    const requested = localLyricStyle('Old Request', 'OldRequest-Regular')
+    const missing = localLyricStyle('Missing Design', 'MissingDesign-Bold', 'Bold', 700)
+    missing.fontStyle = requested.fontStyle
+    const typefaceBefore = fontTypefaceKey(missing.typeface)
+    const faceBefore = fontFaceKey(missing.fontStyle)
+    await act(async () => {
+      root.render(
+        <KaraokePreview
+          project={project}
+          playbackMs={0}
+          lyricMs={0}
+          selectedWordIds={new Set()}
+          designMode={{ target: 'project-lyrics', style: missing }}
+        />,
+      )
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(sources).toEqual([
+      'local("RenderedBrand-Regular")',
+      'local("AvailableDesign-Regular")',
+      'local("MissingDesign-Bold")',
+    ])
+    expect(sources.every((source) => !source.includes('Stale'))).toBe(true)
+    expect(container.querySelector('.stage-resource-warning')?.textContent).toContain(
+      'Requested font Missing Design Bold is unavailable',
+    )
+    const failedLine = container.querySelector<HTMLElement>('[data-design-preview] .stage-line')!
+    expect(failedLine.style.fontFamily).toContain('system-ui')
+    expect(failedLine.style.fontWeight).toBe('700')
+    expect(fontTypefaceKey(missing.typeface)).toBe(typefaceBefore)
+    expect(fontFaceKey(missing.fontStyle)).toBe(faceBefore)
+    await act(async () => root.unmount())
+  })
+
+  it.each(['success', 'failure'] as const)(
+    'never paints stale font A %s onto a pending font B selection',
+    async (outcome) => {
+      const suffix = outcome === 'success' ? 'Success' : 'Failure'
+      const styleA = localLyricStyle(`Race ${suffix} A`, `Race${suffix}A-Regular`)
+      const styleB = localLyricStyle(`Race ${suffix} B`, `Race${suffix}B-Regular`)
+      const loadA = deferred<void>()
+      const loadB = deferred<void>()
+      const aliases = new Map<string, string>()
+      vi.stubGlobal(
+        'FontFace',
+        class {
+          constructor(
+            public family: string,
+            private source: string,
+          ) {
+            aliases.set(source, family)
+          }
+
+          load() {
+            const pending = this.source.includes(`Race${suffix}A`) ? loadA : loadB
+            return pending.promise.then(() => this)
+          }
+        },
+      )
+      Object.defineProperty(document, 'fonts', {
+        configurable: true,
+        value: { add: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn() },
+      })
+      const project = createProject()
+      const container = document.createElement('div')
+      document.body.append(container)
+      const root = createRoot(container)
+      const renderStyle = (style: LyricTextStyle) =>
+        root.render(
+          <KaraokePreview
+            project={project}
+            playbackMs={0}
+            lyricMs={0}
+            selectedWordIds={new Set()}
+            designMode={{ target: 'project-lyrics', style }}
+          />,
+        )
+
+      await act(async () => renderStyle(styleA))
+      await act(async () => renderStyle(styleB))
+      await act(async () => {
+        if (outcome === 'success') loadA.resolve(undefined)
+        else loadA.reject(new Error('stale A failure'))
+        await Promise.allSettled([loadA.promise])
+        await Promise.resolve()
+      })
+
+      const pendingLine = container.querySelector<HTMLElement>('[data-design-preview] .stage-line')!
+      const aliasA = aliases.get(`local("Race${suffix}A-Regular")`)!
+      expect(pendingLine.style.fontFamily).not.toContain(aliasA)
+      expect(container.querySelector('.stage-resource-warning')?.textContent).toContain(
+        'Loading requested local font',
+      )
+      expect(container.textContent).not.toContain(`Race ${suffix} A Regular is unavailable`)
+
+      await act(async () => {
+        loadB.resolve(undefined)
+        await loadB.promise
+        await Promise.resolve()
+      })
+      const aliasB = aliases.get(`local("Race${suffix}B-Regular")`)!
+      expect(pendingLine.style.fontFamily).toContain(aliasB)
+      expect(pendingLine.style.fontFamily).not.toContain(aliasA)
+      expect(container.querySelector('.stage-resource-warning')).toBeNull()
+      await act(async () => root.unmount())
+    },
+  )
+
+  it('consumes retry for one selection and reuses cached prior design and ordinary fonts', async () => {
+    const attempts = new Map<string, number>()
+    vi.stubGlobal(
+      'FontFace',
+      class {
+        constructor(
+          public family: string,
+          private source: string,
+        ) {
+          attempts.set(source, (attempts.get(source) ?? 0) + 1)
+        }
+
+        async load() {
+          if (this.source.includes('RetryOnceA') && attempts.get(this.source) === 1) {
+            throw new Error('first A load fails')
+          }
+          return this
+        }
+      },
+    )
+    Object.defineProperty(document, 'fonts', {
+      configurable: true,
+      value: { add: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn() },
+    })
+    const project = createProject()
+    project.stageStyle.lyrics = localLyricStyle('Cached Ordinary', 'CachedOrdinary-Regular')
+    const styleA = localLyricStyle('Retry Once A', 'RetryOnceA-Regular')
+    const styleB = localLyricStyle('Retry Once B', 'RetryOnceB-Regular')
+    const container = document.createElement('div')
+    document.body.append(container)
+    const root = createRoot(container)
+    const renderMode = async (style?: LyricTextStyle) => {
+      await act(async () => {
+        root.render(
+          <KaraokePreview
+            project={project}
+            playbackMs={0}
+            lyricMs={0}
+            selectedWordIds={new Set()}
+            designMode={style ? { target: 'project-lyrics', style } : undefined}
+          />,
+        )
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+    }
+
+    await renderMode()
+    await renderMode(styleA)
+    const retry = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Retry',
+    )!
+    await act(async () => {
+      retry.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    await renderMode(styleB)
+    await renderMode(styleA)
+    expect(container.querySelector('.stage-resource-warning')).toBeNull()
+    await renderMode()
+
+    expect(attempts.get('local("RetryOnceA-Regular")')).toBe(2)
+    expect(attempts.get('local("RetryOnceB-Regular")')).toBe(1)
+    expect(attempts.get('local("CachedOrdinary-Regular")')).toBe(1)
+    expect(container.querySelector('.stage-resource-warning')).toBeNull()
+    await act(async () => root.unmount())
+  })
+})

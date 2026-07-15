@@ -1,20 +1,31 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Edit3, MonitorPlay, ShieldCheck } from 'lucide-react'
+import {
+  designPreviewFonts,
+  previewFontKey,
+  projectPreviewFonts,
+  usePreviewFonts,
+} from '../hooks/usePreviewFonts'
 import type { KaraokeProject, LyricDisplaySettings } from '../lib/model'
 import { formatTime } from '../lib/model'
-import { fontFamilyFor, loadLocalFont } from '../lib/font-runtime'
+import { fontFamilyFor } from '../lib/font-runtime'
 import { logicalStagePx, previewStageLayoutVariables } from '../lib/stage-layout'
 import { previewFrameStateAt, type StageFrameLine } from '../lib/stage-frame-state'
 import { SYNC_AID_GEOMETRY, syncAidBrightness, syncAidPosition } from '../lib/sync-aid-geometry'
 import {
+  DEFAULT_VOCAL_STYLE,
   backgroundReadiness,
-  fontFaceKey,
   resolveFontFace,
   resolveVocalStyle,
-  type FontSizeStyle,
+  type LyricTextStyle,
   type TextStyle,
 } from '../lib/video-style'
 import { Button } from './ui'
+
+export type KaraokePreviewDesignMode = {
+  target: 'project-lyrics'
+  style: LyricTextStyle
+}
 
 interface KaraokePreviewProps {
   project: KaraokeProject
@@ -23,65 +34,14 @@ interface KaraokePreviewProps {
   selectedWordIds: Set<string>
   onUpdateLyricDisplay?: (patch: Partial<LyricDisplaySettings>) => void
   onEditLyrics?: () => void
-}
-
-function fontKey(style: FontSizeStyle) {
-  const face = resolveFontFace(style.typeface, style.fontStyle)
-  return JSON.stringify([style.typeface.kind, style.typeface.family, fontFaceKey(face)])
-}
-
-function projectFonts(project: KaraokeProject) {
-  const stage = project.stageStyle
-  const values: FontSizeStyle[] = [
-    stage.lyrics,
-    stage.titleCard.eyebrow,
-    stage.titleCard.title,
-    stage.titleCard.artist,
-    stage.stageFrame.brand,
-    stage.stageFrame.clock,
-    stage.stageFrame.footer,
-    ...project.tracks.map((track) => resolveVocalStyle(stage.lyrics, track.vocalStyle)),
-  ]
-  return [...new Map(values.map((style) => [fontKey(style), style])).values()]
-}
-
-function useFontRuntime(project: KaraokeProject) {
-  const selectedFonts = projectFonts(project)
-  const selectionKey = JSON.stringify(selectedFonts.map(fontKey))
-  const fonts = useMemo(() => selectedFonts, [selectionKey])
-  const [generation, setGeneration] = useState(0)
-  const [result, setResult] = useState<{
-    aliases: Record<string, string | null>
-    failures: string[]
-    loading: boolean
-  }>({ aliases: {}, failures: [], loading: false })
-  useEffect(() => {
-    let active = true
-    setResult((current) => ({ ...current, loading: fonts.some(({ typeface }) => typeface.kind === 'local') }))
-    void Promise.all(fonts.map(async (style) => ({
-      alias: await loadLocalFont(style.typeface, style.fontStyle, generation > 0),
-      face: resolveFontFace(style.typeface, style.fontStyle),
-      key: fontKey(style),
-      local: style.typeface.kind === 'local',
-    }))).then((loaded) => {
-      if (!active) return
-      setResult({
-        aliases: Object.fromEntries(loaded.map(({ alias, key }) => [key, alias])),
-        failures: loaded.filter(({ alias, local }) => local && !alias)
-          .map(({ face }) => face.fullName),
-        loading: false,
-      })
-    })
-    return () => { active = false }
-  }, [fonts, generation])
-  return { ...result, retry: () => setGeneration((value) => value + 1) }
+  designMode?: KaraokePreviewDesignMode
 }
 
 function textStyle(style: TextStyle, aliases: Record<string, string | null>): CSSProperties {
   const face = resolveFontFace(style.typeface, style.fontStyle)
   return {
     color: style.color,
-    fontFamily: fontFamilyFor(style.typeface, aliases[fontKey(style)] ?? null),
+    fontFamily: fontFamilyFor(style.typeface, aliases[previewFontKey(style)] ?? null),
     fontSize: logicalStagePx(style.sizePx),
     fontStyle: face.slant,
     fontWeight: face.weight,
@@ -91,6 +51,22 @@ function textStyle(style: TextStyle, aliases: Record<string, string | null>): CS
 
 function lineKey(trackId: string, lineId: string) {
   return JSON.stringify([trackId, lineId])
+}
+
+const PROJECT_LYRICS_DESIGN_WORDS = ['Sing', 'the', 'first', 'words', 'and', 'see', 'the', 'rest']
+
+function projectLyricsDesignLine(style: LyricTextStyle): StageFrameLine {
+  return {
+    id: 'project-lyrics-design-line',
+    trackId: 'project-lyrics-design-track',
+    text: PROJECT_LYRICS_DESIGN_WORDS.join(' '),
+    style: resolveVocalStyle(style, DEFAULT_VOCAL_STYLE),
+    words: PROJECT_LYRICS_DESIGN_WORDS.map((text, index) => ({
+      id: `project-lyrics-design-word-${index}`,
+      text,
+      progress: index === 0 ? 1 : index === 1 ? 0.5 : 0,
+    })),
+  }
 }
 
 function PreviewLine({
@@ -104,22 +80,37 @@ function PreviewLine({
 }) {
   const face = resolveFontFace(line.style.typeface, line.style.fontStyle)
   return (
-    <div className={`stage-line stage-line--${line.style.alignment}`} style={{
-      '--track-color': line.style.sungColor,
-      '--unsung-color': line.style.unsungColor,
-      fontFamily: fontFamilyFor(line.style.typeface, aliases[fontKey(line.style)] ?? null),
-      fontSize: logicalStagePx(line.style.sizePx),
-      fontStyle: face.slant,
-      fontWeight: face.weight,
-      fontSynthesis: 'none',
-    } as CSSProperties}>
-      <p><span className="stage-line__text" data-sync-line={lineKey(line.trackId, line.id)}>
-        {line.words.map((word, index) => <span
-          key={word.id}
-          className={`stage-word ${word.progress >= 1 ? 'is-done' : ''} ${selectedWordIds.has(word.id) ? 'is-selected' : ''}`}
-          style={{ '--word-progress': `${word.progress * 100}%` } as CSSProperties}
-        >{index ? ' ' : ''}{word.text}</span>)}
-      </span></p>
+    <div
+      className={`stage-line stage-line--${line.style.alignment}`}
+      style={
+        {
+          '--track-color': line.style.sungColor,
+          '--unsung-color': line.style.unsungColor,
+          fontFamily: fontFamilyFor(
+            line.style.typeface,
+            aliases[previewFontKey(line.style)] ?? null,
+          ),
+          fontSize: logicalStagePx(line.style.sizePx),
+          fontStyle: face.slant,
+          fontWeight: face.weight,
+          fontSynthesis: 'none',
+        } as CSSProperties
+      }
+    >
+      <p>
+        <span className="stage-line__text" data-sync-line={lineKey(line.trackId, line.id)}>
+          {line.words.map((word, index) => (
+            <span
+              key={word.id}
+              className={`stage-word ${word.progress >= 1 ? 'is-done' : ''} ${selectedWordIds.has(word.id) ? 'is-selected' : ''}`}
+              style={{ '--word-progress': `${word.progress * 100}%` } as CSSProperties}
+            >
+              {index ? ' ' : ''}
+              {word.text}
+            </span>
+          ))}
+        </span>
+      </p>
     </div>
   )
 }
@@ -175,70 +166,228 @@ export function KaraokePreview({
   selectedWordIds,
   onUpdateLyricDisplay,
   onEditLyrics,
+  designMode,
 }: KaraokePreviewProps) {
   const frame = useMemo(() => previewFrameStateAt(project, playbackMs), [playbackMs, project])
-  const fontRuntime = useFontRuntime(project)
+  const designStyle = designMode?.style ?? null
+  const designLine = useMemo(
+    () => (designStyle ? projectLyricsDesignLine(designStyle) : null),
+    [designStyle],
+  )
+  const selectedFonts = designMode
+    ? designPreviewFonts(frame, designMode.style)
+    : projectPreviewFonts(project)
+  const fontRuntime = usePreviewFonts(selectedFonts)
   const background = frame.stageStyle.background
   const imageReadiness = backgroundReadiness(
     background,
     null,
     'Linked-image Preview and MP4 export are deferred; using the authored gradient fallback.',
   )
-  const backgroundStyle: CSSProperties = background.mode === 'solid'
-    ? { background: background.solidColor }
-    : { background: `linear-gradient(145deg, ${background.gradientStartColor}, ${background.gradientEndColor})` }
+  const backgroundStyle: CSSProperties =
+    background.mode === 'solid'
+      ? { background: background.solidColor }
+      : {
+          background: `linear-gradient(145deg, ${background.gradientStartColor}, ${background.gradientEndColor})`,
+        }
   const stageFrame = frame.stageStyle.stageFrame
   const stageVars = {
     ...backgroundStyle,
-    ...previewStageLayoutVariables(frame.lines.length),
+    ...previewStageLayoutVariables(designLine ? 1 : frame.lines.length),
     '--stage-frame-color': stageFrame.lineColor,
     '--stage-frame-width': logicalStagePx(stageFrame.lineWidthPx),
   } as CSSProperties
   const lines = new Map(frame.lines.map((line) => [lineKey(line.trackId, line.id), line]))
+  const stageClassName = designLine
+    ? 'karaoke-stage karaoke-stage--lines-1 is-designing'
+    : `karaoke-stage karaoke-stage--lines-${project.lyricDisplay.lineCount}`
 
-  return <section className="preview-panel panel" aria-label="Karaoke preview">
-    <header className="panel-header preview-panel__header">
-      <div className="panel-title"><span className="panel-title__icon"><MonitorPlay size={16} /></span>
-        <div><span className="eyebrow">Stage monitor</span><h2>Live preview</h2></div>
-      </div>
-      <div className="preview-toolbar">
-        <label className="preview-setting"><span>Lines</span><select
-          aria-label="Visible lyric lines"
-          title="Choose how many lyric lines appear in the preview and exported video"
-          value={project.lyricDisplay.lineCount}
-          onChange={(event) => onUpdateLyricDisplay?.({ lineCount: Number(event.target.value) })}
-        >{[1, 2, 3, 4, 5].map((count) => <option key={count} value={count}>{count}</option>)}</select></label>
-        <label className="preview-setting"><span>Advance</span><select
-          aria-label="Lyric line advance mode"
-          title="Clear replaces a page; Scroll advances one line at a time within a section"
-          value={project.lyricDisplay.advanceMode}
-          onChange={(event) => onUpdateLyricDisplay?.({ advanceMode: event.target.value as LyricDisplaySettings['advanceMode'] })}
-        ><option value="clear">Clear</option><option value="scroll">Scroll</option></select></label>
-        {onEditLyrics && <Button size="sm" variant="ghost" title="Open the lyric text editor" onClick={onEditLyrics}><Edit3 size={13} /> Edit text</Button>}
-        <div className="preview-badges"><span className="status-pill status-pill--live"><i /> Live</span><span className="status-pill"><ShieldCheck size={12} /> Title safe</span></div>
-      </div>
-    </header>
+  return (
+    <section
+      className="preview-panel panel"
+      aria-label={designLine ? 'Project lyrics design preview' : 'Karaoke preview'}
+    >
+      <header className="panel-header preview-panel__header">
+        <div className="panel-title">
+          <span className="panel-title__icon">
+            <MonitorPlay size={16} />
+          </span>
+          <div>
+            <span className="eyebrow">{designLine ? 'Project lyrics' : 'Stage monitor'}</span>
+            <h2>{designLine ? 'Design preview' : 'Live preview'}</h2>
+          </div>
+        </div>
+        {designLine ? (
+          <div className="preview-badges">
+            <span className="status-pill">Fixed 1920 × 1080 stage</span>
+            <span className="status-pill">
+              <ShieldCheck size={12} /> Title safe
+            </span>
+          </div>
+        ) : (
+          <div className="preview-toolbar">
+            <label className="preview-setting">
+              <span>Lines</span>
+              <select
+                aria-label="Visible lyric lines"
+                title="Choose how many lyric lines appear in the preview and exported video"
+                value={project.lyricDisplay.lineCount}
+                onChange={(event) =>
+                  onUpdateLyricDisplay?.({ lineCount: Number(event.target.value) })
+                }
+              >
+                {[1, 2, 3, 4, 5].map((count) => (
+                  <option key={count} value={count}>
+                    {count}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="preview-setting">
+              <span>Advance</span>
+              <select
+                aria-label="Lyric line advance mode"
+                title="Clear replaces a page; Scroll advances one line at a time within a section"
+                value={project.lyricDisplay.advanceMode}
+                onChange={(event) =>
+                  onUpdateLyricDisplay?.({
+                    advanceMode: event.target.value as LyricDisplaySettings['advanceMode'],
+                  })
+                }
+              >
+                <option value="clear">Clear</option>
+                <option value="scroll">Scroll</option>
+              </select>
+            </label>
+            {onEditLyrics && (
+              <Button
+                size="sm"
+                variant="ghost"
+                title="Open the lyric text editor"
+                onClick={onEditLyrics}
+              >
+                <Edit3 size={13} /> Edit text
+              </Button>
+            )}
+            <div className="preview-badges">
+              <span className="status-pill status-pill--live">
+                <i /> Live
+              </span>
+              <span className="status-pill">
+                <ShieldCheck size={12} /> Title safe
+              </span>
+            </div>
+          </div>
+        )}
+      </header>
 
-    <div className={`karaoke-stage karaoke-stage--lines-${project.lyricDisplay.lineCount}`} style={stageVars}>
-      <div className="karaoke-stage__grain" />
-      {!imageReadiness.ready ? <div className="stage-resource-warning" role="status">{imageReadiness.reason}</div>
-        : fontRuntime.loading ? <div className="stage-resource-warning" role="status">Loading requested local font; previewing with System UI.</div>
-          : fontRuntime.failures[0] && <div className="stage-resource-warning" role="status">Requested font {fontRuntime.failures[0]} is unavailable; previewing with System UI. <button onClick={fontRuntime.retry}>Retry</button></div>}
-      {stageFrame.enabled && <div className="karaoke-stage__safe-area" aria-hidden="true" />}
-      {stageFrame.enabled && stageFrame.brand.visible && <div className="karaoke-stage__brand" style={textStyle(stageFrame.brand, fontRuntime.aliases)}>OKAY / STUDIO</div>}
-      {stageFrame.enabled && stageFrame.clock.visible && <div className="karaoke-stage__time" style={textStyle(stageFrame.clock, fontRuntime.aliases)}>{formatTime(playbackMs)}</div>}
-      <div className="karaoke-stage__content">
-        {frame.showTitle ? <div className="title-card">
-          {frame.stageStyle.titleCard.eyebrow.visible && <span style={textStyle(frame.stageStyle.titleCard.eyebrow, fontRuntime.aliases)}>Tonight&apos;s performance</span>}
-          {frame.stageStyle.titleCard.title.visible && <h3 style={textStyle(frame.stageStyle.titleCard.title, fontRuntime.aliases)}>{frame.title}</h3>}
-          {frame.stageStyle.titleCard.artist.visible && <p style={textStyle(frame.stageStyle.titleCard.artist, fontRuntime.aliases)}>{frame.artist}</p>}
-        </div> : frame.lines.length ? <div className="active-lines">{frame.lines.map((line) => <PreviewLine key={lineKey(line.trackId, line.id)} line={line} selectedWordIds={selectedWordIds} aliases={fontRuntime.aliases} />)}</div> : null}
+      <div
+        className={stageClassName}
+        data-logical-stage={designLine ? '1920x1080' : undefined}
+        style={stageVars}
+      >
+        <div className="karaoke-stage__grain" />
+        {!imageReadiness.ready ? (
+          <div className="stage-resource-warning" role="status">
+            {imageReadiness.reason}
+          </div>
+        ) : fontRuntime.loading ? (
+          <div className="stage-resource-warning" role="status">
+            Loading requested local font; previewing with System UI.
+          </div>
+        ) : (
+          fontRuntime.failures[0] &&
+          (designLine ? (
+            <div className="stage-resource-warning" role="status">
+              Requested font {fontRuntime.failures[0]} is unavailable; Preview and MP4 use System
+              UI. <button onClick={fontRuntime.retry}>Retry</button>
+            </div>
+          ) : (
+            <div className="stage-resource-warning" role="status">
+              Requested font {fontRuntime.failures[0]} is unavailable; previewing with System UI.{' '}
+              <button onClick={fontRuntime.retry}>Retry</button>
+            </div>
+          ))
+        )}
+        {stageFrame.enabled && <div className="karaoke-stage__safe-area" aria-hidden="true" />}
+        {stageFrame.enabled && stageFrame.brand.visible && (
+          <div
+            className="karaoke-stage__brand"
+            style={textStyle(stageFrame.brand, fontRuntime.aliases)}
+          >
+            OKAY / STUDIO
+          </div>
+        )}
+        {stageFrame.enabled && stageFrame.clock.visible && (
+          <div
+            className="karaoke-stage__time"
+            style={textStyle(stageFrame.clock, fontRuntime.aliases)}
+          >
+            {formatTime(playbackMs)}
+          </div>
+        )}
+        <div className="karaoke-stage__content">
+          {designLine ? (
+            <div className="active-lines" data-design-preview="project-lyrics">
+              <PreviewLine
+                line={designLine}
+                selectedWordIds={selectedWordIds}
+                aliases={fontRuntime.aliases}
+              />
+            </div>
+          ) : frame.showTitle ? (
+            <div className="title-card">
+              {frame.stageStyle.titleCard.eyebrow.visible && (
+                <span style={textStyle(frame.stageStyle.titleCard.eyebrow, fontRuntime.aliases)}>
+                  Tonight&apos;s performance
+                </span>
+              )}
+              {frame.stageStyle.titleCard.title.visible && (
+                <h3 style={textStyle(frame.stageStyle.titleCard.title, fontRuntime.aliases)}>
+                  {frame.title}
+                </h3>
+              )}
+              {frame.stageStyle.titleCard.artist.visible && (
+                <p style={textStyle(frame.stageStyle.titleCard.artist, fontRuntime.aliases)}>
+                  {frame.artist}
+                </p>
+              )}
+            </div>
+          ) : frame.lines.length ? (
+            <div className="active-lines">
+              {frame.lines.map((line) => (
+                <PreviewLine
+                  key={lineKey(line.trackId, line.id)}
+                  line={line}
+                  selectedWordIds={selectedWordIds}
+                  aliases={fontRuntime.aliases}
+                />
+              ))}
+            </div>
+          ) : null}
+        </div>
+        {!designLine &&
+          frame.syncAids.map((aid) => {
+            const line = lines.get(lineKey(aid.trackId, aid.lineId))
+            return line ? (
+              <SyncAidCue
+                key={lineKey(aid.trackId, aid.lineId)}
+                line={line}
+                progress={aid.progress}
+              />
+            ) : null
+          })}
+        {stageFrame.enabled && stageFrame.footer.visible && (
+          <div
+            className="karaoke-stage__footer"
+            style={textStyle(stageFrame.footer, fontRuntime.aliases)}
+          >
+            <span>
+              {frame.artist} · {frame.title}
+            </span>
+          </div>
+        )}
       </div>
-      {frame.syncAids.map((aid) => {
-        const line = lines.get(lineKey(aid.trackId, aid.lineId))
-        return line ? <SyncAidCue key={lineKey(aid.trackId, aid.lineId)} line={line} progress={aid.progress} /> : null
-      })}
-      {stageFrame.enabled && stageFrame.footer.visible && <div className="karaoke-stage__footer" style={textStyle(stageFrame.footer, fontRuntime.aliases)}><span>{frame.artist} · {frame.title}</span></div>}
-    </div>
-  </section>
+    </section>
+  )
 }
