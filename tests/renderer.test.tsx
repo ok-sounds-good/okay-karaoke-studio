@@ -98,6 +98,7 @@ describe('offset-aware renderer state', () => {
 
   it('uses lyric time for preview progress while retaining the playback clock', () => {
     const project = offsetProject()
+    Object.assign(project.stageStyle.background, { mode: 'image', imagePath: '/fixtures/background.png' })
     const markup = renderToStaticMarkup(
       <KaraokePreview
         project={project}
@@ -107,8 +108,9 @@ describe('offset-aware renderer state', () => {
       />,
     )
 
-    expect(markup).toContain('karaoke-stage__time">00:01.500')
+    expect(markup).toMatch(/karaoke-stage__time"[^>]*>00:01\.500/u)
     expect(markup).toContain('--word-progress:0%')
+    expect(markup).toContain('Linked-image Preview and MP4 export are deferred; using the authored gradient fallback.')
   })
 
   it('keeps per-word progress without rendering a whole-line progress meter', () => {

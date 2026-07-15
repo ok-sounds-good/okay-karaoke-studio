@@ -37,6 +37,8 @@ const {
   showCanonicalSaveDialog,
 } = require('./save-paths.cjs')
 const { createLocalFontPermissionPolicy } = require('./local-font-access.cjs')
+const { readLinkedImage } = require('./linked-image-decoder.cjs')
+const { createElectronNativeImageDecoder } = require('./native-image-adapter.cjs')
 
 const APP_NAME = 'Okay Karaoke Studio'
 const APP_SCHEME = 'studio-app'
@@ -591,6 +593,9 @@ function executeVideoExport({ request, preparation, destination, operation, onPr
     audioPath: request.audioPath,
     outputPath: path.resolve(destination),
     ffmpegPath: preparation,
+    readLinkedImage: (imagePath) => readLinkedImage(imagePath, {
+      decode: createElectronNativeImageDecoder(),
+    }),
     resolution: request.resolution,
     fps: request.fps,
     onProgress,
@@ -600,8 +605,13 @@ function executeVideoExport({ request, preparation, destination, operation, onPr
   })
 }
 
+function parseVideoExportProject(projectJson) {
+  const project = parseProjectJson(projectJson)
+  if (project.stageStyle.background.mode === 'image') throw new Error('Linked-image video export is deferred until Live Preview can verify the same image.')
+  return project
+}
 const videoExportOperation = createVideoExportOperation({
-  parseProject: parseProjectJson,
+  parseProject: parseVideoExportProject,
   createCommitState: createVideoExportCommitState,
   prepareExport: prepareVideoExport,
   selectDestination: selectVideoExportDestination,

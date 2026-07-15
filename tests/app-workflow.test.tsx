@@ -905,6 +905,33 @@ describe('mounted first-time workflow', () => {
     expect(document.querySelector('.timeline-word')?.getAttribute('aria-label')).toBe(firstTiming)
   })
 
+  it('reloads an unavailable local font only when the user retries it', async () => {
+    const fontLoads = vi.fn(async () => { throw new Error('Font unavailable') })
+    vi.stubGlobal('FontFace', class { load() { return fontLoads() } })
+    const project = createDemoProject()
+    const face = {
+      fullName: 'Unavailable Test Regular', style: 'Regular',
+      postscriptName: 'UnavailableTest-Regular', weight: 400 as const, slant: 'normal' as const,
+    }
+    project.stageStyle.lyrics.typeface = {
+      kind: 'local', family: 'Unavailable Test', faces: [face],
+    }
+    project.stageStyle.lyrics.fontStyle = face
+    harness.openProject.mockResolvedValueOnce({
+      path: '/opened/unavailable-font.oks', contents: serializeProject(project),
+    })
+
+    await clickButton('Workflow')
+    await clickButton('Open .oks')
+    expect(fontLoads).toHaveBeenCalledTimes(1)
+
+    await clickButton('Clear timing')
+    expect(fontLoads).toHaveBeenCalledTimes(1)
+
+    await clickButton('Retry')
+    expect(fontLoads).toHaveBeenCalledTimes(2)
+  })
+
   it('clears active-track timing after the offset cursor as one undoable edit', async () => {
     const demo = createDemoProject()
     const lead = demo.tracks[0]
@@ -1034,6 +1061,16 @@ describe('mounted first-time workflow', () => {
       resolution: '2160p',
       fps: 60,
     }))
+  })
+
+  it('rejects linked-image video export before IPC or progress starts', async () => {
+    const project = createDemoProject(); Object.assign(project.stageStyle.background, { mode: 'image', imagePath: '/fixtures/background.png' })
+    harness.openProject.mockResolvedValueOnce({ path: '/opened/image.oks', contents: serializeProject(project) })
+    await clickButton('Workflow'); await clickButton('Open .oks'); await prepareVideoExportProject()
+    await clickButton('Karaoke video')
+    expect(harness.exportVideo).not.toHaveBeenCalled()
+    expect(document.querySelector('[aria-label="Karaoke video export progress"]')).toBeNull()
+    expect(document.querySelector('.toast')?.textContent).toContain('Linked-image video export is deferred until Live Preview can verify the same image.')
   })
 
   it('confirms cancellation from both the cancel action and the export-dialog close action', async () => {

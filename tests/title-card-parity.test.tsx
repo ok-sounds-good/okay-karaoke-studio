@@ -9,6 +9,7 @@ import {
   createProject,
   createVocalTrack,
 } from '../src/lib/karaoke'
+import { cloneVocalStyle } from '../src/lib/video-style'
 
 const require = createRequire(import.meta.url)
 const { frameStateAt } = require('../electron/video-export.cjs') as {
@@ -16,6 +17,9 @@ const { frameStateAt } = require('../electron/video-export.cjs') as {
 }
 
 function projectWithLineLeadIn() {
+  const vocalStyle = cloneVocalStyle()
+  vocalStyle.previewMs = 1_500
+  vocalStyle.syncAid = { enabled: false, minLeadMs: 1_000, maxLeadMs: 1_500 }
   const mutedEarlierLine = createLyricLine('Muted count-in', {
     startMs: 0,
     endMs: 500,
@@ -35,7 +39,7 @@ function projectWithLineLeadIn() {
     offsetMs: 800,
     tracks: [
       createVocalTrack({ id: 'muted', muted: true, lines: [mutedEarlierLine] }),
-      createVocalTrack({ id: 'lead', lines: [line] }),
+      createVocalTrack({ id: 'lead', vocalStyle, lines: [line] }),
     ],
   })
 }
@@ -54,15 +58,15 @@ function previewShowsTitle(playbackMs: number) {
 }
 
 describe('Live Preview and MP4 title-card parity', () => {
-  it('uses the offset-adjusted line lead-in rather than the later first word', () => {
+  it('uses Preview time before the first sung word rather than an earlier line range', () => {
     const project = projectWithLineLeadIn()
 
-    // The adjusted line starts at 2800 ms, so its 1500 ms title lead ends at 1300 ms.
-    for (const playbackMs of [1_299, 1_300, 2_299]) {
+    // The first word starts at 3800 ms after offset, so 1500 ms Preview ends the title at 2300 ms.
+    for (const playbackMs of [2_299, 2_300]) {
       expect(previewShowsTitle(playbackMs)).toBe(frameStateAt(project, playbackMs).showTitle)
     }
-    expect(previewShowsTitle(1_299)).toBe(true)
-    expect(previewShowsTitle(1_300)).toBe(false)
+    expect(previewShowsTitle(2_299)).toBe(true)
+    expect(previewShowsTitle(2_300)).toBe(false)
   })
 
   it('keeps the title card visible when no valid timed line exists', () => {

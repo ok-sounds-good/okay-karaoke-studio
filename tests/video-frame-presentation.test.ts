@@ -39,6 +39,7 @@ type VideoExportModule = {
     timeline: { times: number[] },
     stream: { destroyed: boolean; write(frame: Buffer): boolean },
     settings: VideoSettings,
+    runtime: Record<string, unknown>,
     onProgress?: (progress: unknown) => void,
     signal?: AbortSignal,
   ): Promise<void>
@@ -50,6 +51,11 @@ const project = JSON.parse(readFileSync(
   new URL('./fixtures/current-project-v0.json', import.meta.url),
   'utf8',
 )) as unknown
+const runtime = {}
+
+function isAssetInvocation(source: string) {
+  return source.includes('prepareKaraokeAssets')
+}
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void
@@ -67,6 +73,10 @@ describe('offscreen video frame presentation', () => {
     contents.capturePage = vi.fn(() => { throw new Error('capturePage returned stale data') })
     contents.invalidate = vi.fn(() => { throw new Error('invalidate requested stale data') })
     contents.executeJavaScript = vi.fn(async (source: string) => {
+      if (isAssetInvocation(source)) {
+        order.push('assets')
+        return { fontFallbacks: [] }
+      }
       expect(contents.listenerCount('paint')).toBe(0)
       expect(source).toContain(
         'requestAnimationFrame(()=>requestAnimationFrame(resolve))',
@@ -124,13 +134,14 @@ describe('offscreen video frame presentation', () => {
         },
       },
       videoExport.normalizeVideoSettings({ resolution: '240p', fps: 60 }),
+      runtime,
     )
 
     expect(contents.capturePage).not.toHaveBeenCalled()
     expect(contents.invalidate).not.toHaveBeenCalled()
     expect(frames.map((frame) => frame.toString())).toEqual(['current-0', 'current-1'])
     expect(order).toEqual([
-      'construct', 'capture-rate:240', 'load', 'stop:-1',
+      'construct', 'capture-rate:240', 'load', 'stop:-1', 'assets',
       'update:0', 'commit:0', 'listen/start:0',
       'resize:0', 'encode:0', 'stop:0', 'write:0',
       'update:1', 'commit:1', 'listen/start:1',
@@ -166,6 +177,7 @@ describe('offscreen video frame presentation', () => {
       { times: [0] },
       { destroyed: false, write: vi.fn(() => true) },
       videoExport.normalizeVideoSettings({ resolution: '240p', fps: 30 }),
+      runtime,
     )).rejects.toThrow('JPEG encoding failed')
 
     expect(contents.stopPainting).toHaveBeenCalledTimes(2)
@@ -179,7 +191,8 @@ describe('offscreen video frame presentation', () => {
     const controller = new AbortController()
     let destroyed = false
     const contents = new EventEmitter() as FakeWebContents
-    contents.executeJavaScript = vi.fn(() => {
+    contents.executeJavaScript = vi.fn((source: string) => {
+      if (isAssetInvocation(source)) return Promise.resolve({ fontFallbacks: [] })
       updateStarted.resolve()
       return update.promise
     })
@@ -201,6 +214,7 @@ describe('offscreen video frame presentation', () => {
       { times: [0] },
       { destroyed: false, write: vi.fn(() => true) },
       videoExport.normalizeVideoSettings({ resolution: '240p', fps: 30 }),
+      runtime,
       undefined,
       controller.signal,
     )
@@ -227,7 +241,8 @@ describe('offscreen video frame presentation', () => {
       const controller = new AbortController()
       let destroyed = false
       const contents = new EventEmitter() as FakeWebContents
-      contents.executeJavaScript = vi.fn(() => {
+      contents.executeJavaScript = vi.fn((source: string) => {
+        if (isAssetInvocation(source)) return Promise.resolve({ fontFallbacks: [] })
         updateStarted.resolve()
         return update.promise
       })
@@ -249,6 +264,7 @@ describe('offscreen video frame presentation', () => {
         { times: [0] },
         { destroyed: false, write: vi.fn(() => true) },
         videoExport.normalizeVideoSettings({ resolution: '240p', fps: 30 }),
+        runtime,
         undefined,
         controller.signal,
       )

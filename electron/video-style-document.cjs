@@ -266,7 +266,9 @@ function frameInvocation(state, sequence) {
     throw new RangeError('Frame sequence must be a nonnegative safe integer.')
   }
   const payload = encodeJavaScriptValue(state, 'Frame state')
-  return `window.renderKaraokeFrame(${decodedValueExpression(payload)},${sequence})`
+  const render = `window.renderKaraokeFrame(${decodedValueExpression(payload)},${sequence})`
+  return `(async()=>{const result=${render};await new Promise(resolve=>requestAnimationFrame(` +
+    `()=>requestAnimationFrame(resolve)));return result})()`
 }
 
 function assetInvocation(runtime) {

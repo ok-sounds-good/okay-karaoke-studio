@@ -12,7 +12,7 @@ const GOLDEN_JSON = readFileSync(
   'utf8',
 ).trim()
 const REQUEST = {
-  projectJson: GOLDEN_JSON,
+  projectJson: changedProject((project) => { (project.stageStyle as { background: { mode: string } }).background.mode = 'gradient' }),
   audioPath: '/fixtures/backing-track.wav',
   durationMs: 12_000,
   resolution: '720p',
@@ -41,6 +41,7 @@ function changedProject(change: (project: Record<string, unknown>) => void) {
   change(project)
   return JSON.stringify(project)
 }
+const parseVideoExportProject = (json: string) => { expect(readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf8')).toContain('parseProject: parseVideoExportProject'); const project = parseProjectJson(json); if (project.stageStyle.background.mode === 'image') throw new Error('Linked-image video export is deferred until Live Preview can verify the same image.'); return project }
 function deferred<T>() {
   let resolve = (_value: T) => {}
   const promise = new Promise<T>((done) => { resolve = done })
@@ -77,7 +78,7 @@ function harness() {
   const coordinator = createVideoExportOperation({
     parseProject: (json: string) => {
       events.push('parse')
-      return parseProjectJson(json)
+      return parseVideoExportProject(json)
     },
     createCommitState,
     prepareExport,
@@ -110,6 +111,7 @@ describe('video export operation preflight and lifecycle', () => {
     ['nonzero schema', changedProject((project) => { project.schemaVersion = 1 })],
     ['nonnumeric schema', changedProject((project) => { project.schemaVersion = '0' })],
     ['malformed current project', changedProject((project) => { project.title = 42 })],
+    ['linked-image background', GOLDEN_JSON],
   ])('rejects %s before any export effect or lifecycle mutation', async (_label, projectJson) => {
     const fixture = harness()
     const sender = new FakeSender(7)

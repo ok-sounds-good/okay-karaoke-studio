@@ -75,6 +75,10 @@ declare global {
     width: number
     height: number
     fps: StudioVideoFps
+    fontFallbacks: Array<{
+      requested: string
+      effective: string
+    }>
   }
 
   interface StudioApi {
