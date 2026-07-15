@@ -21,22 +21,37 @@ body:
     validations:
       required: true
   - type: dropdown
+    id: finding-class
+    attributes:
+      label: Finding class
+      description: Use the canonical classification from docs/REVIEWING.md.
+      options:
+        - Runtime/path finding
+        - Scope-integrity finding
+    validations:
+      required: true
+  - type: dropdown
     id: reachability
     attributes:
-      label: Reachability
-      description: Use the canonical classification from docs/REVIEWING.md.
+      label: Runtime reachability
+      description: Required for a runtime/path finding; leave blank for a scope-integrity finding.
       options:
         - Current product path
         - Accepted dependent behavior
         - Platform/failure path
         - Internal invariant only
+  - type: textarea
+    id: affected-contract
+    attributes:
+      label: Affected contract or boundary
+      description: Identify the runtime boundary or the declared scope and obligation affected by the finding.
     validations:
       required: true
   - type: textarea
-    id: trigger
+    id: class-evidence
     attributes:
-      label: Concrete trigger and boundary evidence
-      description: Give the smallest exact event order and the path or missing guard that makes it credible.
+      label: Class-specific evidence
+      description: For runtime, give the event order, boundary path, and missing guard. For scope integrity, give the exact diff and consistency evidence without inventing a runtime path.
     validations:
       required: true
   - type: textarea
@@ -56,15 +71,15 @@ body:
   - type: textarea
     id: mitigations
     attributes:
-      label: Existing mitigations or enforced boundaries
+      label: Existing invariant, mitigation, or consistency mechanism
       description: Identify protections already in place, or write "None".
     validations:
       required: true
   - type: textarea
     id: evidence
     attributes:
-      label: Reproduction evidence and validation gaps
-      description: Link safe evidence and name checks that have not been run or cannot yet reproduce the path.
+      label: Supporting evidence and validation gaps
+      description: Link safe runtime or diff evidence and name checks that have not been run.
     validations:
       required: true
   - type: textarea
@@ -91,4 +106,6 @@ body:
         - label: The maintainer explicitly accepted this residual.
           required: true
         - label: This issue links to the originating pull request or review thread, which links back here.
+          required: true
+        - label: I supplied runtime reachability for a runtime/path finding, or selected scope integrity and omitted runtime-only fields.
           required: true

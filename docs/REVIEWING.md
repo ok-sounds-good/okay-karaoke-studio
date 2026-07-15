@@ -49,13 +49,20 @@ documentation change that no longer matches the implementation.
 
 Scope-integrity findings are evidenced by the diff and the pull request's stated
 purpose; they do not require a synthetic runtime trigger to be actionable. When
-such a finding also changes reachable behavior, classify that behavior using the
-reachability labels below. Otherwise, identify it explicitly as a
-scope-integrity finding rather than forcing it into a runtime category.
+the same change also creates a reachable behavior failure, report that distinct
+impact as a separate runtime/path finding rather than blending the two evidence
+contracts.
 
-## Classify reachability first
+## Classify findings before reachability
 
-Every proposed finding must use exactly one of these reachability labels:
+Every actionable finding uses exactly one finding class:
+
+- **Runtime/path finding** — a current, accepted-dependent, platform, failure,
+  or internal path produces incorrect or unsafe behavior.
+- **Scope-integrity finding** — the diff itself contains an unrelated,
+  undisclosed, unjustified, or inconsistent change to an obligation or contract.
+
+Only a runtime/path concern uses exactly one of these reachability labels:
 
 - **Current product path** — a user can reach the state through the current UI,
   keyboard or accessibility commands, application menus, or another supported
@@ -73,6 +80,10 @@ Every proposed finding must use exactly one of these reachability labels:
   the state for every relevant entry point, and focused evidence covers that
   enforcement. Use this label when recording why a concern is not actionable.
 
+**Not reachable under an enforced boundary** is a non-finding disposition. It
+cannot be carried as an accepted residual unless the reviewer identifies a
+separate actionable failure in the enforcement or its required validation.
+
 Do not make a finding merge-blocking solely because an internal API can
 represent the state. Demonstrate a current product, accepted-dependent,
 platform, or credible failure path. If a state is intended to be impossible,
@@ -87,29 +98,50 @@ converge on a checked boundary and the evidence covers it.
 
 ## Finding contract
 
-Return findings first, ordered by severity. Each actionable finding must include:
+Return findings first, ordered by severity. Every actionable finding includes:
 
 - **Severity and confidence** — distinguish demonstrated impact from uncertainty.
 - **Location** — exact file and line, or the smallest owning symbol when line
   anchors are unstable.
-- **Reachability** — one label from the list above.
+- **Finding class** — `Runtime/path finding` or `Scope-integrity finding`.
+- **Impact** — the resulting user or system harm, including data, security,
+  correctness, recovery, latency, accessibility, or governance consequences.
+- **Smallest defensible correction** — identify the narrowest code, boundary,
+  documentation, or scope correction that resolves the evidence.
+- **Required validation** — name the focused regression test or manual/platform
+  evidence that would prove the correction.
+
+A runtime/path finding additionally includes:
+
+- **Reachability** — one runtime label from the list above.
 - **Concrete trigger** — the smallest exact action, event, and completion order
   that reaches the failure.
 - **Boundary evidence** — the call path, event path, or missing guard that makes
   the trigger credible.
 - **Preventing invariant** — state whether prevention is mechanically enforced,
   merely assumed by the current UI, or absent.
-- **Impact** — the resulting user or system harm, including data, security,
-  correctness, recovery, latency, or accessibility consequences.
-- **Smallest defensible correction** — say whether the fix belongs in core
-  handling or at the boundary that should prohibit the state.
-- **Required validation** — name the focused regression test or manual/platform
-  evidence that would prove the correction.
 
-A finding is merge-blocking when it demonstrates a credible correctness,
-security, data-integrity, accepted-behavior, or required-validation failure.
-Maintainability is actionable only when the reviewer identifies a concrete
-failure risk; style preferences and speculative future callers are not findings.
+A scope-integrity finding instead includes:
+
+- **Declared scope or contract** — the pull-request claim or existing obligation
+  against which the diff is being judged.
+- **Diff evidence** — the exact unrelated file, deletion, addition, or rewording.
+- **Integrity failure** — identify the undisclosed change, semantic cleanup,
+  unjustified narrowing or broadening, or implementation/documentation mismatch.
+- **Consistency evidence** — identify affected documentation, implementation,
+  tests, configuration, templates, or agent instructions and whether they agree.
+
+Do not add a runtime reachability label, event-order trigger, boundary path, or
+preventing invariant to a pure scope-integrity finding. Its class-specific diff
+evidence replaces those runtime-only fields.
+
+A runtime/path finding is merge-blocking when it demonstrates a credible
+correctness, security, data-integrity, accepted-behavior, or
+required-validation failure. A scope-integrity finding is merge-blocking when
+the pull request contains unrelated behavior or silently or unjustifiably
+changes an authoritative obligation. Maintainability is actionable only when
+the reviewer identifies a concrete failure risk; style preferences and
+speculative future callers are not findings.
 
 For interactive timing, playback, and drag paths, evaluate both correctness and
 real-time responsiveness. A correction is not complete if it prevents a rare
@@ -127,9 +159,13 @@ duplicate.
 The issue must record:
 
 - the originating pull request and review thread;
-- the reachability label, concrete trigger, and boundary evidence;
+- the finding class and all evidence required for that class;
+- for a runtime/path finding, its reachability label, concrete trigger,
+  boundary evidence, and preventing invariant;
+- for a scope-integrity finding, its declared scope or contract, diff evidence,
+  integrity failure, and consistency evidence;
 - impact, severity, and the reason deferral is acceptable now;
-- existing mitigations or enforced boundaries;
+- existing mitigations, enforced invariants, or consistency mechanisms;
 - available reproduction evidence and any validation gap;
 - acceptance criteria for closing the residual; and
 - a target milestone, delivery dependency, or roadmap disposition.
@@ -166,14 +202,16 @@ or commit range:
 > Review `<base>...<head>` independently under `docs/REVIEWING.md`. Read
 > `AGENTS.md`, `docs/MVP.md`, `docs/ROADMAP.md`, `docs/SDLC.md`, and
 > `CONTRIBUTING.md` before judging the diff. Return findings first and use the
-> canonical finding fields and reachability labels. Do not block solely because
-> an internal API can represent a state; demonstrate a current,
-> accepted-dependent, platform, or credible failure path. Do not treat visual UI
-> restrictions as enforced boundaries. Audit the stated scope against every
-> changed file and the existing-file word diff; flag unrelated changes, semantic
-> edits disguised as formatting, undocumented contract changes, and unjustified
-> narrowing or broadening of obligations. Verify that code, tests, documentation,
-> configuration, and PR claims agree. A confirmed residual can pass only after
-> explicit maintainer acceptance and a linked GitHub issue. Report residual risk
-> and unobserved validation even when there are no findings. Do not edit the
-> worktree or manage repository lifecycle.
+> canonical finding classes and class-specific fields. Apply reachability,
+> event-order, boundary, and preventing-invariant fields only to runtime/path
+> findings; use declared-contract and diff evidence for pure scope-integrity
+> findings. Do not block solely because an internal API can represent a state;
+> demonstrate a current, accepted-dependent, platform, or credible failure path.
+> Do not treat visual UI restrictions as enforced boundaries. Audit the stated
+> scope against every changed file and the existing-file word diff; flag
+> unrelated changes, semantic edits disguised as formatting, undocumented
+> contract changes, and unjustified narrowing or broadening of obligations.
+> Verify that code, tests, documentation, configuration, and PR claims agree. A
+> confirmed residual can pass only after explicit maintainer acceptance and a
+> linked GitHub issue. Report residual risk and unobserved validation even when
+> there are no findings. Do not edit the worktree or manage repository lifecycle.
