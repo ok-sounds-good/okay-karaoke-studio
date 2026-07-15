@@ -79,6 +79,17 @@ function fakeWindow(
   }
 }
 
+function fakeRendererContents() {
+  let destroyed = false
+  return Object.assign(new EventEmitter(), {
+    destroy() {
+      destroyed = true
+      this.emit('destroyed')
+    },
+    isDestroyed: () => destroyed,
+  })
+}
+
 describe('production-window visual smoke', () => {
   it('accepts one complete flag set and configures isolated paths before readiness', async () => {
     const { argv, output } = await configuredArguments()
@@ -217,6 +228,52 @@ describe('production-window visual smoke', () => {
     },
   )
 
+  it.each([
+    'Uncaught TypeError: renderer probe',
+    'Uncaught (in promise) TypeError: renderer probe',
+  ])('fails closed on a sanitized renderer console error: %s', (message) => {
+    const stderr = { write: vi.fn(() => true) }
+    const processLike = Object.assign(new EventEmitter(), { stderr })
+    const fatalObserver = smoke.installVisualSmokeFatalObserver(processLike)
+    const contents = fakeRendererContents()
+    fatalObserver.observeRenderer(contents)
+
+    contents.emit('console-message', {
+      level: 'error',
+      message,
+      sourceId: '/private/renderer-source.js',
+    })
+
+    expect(fatalObserver.hasFatal()).toBe(true)
+    expect(stderr.write).toHaveBeenCalledWith(smoke.FATAL_DIAGNOSTIC)
+    expect(JSON.stringify(stderr.write.mock.calls)).not.toContain(message)
+    expect(JSON.stringify(stderr.write.mock.calls)).not.toContain('/private/renderer-source.js')
+    fatalObserver.dispose()
+    expect(contents.listenerCount('console-message')).toBe(0)
+    expect(processLike.listenerCount('uncaughtException')).toBe(0)
+    expect(processLike.listenerCount('unhandledRejection')).toBe(0)
+  })
+
+  it('ignores clean renderer console traffic and disposes safely after WebContents destruction', () => {
+    const stderr = { write: vi.fn(() => true) }
+    const processLike = Object.assign(new EventEmitter(), { stderr })
+    const fatalObserver = smoke.installVisualSmokeFatalObserver(processLike)
+    const contents = fakeRendererContents()
+    fatalObserver.observeRenderer(contents)
+
+    contents.emit('console-message', {
+      level: 'info',
+      message: 'Uncaught TypeError appears only as quoted informational text',
+    })
+    contents.emit('console-message', {}, 2, 'Uncaught (in promise) appears only in a warning')
+
+    expect(fatalObserver.hasFatal()).toBe(false)
+    expect(stderr.write).not.toHaveBeenCalled()
+    contents.destroy()
+    expect(() => fatalObserver.dispose()).not.toThrow()
+    expect(fatalObserver.hasFatal()).toBe(false)
+  })
+
   it('routes smoke mode through the built protocol without weakening window security', async () => {
     const source = await readFile(join(process.cwd(), 'electron/main.cjs'), 'utf8')
     expect(source.indexOf('configureVisualSmokeBeforeReady')).toBeLessThan(
@@ -227,6 +284,9 @@ describe('production-window visual smoke', () => {
     expect(source).toContain(
       'if (visualSmokeConfig) visualSmokeFatalObserver = installVisualSmokeFatalObserver(process)',
     )
+    expect(
+      source.indexOf('visualSmokeFatalObserver.observeRenderer(window.webContents)'),
+    ).toBeLessThan(source.indexOf('await window.loadURL(PACKAGED_APP_URL)'))
     expect(source).toContain('createNativeCloseOwnershipCleanup(')
     expect(source).toContain('clearNativeCloseOwnershipAfterWindowClosed()')
     for (const invariant of [

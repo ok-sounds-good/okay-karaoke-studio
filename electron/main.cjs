@@ -1170,6 +1170,7 @@ async function createMainWindow() {
 
   mainWindow = window
   secureWebContents(window.webContents)
+  if (visualSmokeConfig) visualSmokeFatalObserver.observeRenderer(window.webContents)
   const clearNativeCloseOwnershipAfterWindowClosed = createNativeCloseOwnershipCleanup(
     window.webContents,
     clearNativeCloseOwnership,
@@ -1278,6 +1279,7 @@ if (visualSmokeStartupFailed) {
           fatalObserver: visualSmokeFatalObserver,
           window,
         })
+        visualSmokeFatalObserver.dispose()
         app.exit(outcome.ok && !visualSmokeFatalObserver.hasFatal() ? 0 : 1)
       }
     })

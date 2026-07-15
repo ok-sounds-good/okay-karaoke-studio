@@ -75,6 +75,8 @@ function installVisualSmokeFatalObserver(processLike = process) {
   )
     throw smokeError('VISUAL_SMOKE_FATAL_OBSERVER_FAILED')
   let fatal = false
+  let disposed = false
+  const rendererObservers = new Set()
   const observeFatal = () => {
     if (fatal) return
     fatal = true
@@ -84,14 +86,86 @@ function installVisualSmokeFatalObserver(processLike = process) {
       // Fatal state remains authoritative even when its fixed diagnostic cannot be written.
     }
   }
+
+  const observeRenderer = (contents) => {
+    if (
+      disposed ||
+      !contents ||
+      typeof contents.on !== 'function' ||
+      typeof contents.once !== 'function' ||
+      typeof contents.removeListener !== 'function'
+    )
+      throw smokeError('VISUAL_SMOKE_FATAL_OBSERVER_FAILED')
+
+    let active = true
+    const observeConsoleMessage = (...args) => {
+      try {
+        const [details, legacyLevel] = args
+        const level = details && typeof details === 'object' ? details.level : undefined
+        if (level === 'error' || level === 3 || (typeof level !== 'string' && legacyLevel === 3))
+          observeFatal()
+      } catch {
+        observeFatal()
+      }
+    }
+    const rendererObserver = Object.freeze({
+      dispose() {
+        if (!active) return
+        active = false
+        rendererObservers.delete(rendererObserver)
+        try {
+          if (typeof contents.isDestroyed === 'function' && contents.isDestroyed()) return
+          contents.removeListener('console-message', observeConsoleMessage)
+          contents.removeListener('destroyed', observeDestroyed)
+        } catch {
+          observeFatal()
+        }
+      },
+    })
+    const observeDestroyed = () => {
+      active = false
+      rendererObservers.delete(rendererObserver)
+    }
+
+    try {
+      if (typeof contents.isDestroyed === 'function' && contents.isDestroyed()) {
+        throw smokeError('VISUAL_SMOKE_FATAL_OBSERVER_FAILED')
+      }
+      contents.on('console-message', observeConsoleMessage)
+      contents.once('destroyed', observeDestroyed)
+      rendererObservers.add(rendererObserver)
+      return rendererObserver
+    } catch {
+      try {
+        contents.removeListener('console-message', observeConsoleMessage)
+        contents.removeListener('destroyed', observeDestroyed)
+      } catch {
+        // The fixed observer-installation failure remains the only public diagnostic.
+      }
+      observeFatal()
+      throw smokeError('VISUAL_SMOKE_FATAL_OBSERVER_FAILED')
+    }
+  }
+
   processLike.on('uncaughtException', observeFatal)
   processLike.on('unhandledRejection', observeFatal)
   return Object.freeze({
     dispose() {
-      processLike.removeListener('uncaughtException', observeFatal)
-      processLike.removeListener('unhandledRejection', observeFatal)
+      if (disposed) return
+      disposed = true
+      for (const rendererObserver of [...rendererObservers]) rendererObserver.dispose()
+      try {
+        processLike.removeListener('uncaughtException', observeFatal)
+        processLike.removeListener('unhandledRejection', observeFatal)
+      } catch {
+        observeFatal()
+      }
+    },
+    disposeRenderers() {
+      for (const rendererObserver of [...rendererObservers]) rendererObserver.dispose()
     },
     hasFatal: () => fatal,
+    observeRenderer,
   })
 }
 
@@ -297,6 +371,11 @@ async function runVisualSmoke({ app, config, fatalObserver, window }, dependenci
   }
   try {
     await options.settle()
+  } catch {
+    failed = true
+  }
+  try {
+    fatalObserver?.disposeRenderers()
   } catch {
     failed = true
   }

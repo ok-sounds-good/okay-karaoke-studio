@@ -23,7 +23,7 @@ const DEFAULT_TIMEOUT_MS = 45_000
 const MAX_DIAGNOSTIC_BYTES = 64 * 1024
 const FATAL_DIAGNOSTIC_PATTERNS = Object.freeze([
   FATAL_DIAGNOSTIC.trim(),
-  'Uncaught Exception',
+  'Uncaught ',
   'UnhandledPromiseRejection',
   'Unhandled Rejection',
   'TypeError: Object has been destroyed',
