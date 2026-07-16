@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { KaraokeProject } from '../lib/model'
 import { loadLocalFont } from '../lib/font-runtime'
-import type { StageFrameState } from '../lib/stage-frame-state'
 import {
   fontFaceKey,
   resolveFontFace,
   resolveVocalStyle,
   type FontSizeStyle,
-  type LyricTextStyle,
+  type StageStyle,
 } from '../lib/video-style'
 
 export function previewFontKey(style: FontSizeStyle) {
@@ -33,15 +32,15 @@ export function projectPreviewFonts(project: KaraokeProject) {
   ])
 }
 
-export function designPreviewFonts(frame: StageFrameState, style: LyricTextStyle) {
+export function designPreviewFonts(stageStyle: StageStyle) {
   const values: FontSizeStyle[] = []
-  const stageFrame = frame.stageStyle.stageFrame
+  const stageFrame = stageStyle.stageFrame
   if (stageFrame.enabled) {
     if (stageFrame.brand.visible) values.push(stageFrame.brand)
     if (stageFrame.clock.visible) values.push(stageFrame.clock)
     if (stageFrame.footer.visible) values.push(stageFrame.footer)
   }
-  values.push(style)
+  values.push(stageStyle.lyrics)
   return uniqueFonts(values)
 }
 

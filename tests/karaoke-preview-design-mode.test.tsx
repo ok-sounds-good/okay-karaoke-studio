@@ -10,6 +10,7 @@ import { previewFrameStateAt } from '../src/lib/stage-frame-state'
 import { logicalStagePx } from '../src/lib/stage-layout'
 import {
   SYSTEM_MONOSPACE_TYPEFACE,
+  cloneStageStyle,
   fontFaceKey,
   fontTypefaceKey,
   genericFontFace,
@@ -75,6 +76,15 @@ function previewMarkup(
   )
 }
 
+function projectLyricsDesignMode(
+  style: LyricTextStyle,
+  project = createProject(),
+): KaraokePreviewDesignMode {
+  const stageStyle = cloneStageStyle(project.stageStyle)
+  stageStyle.lyrics = style
+  return { target: 'project-lyrics', stageStyle }
+}
+
 describe('Karaoke Preview project-lyrics design mode', () => {
   beforeEach(() => {
     ;(
@@ -88,10 +98,8 @@ describe('Karaoke Preview project-lyrics design mode', () => {
     document.body.replaceChildren()
   })
 
-  it('renders one fixed-stage representative line with draft typography and mixed progress', () => {
+  it('renders the complete draft Style with one representative lyric line and mixed progress', () => {
     const project = createProject({ title: 'Project title', artist: 'Project artist' })
-    project.stageStyle.background.mode = 'solid'
-    project.stageStyle.background.solidColor = '#123456'
     const style: LyricTextStyle = {
       typeface: SYSTEM_MONOSPACE_TYPEFACE,
       fontStyle: genericFontFace(SYSTEM_MONOSPACE_TYPEFACE, 'Bold'),
@@ -99,7 +107,11 @@ describe('Karaoke Preview project-lyrics design mode', () => {
       sungColor: '#ABCDEF',
       unsungColor: '#234567',
     }
-    const markup = previewMarkup({ target: 'project-lyrics', style }, project, 0, vi.fn())
+    const designMode = projectLyricsDesignMode(style, project)
+    designMode.stageStyle.background.mode = 'solid'
+    designMode.stageStyle.background.solidColor = '#123456'
+    designMode.stageStyle.stageFrame.lineColor = '#345678'
+    const markup = previewMarkup(designMode, project, 0, vi.fn())
     const rendered = document.createElement('div')
     rendered.innerHTML = markup
     const panel = rendered.querySelector<HTMLElement>(
@@ -113,6 +125,7 @@ describe('Karaoke Preview project-lyrics design mode', () => {
     expect(stage?.dataset.logicalStage).toBe('1920x1080')
     expect(stage?.classList.contains('is-designing')).toBe(true)
     expect(stage?.style.background).toBe('#123456')
+    expect(stage?.style.getPropertyValue('--stage-frame-color')).toBe('#345678')
     expect(stage?.querySelector('.karaoke-stage__safe-area')).not.toBeNull()
     expect(stage?.textContent).toContain('OKAY / STUDIO')
     expect(stage?.textContent).toContain('Project artist · Project title')
@@ -158,7 +171,7 @@ describe('Karaoke Preview project-lyrics design mode', () => {
     expect(previewFrameStateAt(project, 1_000).syncAids).toHaveLength(1)
 
     const markup = previewMarkup(
-      { target: 'project-lyrics', style: project.stageStyle.lyrics },
+      { target: 'project-lyrics', stageStyle: project.stageStyle },
       project,
       1_000,
     )
@@ -262,7 +275,7 @@ describe('Karaoke Preview project-lyrics design mode', () => {
           playbackMs={0}
           lyricMs={0}
           selectedWordIds={new Set()}
-          designMode={{ target: 'project-lyrics', style: available }}
+          designMode={projectLyricsDesignMode(available, project)}
         />,
       )
       await Promise.resolve()
@@ -285,7 +298,7 @@ describe('Karaoke Preview project-lyrics design mode', () => {
           playbackMs={0}
           lyricMs={0}
           selectedWordIds={new Set()}
-          designMode={{ target: 'project-lyrics', style: missing }}
+          designMode={projectLyricsDesignMode(missing, project)}
         />,
       )
       await Promise.resolve()
@@ -349,7 +362,7 @@ describe('Karaoke Preview project-lyrics design mode', () => {
             playbackMs={0}
             lyricMs={0}
             selectedWordIds={new Set()}
-            designMode={{ target: 'project-lyrics', style }}
+            designMode={projectLyricsDesignMode(style, project)}
           />,
         )
 
@@ -422,7 +435,7 @@ describe('Karaoke Preview project-lyrics design mode', () => {
             playbackMs={0}
             lyricMs={0}
             selectedWordIds={new Set()}
-            designMode={style ? { target: 'project-lyrics', style } : undefined}
+            designMode={style ? projectLyricsDesignMode(style, project) : undefined}
           />,
         )
         await Promise.resolve()

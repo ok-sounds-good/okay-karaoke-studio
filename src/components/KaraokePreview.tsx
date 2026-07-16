@@ -18,13 +18,14 @@ import {
   resolveFontFace,
   resolveVocalStyle,
   type LyricTextStyle,
+  type StageStyle,
   type TextStyle,
 } from '../lib/video-style'
 import { Button } from './ui'
 
 export type KaraokePreviewDesignMode = {
   target: 'project-lyrics'
-  style: LyricTextStyle
+  stageStyle: StageStyle
 }
 
 interface KaraokePreviewProps {
@@ -169,16 +170,17 @@ export function KaraokePreview({
   designMode,
 }: KaraokePreviewProps) {
   const frame = useMemo(() => previewFrameStateAt(project, playbackMs), [playbackMs, project])
-  const designStyle = designMode?.style ?? null
+  const designStyle = designMode?.stageStyle ?? null
   const designLine = useMemo(
-    () => (designStyle ? projectLyricsDesignLine(designStyle) : null),
+    () => (designStyle ? projectLyricsDesignLine(designStyle.lyrics) : null),
     [designStyle],
   )
   const selectedFonts = designMode
-    ? designPreviewFonts(frame, designMode.style)
+    ? designPreviewFonts(designMode.stageStyle)
     : projectPreviewFonts(project)
   const fontRuntime = usePreviewFonts(selectedFonts)
-  const background = frame.stageStyle.background
+  const stageStyle = designStyle ?? frame.stageStyle
+  const background = stageStyle.background
   const imageReadiness = backgroundReadiness(
     background,
     null,
@@ -190,7 +192,7 @@ export function KaraokePreview({
       : {
           background: `linear-gradient(145deg, ${background.gradientStartColor}, ${background.gradientEndColor})`,
         }
-  const stageFrame = frame.stageStyle.stageFrame
+  const stageFrame = stageStyle.stageFrame
   const stageVars = {
     ...backgroundStyle,
     ...previewStageLayoutVariables(designLine ? 1 : frame.lines.length),
@@ -337,18 +339,18 @@ export function KaraokePreview({
             </div>
           ) : frame.showTitle ? (
             <div className="title-card">
-              {frame.stageStyle.titleCard.eyebrow.visible && (
-                <span style={textStyle(frame.stageStyle.titleCard.eyebrow, fontRuntime.aliases)}>
+              {stageStyle.titleCard.eyebrow.visible && (
+                <span style={textStyle(stageStyle.titleCard.eyebrow, fontRuntime.aliases)}>
                   Tonight&apos;s performance
                 </span>
               )}
-              {frame.stageStyle.titleCard.title.visible && (
-                <h3 style={textStyle(frame.stageStyle.titleCard.title, fontRuntime.aliases)}>
+              {stageStyle.titleCard.title.visible && (
+                <h3 style={textStyle(stageStyle.titleCard.title, fontRuntime.aliases)}>
                   {frame.title}
                 </h3>
               )}
-              {frame.stageStyle.titleCard.artist.visible && (
-                <p style={textStyle(frame.stageStyle.titleCard.artist, fontRuntime.aliases)}>
+              {stageStyle.titleCard.artist.visible && (
+                <p style={textStyle(stageStyle.titleCard.artist, fontRuntime.aliases)}>
                   {frame.artist}
                 </p>
               )}

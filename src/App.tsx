@@ -10,17 +10,12 @@ import {
   serializeProject,
   validateProject,
 } from './lib/model'
-import {
-  cloneFontFace,
-  cloneTypeface,
-  cloneVocalStyle,
-  type LyricTextStyle,
-} from './lib/video-style'
+import { cloneStageStyle, cloneVocalStyle, type StageStyle } from './lib/video-style'
 import { TopBar } from './components/TopBar'
 import { InspectorPanel } from './components/InspectorPanel'
 import { KaraokePreview } from './components/KaraokePreview'
 import { ProjectActionDecisionDialog } from './components/ProjectActionDecisionDialog'
-import { ProjectTypographyEditor } from './components/ProjectTypographyEditor'
+import { ProjectStyleEditor } from './components/ProjectStyleEditor'
 import { SyncCueStrip } from './components/SyncCueStrip'
 import { Timeline } from './components/Timeline'
 import { TransportBar } from './components/TransportBar'
@@ -30,11 +25,11 @@ import { useInstalledFonts } from './hooks/useInstalledFonts'
 import { useWaveform } from './hooks/useWaveform'
 import { useProjectActionArbiter } from './hooks/useProjectActionArbiter'
 import {
-  sameLyricTextStyle,
-  useProjectTypographySession,
-  type ProjectTypographyCommitResult,
-  type ProjectTypographyOwnerKey,
-} from './hooks/useProjectTypographySession'
+  sameStageStyle,
+  useProjectStyleSession,
+  type ProjectStyleCommitResult,
+  type ProjectStyleOwnerKey,
+} from './hooks/useProjectStyleSession'
 import type { ProjectActionKind, ProjectActionRequest } from './lib/project-action-arbiter'
 import {
   downloadText,
@@ -400,7 +395,7 @@ export default function App() {
     timelineGestureActiveRef.current = active
     setTimelineGestureActive(active)
   }, [])
-  const canInteractWithProjectTypography = useCallback(
+  const canInteractWithProjectStyle = useCallback(
     () =>
       !projectTransitionRef.current &&
       !projectActionLifetimeRef.current &&
@@ -413,8 +408,8 @@ export default function App() {
       !workflowGuideOpen,
     [exportDialogOpen, lyricsDialogOpen, syncMode, validationDialogOpen, workflowGuideOpen],
   )
-  const commitProjectTypography = useCallback(
-    (ownerKey: ProjectTypographyOwnerKey, draft: LyricTextStyle): ProjectTypographyCommitResult => {
+  const commitProjectStyle = useCallback(
+    (ownerKey: ProjectStyleOwnerKey, draft: StageStyle): ProjectStyleCommitResult => {
       const current = projectRef.current
       if (
         ownerKey.projectId !== current.id ||
@@ -423,39 +418,35 @@ export default function App() {
         return 'stale'
       }
       if (projectMutationIsBlocked()) return 'blocked'
-      if (sameLyricTextStyle(current.stageStyle.lyrics, draft)) return 'noop'
+      if (sameStageStyle(current.stageStyle, draft)) return 'noop'
 
-      const lyrics = {
-        ...draft,
-        typeface: cloneTypeface(draft.typeface),
-        fontStyle: cloneFontFace(draft.fontStyle),
-      }
+      const acceptedStyle = cloneStageStyle(draft)
       commitHistory((latest) => {
         if (
           ownerKey.projectId !== latest.id ||
           ownerKey.lifecycle !== projectLifecycleSequenceRef.current ||
-          sameLyricTextStyle(latest.stageStyle.lyrics, lyrics)
+          sameStageStyle(latest.stageStyle, acceptedStyle)
         ) {
           return latest
         }
         return {
           ...latest,
-          stageStyle: { ...latest.stageStyle, lyrics },
+          stageStyle: cloneStageStyle(acceptedStyle),
         }
       })
       return 'applied'
     },
     [commitHistory, projectMutationIsBlocked],
   )
-  const typographySession = useProjectTypographySession({
+  const styleSession = useProjectStyleSession({
     ownerKey: {
       projectId: project.id,
       lifecycle: projectLifecycleSequenceRef.current,
     },
-    source: project.stageStyle.lyrics,
-    canInteract: canInteractWithProjectTypography,
+    source: project.stageStyle,
+    canInteract: canInteractWithProjectStyle,
     requestFonts: installedFonts.request,
-    commitDraft: commitProjectTypography,
+    commitDraft: commitProjectStyle,
   })
 
   useEffect(() => {
@@ -1184,9 +1175,8 @@ export default function App() {
   } = useProjectActionArbiter({
     nativeClose: nativeCloseBridge,
     draftGuard: {
-      needsResolution: () => typographySession.blocksProjectActions,
-      settle: (decision) =>
-        decision === 'apply' ? typographySession.apply() : typographySession.cancel(),
+      needsResolution: () => styleSession.blocksProjectActions,
+      settle: (decision) => (decision === 'apply' ? styleSession.apply() : styleSession.cancel()),
     },
     executors: {
       new: handleNew,
@@ -1301,7 +1291,7 @@ export default function App() {
         return
       }
       if (
-        !typographySession.isOpen &&
+        !styleSession.isOpen &&
         event.code === 'KeyA' &&
         (event.metaKey || event.ctrlKey) &&
         !event.altKey &&
@@ -1312,7 +1302,7 @@ export default function App() {
         return
       }
       if (
-        !typographySession.isOpen &&
+        !styleSession.isOpen &&
         (event.code === 'Backspace' || event.code === 'Delete') &&
         selectedWordIds.size
       ) {
@@ -1459,7 +1449,7 @@ export default function App() {
     syncItems,
     syncMode,
     syncWords,
-    typographySession.isOpen,
+    styleSession.isOpen,
   ])
 
   useEffect(() => {
@@ -1499,13 +1489,13 @@ export default function App() {
   }, [cancelHeldSync])
 
   const workflowGuideActions = createWorkflowGuideActions({
-    canStartSync: syncWords.length > 0 && !typographySession.isOpen,
+    canStartSync: syncWords.length > 0 && !styleSession.isOpen,
     close: () => setWorkflowGuideOpen(false),
     startNew: () => requestProjectAction('new'),
     open: () => requestProjectAction('open'),
     attachAudio: () => requestProjectAction('import-audio'),
     editLyrics: () => {
-      if (!typographySession.isOpen) setLyricsDialogOpen(true)
+      if (!styleSession.isOpen) setLyricsDialogOpen(true)
     },
     importLrc: () => requestProjectAction('import-lrc'),
     startSync: toggleSyncMode,
@@ -1514,7 +1504,7 @@ export default function App() {
   })
 
   const syncWordId = syncMode ? syncWords[syncCursor]?.id ?? null : null
-  const styleDisabledReason = typographySession.isOpen
+  const styleDisabledReason = styleSession.isOpen
     ? 'The Style editor is already open.'
     : projectActionLifetimeKind
       ? projectActionStyleDisabledReasons[projectActionLifetimeKind]
@@ -1546,32 +1536,32 @@ export default function App() {
         issueCount={reviewIssues.length}
         hasLyrics={projectHasLyrics}
         styleDisabledReason={styleDisabledReason}
-        workflowDisabled={typographySession.isOpen}
-        validationDisabled={typographySession.isOpen}
-        onStyle={typographySession.start}
+        workflowDisabled={styleSession.isOpen}
+        validationDisabled={styleSession.isOpen}
+        onStyle={styleSession.start}
         onNew={() => requestProjectAction('new')}
         onOpen={() => requestProjectAction('open')}
         onSave={() => requestProjectAction('save')}
         onUndo={() => requestProjectAction('undo')}
         onRedo={() => requestProjectAction('redo')}
         onShowWorkflow={() => {
-          if (!typographySession.isOpen) setWorkflowGuideOpen(true)
+          if (!styleSession.isOpen) setWorkflowGuideOpen(true)
         }}
         onValidate={() => setValidationDialogOpen(true)}
         onExport={() => requestProjectAction('export')}
       />
 
-      {typographySession.draft ? (
-        <ProjectTypographyEditor
+      {styleSession.draft ? (
+        <ProjectStyleEditor
           project={project}
           playbackMs={playback.currentMs}
-          draft={typographySession.draft}
+          draft={styleSession.draft}
           fonts={installedFonts}
-          onDraftChange={typographySession.change}
+          onDraftChange={styleSession.change}
           onRetryFonts={installedFonts.request}
           onTogglePlayback={playback.toggle}
-          onCancel={typographySession.cancel}
-          onApply={typographySession.apply}
+          onCancel={styleSession.cancel}
+          onApply={styleSession.apply}
         />
       ) : (
         <main className="studio-main">
@@ -1645,7 +1635,7 @@ export default function App() {
         syncMode={syncMode}
         syncPosition={syncCursor}
         syncTotal={syncWords.length}
-        syncDisabled={typographySession.isOpen}
+        syncDisabled={styleSession.isOpen}
         hasAudio={playback.hasAudio}
         onToggle={playback.toggle}
         onStop={handleStop}
@@ -1720,7 +1710,7 @@ export default function App() {
           request={pendingProjectAction}
           phase={projectActionPhase}
           error={projectActionError}
-          hasDraft={typographySession.blocksProjectActions}
+          hasDraft={styleSession.blocksProjectActions}
           onApply={applyPendingProjectAction}
           onDiscard={discardPendingProjectAction}
           onKeep={keepPendingProjectAction}

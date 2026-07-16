@@ -66,11 +66,9 @@ export function TopBar({
           variant="ghost"
           aria-disabled={styleDisabledReason !== null}
           aria-label={
-            styleDisabledReason
-              ? `Style unavailable: ${styleDisabledReason}`
-              : 'Edit project lyric style'
+            styleDisabledReason ? `Style unavailable: ${styleDisabledReason}` : 'Edit project Style'
           }
-          title={styleDisabledReason ?? 'Edit project lyric style'}
+          title={styleDisabledReason ?? 'Edit project Style'}
           onClick={(event) => {
             if (!styleDisabledReason) onStyle(event.currentTarget)
           }}

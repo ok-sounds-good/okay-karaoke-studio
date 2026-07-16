@@ -3,11 +3,11 @@
 import { act, type ComponentProps } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ProjectTypographyEditor } from '../src/components/ProjectTypographyEditor'
+import { ProjectStyleEditor } from '../src/components/ProjectStyleEditor'
 import type {
-  ProjectTypographyDraftChange,
-  ProjectTypographySession,
-} from '../src/hooks/useProjectTypographySession'
+  ProjectStyleDraftChange,
+  ProjectStyleSession,
+} from '../src/hooks/useProjectStyleSession'
 import { createProject } from '../src/lib/model'
 import {
   FONT_SIZE_OPTIONS,
@@ -15,10 +15,10 @@ import {
   resolveFontFace,
   type FontFaceDescriptor,
   type FontTypefaceDescriptor,
-  type LyricTextStyle,
+  type StageStyle,
 } from '../src/lib/video-style'
 
-type EditorProps = ComponentProps<typeof ProjectTypographyEditor>
+type EditorProps = ComponentProps<typeof ProjectStyleEditor>
 
 const READY_FONTS: EditorProps['fonts'] = {
   typefaces: [],
@@ -26,7 +26,7 @@ const READY_FONTS: EditorProps['fonts'] = {
   message: null,
 }
 
-function applyChange(change: ProjectTypographyDraftChange | undefined, current: LyricTextStyle) {
+function applyChange(change: ProjectStyleDraftChange | undefined, current: StageStyle) {
   expect(change).toBeTypeOf('function')
   if (typeof change !== 'function') throw new Error('Expected a functional draft update')
   return change(current)
@@ -67,7 +67,7 @@ function testFace(style: string, weight: number): FontFaceDescriptor {
   }
 }
 
-describe('ProjectTypographyEditor', () => {
+describe('ProjectStyleEditor', () => {
   let container: HTMLDivElement
   let root: Root
   let originalFonts: PropertyDescriptor | undefined
@@ -104,11 +104,11 @@ describe('ProjectTypographyEditor', () => {
   })
 
   const renderEditor = async (overrides: Partial<EditorProps> = {}) => {
-    const project = overrides.project ?? createProject({ id: 'typography-project' })
+    const project = overrides.project ?? createProject({ id: 'style-project' })
     const props: EditorProps = {
       project,
       playbackMs: 1_250,
-      draft: project.stageStyle.lyrics,
+      draft: project.stageStyle,
       fonts: READY_FONTS,
       onDraftChange: vi.fn(),
       onRetryFonts: vi.fn(),
@@ -118,7 +118,7 @@ describe('ProjectTypographyEditor', () => {
       ...overrides,
     }
     await act(async () => {
-      root.render(<ProjectTypographyEditor {...props} />)
+      root.render(<ProjectStyleEditor {...props} />)
       await Promise.resolve()
       await Promise.resolve()
     })
@@ -137,16 +137,16 @@ describe('ProjectTypographyEditor', () => {
     const designLine = stage.querySelector<HTMLElement>('[data-design-preview="project-lyrics"]')!
 
     expect(dialog.getAttribute('aria-labelledby')).toBe(heading.id)
-    expect(heading.textContent).toBe('Typography')
+    expect(heading.textContent).toBe('Style')
     expect(heading.tabIndex).toBe(-1)
     expect(container.textContent).toContain('Project lyrics')
     expect(document.activeElement).toBe(heading)
     expect(dialog.children[1]).toBe(preview)
     expect(designLine.textContent).toBe('Sing the first words and see the rest')
     expect(container.textContent).not.toContain('This is')
-    expect(container.textContent).not.toContain(draft.typeface.family)
+    expect(container.textContent).not.toContain(draft.lyrics.typeface.family)
     expect(container.querySelector<HTMLInputElement>('[role="combobox"]')?.value).toBe(
-      draft.typeface.family,
+      draft.lyrics.typeface.family,
     )
 
     await act(async () => {
@@ -156,7 +156,7 @@ describe('ProjectTypographyEditor', () => {
   })
 
   it('replaces only the typeface through an immutable functional update', async () => {
-    const onDraftChange = vi.fn<ProjectTypographySession['change']>()
+    const onDraftChange = vi.fn<ProjectStyleSession['change']>()
     const { draft } = await renderEditor({ onDraftChange })
     const snapshot = structuredClone(draft)
     const input = container.querySelector<HTMLInputElement>('[role="combobox"]')!
@@ -168,11 +168,14 @@ describe('ProjectTypographyEditor', () => {
     })
 
     const next = applyChange(onDraftChange.mock.calls.at(-1)?.[0], draft)
-    expect(next.typeface).toEqual(SYSTEM_MONOSPACE_TYPEFACE)
-    expect(next.typeface).not.toBe(SYSTEM_MONOSPACE_TYPEFACE)
-    expect(next.typeface.faces[0]).not.toBe(SYSTEM_MONOSPACE_TYPEFACE.faces[0])
-    expect(next.fontStyle).toBe(draft.fontStyle)
-    expect(next.sizePx).toBe(draft.sizePx)
+    expect(next.lyrics.typeface).toEqual(SYSTEM_MONOSPACE_TYPEFACE)
+    expect(next.lyrics.typeface).not.toBe(SYSTEM_MONOSPACE_TYPEFACE)
+    expect(next.lyrics.typeface.faces[0]).not.toBe(SYSTEM_MONOSPACE_TYPEFACE.faces[0])
+    expect(next.lyrics.fontStyle).toBe(draft.lyrics.fontStyle)
+    expect(next.lyrics.sizePx).toBe(draft.lyrics.sizePx)
+    expect(next.background).toBe(draft.background)
+    expect(next.titleCard).toBe(draft.titleCard)
+    expect(next.stageFrame).toBe(draft.stageFrame)
     expect(draft).toEqual(snapshot)
   })
 
@@ -185,8 +188,11 @@ describe('ProjectTypographyEditor', () => {
     }
     const requested = { ...testFace('Legacy Heavy', 850), postscriptName: null }
     const project = createProject({ id: 'enumerated-faces' })
-    const draft = { ...project.stageStyle.lyrics, typeface, fontStyle: requested }
-    const onDraftChange = vi.fn<ProjectTypographySession['change']>()
+    const draft = {
+      ...project.stageStyle,
+      lyrics: { ...project.stageStyle.lyrics, typeface, fontStyle: requested },
+    }
+    const onDraftChange = vi.fn<ProjectStyleSession['change']>()
     await renderEditor({ project, draft, onDraftChange })
 
     const buttons = [...container.querySelectorAll<HTMLButtonElement>('.font-face-button')]
@@ -201,14 +207,14 @@ describe('ProjectTypographyEditor', () => {
 
     await act(async () => buttons[0].click())
     const next = applyChange(onDraftChange.mock.calls.at(-1)?.[0], draft)
-    expect(next.fontStyle).toEqual(faces[0])
-    expect(next.fontStyle).not.toBe(faces[0])
-    expect(next.typeface).toBe(draft.typeface)
-    expect(draft.fontStyle).toBe(requested)
+    expect(next.lyrics.fontStyle).toEqual(faces[0])
+    expect(next.lyrics.fontStyle).not.toBe(faces[0])
+    expect(next.lyrics.typeface).toBe(draft.lyrics.typeface)
+    expect(draft.lyrics.fontStyle).toBe(requested)
   })
 
   it('uses the exact size options and rejects an injected unsupported value', async () => {
-    const onDraftChange = vi.fn<ProjectTypographySession['change']>()
+    const onDraftChange = vi.fn<ProjectStyleSession['change']>()
     const { draft } = await renderEditor({ onDraftChange })
     const select = container.querySelector<HTMLSelectElement>(
       '[aria-label="Project lyric font size"]',
@@ -230,15 +236,23 @@ describe('ProjectTypographyEditor', () => {
       select.dispatchEvent(new Event('change', { bubbles: true }))
     })
     const next = applyChange(onDraftChange.mock.calls.at(-1)?.[0], draft)
-    expect(next.sizePx).toBe(96)
-    expect(draft.sizePx).not.toBe(96)
+    expect(next.lyrics.sizePx).toBe(96)
+    expect(draft.lyrics.sizePx).not.toBe(96)
   })
 
   it('keeps Sung before Unsung and projects independent draft colors without project mutation', async () => {
     const project = createProject({ id: 'color-draft' })
     const snapshot = structuredClone(project)
-    const onDraftChange = vi.fn<ProjectTypographySession['change']>()
-    let draft = project.stageStyle.lyrics
+    const onDraftChange = vi.fn<ProjectStyleSession['change']>()
+    let draft: StageStyle = {
+      ...project.stageStyle,
+      background: {
+        ...project.stageStyle.background,
+        mode: 'solid',
+        solidColor: '#345678',
+      },
+      stageFrame: { ...project.stageStyle.stageFrame, lineColor: '#456789' },
+    }
     await renderEditor({ project, draft, onDraftChange })
 
     expect(
@@ -250,14 +264,17 @@ describe('ProjectTypographyEditor', () => {
       [...container.querySelectorAll('.style-color-field output')].map(
         (output) => output.textContent,
       ),
-    ).toEqual([draft.sungColor.toUpperCase(), draft.unsungColor.toUpperCase()])
+    ).toEqual([draft.lyrics.sungColor.toUpperCase(), draft.lyrics.unsungColor.toUpperCase()])
+    const stage = container.querySelector<HTMLElement>('.karaoke-stage')!
+    expect(stage.style.background).toBe('#345678')
+    expect(stage.style.getPropertyValue('--stage-frame-color')).toBe('#456789')
 
     const sung = container.querySelector<HTMLInputElement>(
       '[aria-label="Project lyric sung color"]',
     )!
     await act(async () => replaceInput(sung, '#123456'))
     draft = applyChange(onDraftChange.mock.calls.at(-1)?.[0], draft)
-    expect(draft.unsungColor).toBe(project.stageStyle.lyrics.unsungColor)
+    expect(draft.lyrics.unsungColor).toBe(project.stageStyle.lyrics.unsungColor)
     await renderEditor({ project, draft, onDraftChange })
     expect(
       container.querySelector<HTMLElement>('.stage-line')?.style.getPropertyValue('--track-color'),
@@ -270,7 +287,7 @@ describe('ProjectTypographyEditor', () => {
     )!
     await act(async () => replaceInput(unsung, '#654321'))
     draft = applyChange(onDraftChange.mock.calls.at(-1)?.[0], draft)
-    expect(draft.sungColor).toBe('#123456')
+    expect(draft.lyrics.sungColor).toBe('#123456')
     await renderEditor({ project, draft, onDraftChange })
     expect(
       container.querySelector<HTMLElement>('.stage-line')?.style.getPropertyValue('--unsung-color'),

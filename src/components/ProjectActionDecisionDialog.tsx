@@ -58,8 +58,8 @@ export function ProjectActionDecisionDialog({
 
   return (
     <Modal
-      title="Finish editing project lyrics?"
-      eyebrow="Style changes"
+      title="Finish editing project Style?"
+      eyebrow="Project Style changes"
       onClose={onKeep}
       closeDisabled={!canKeep}
       footer={
@@ -77,10 +77,7 @@ export function ProjectActionDecisionDialog({
       }
     >
       <div className="project-action-decision">
-        <p>
-          Choose what to do with the open project-lyrics Style edit before you{' '}
-          {actionDescription(request)}.
-        </p>
+        <p>Resolve the open project Style edit before you {actionDescription(request)}.</p>
         {progress && <p role="status">{progress}</p>}
         {error && <p role="alert">{error}</p>}
       </div>

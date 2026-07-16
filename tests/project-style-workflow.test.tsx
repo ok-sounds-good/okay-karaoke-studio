@@ -110,6 +110,33 @@ function deferred<T>() {
   return { promise, reject, resolve }
 }
 
+class TestAudio extends EventTarget {
+  preload = ''
+  playbackRate = 1
+  volume = 1
+  duration = Number.NaN
+  currentTime = 0
+
+  constructor(readonly src: string) {
+    super()
+  }
+
+  pause() {}
+
+  play() {
+    return Promise.resolve()
+  }
+
+  removeAttribute() {}
+
+  load() {}
+
+  publishDuration(durationMs: number) {
+    this.duration = durationMs / 1_000
+    this.dispatchEvent(new Event('loadedmetadata'))
+  }
+}
+
 function buttonByText(label: string) {
   const button = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
     (candidate) => candidate.textContent?.trim() === label,
@@ -182,7 +209,7 @@ function dispatchKey(target: EventTarget, init: KeyboardEventInit) {
   act(() => target.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, ...init })))
 }
 
-describe('project typography App integration', () => {
+describe('project Style App integration', () => {
   let container: HTMLDivElement
   let root: Root
   let harness: StudioHarness
@@ -214,6 +241,7 @@ describe('project typography App integration', () => {
     container.remove()
     Object.defineProperty(window, 'studio', { configurable: true, value: undefined })
     Reflect.deleteProperty(window, 'queryLocalFonts')
+    vi.unstubAllGlobals()
     vi.restoreAllMocks()
   })
 
@@ -265,7 +293,7 @@ describe('project typography App integration', () => {
     const style = buttonByText('Style')
     expect(style.disabled).toBe(false)
     expect(style.getAttribute('aria-disabled')).toBe('false')
-    expect(style.getAttribute('aria-label')).toBe('Edit project lyric style')
+    expect(style.getAttribute('aria-label')).toBe('Edit project Style')
   }
 
   it('opens beside the identity, replaces the editing workspace, and keeps playback available', async () => {
@@ -319,7 +347,7 @@ describe('project typography App integration', () => {
     expect(buttonByLabel('Undo').disabled).toBe(true)
   })
 
-  it('preserves semantic no-op state and applies one undoable lyric-style step', async () => {
+  it('preserves semantic no-op state and applies one undoable project Style step', async () => {
     const style = buttonByText('Style')
     await click(style)
     await click(buttonByText('Apply & close'))
@@ -341,6 +369,64 @@ describe('project typography App integration', () => {
     expect(
       parseProject(harness.saveProject.mock.calls.at(-1)?.[0].contents).stageStyle.lyrics.sizePx,
     ).toBe(82)
+    expect(buttonByLabel('Redo').disabled).toBe(false)
+  })
+
+  it('replaces only the latest StageStyle and preserves newer non-style state', async () => {
+    const audioInstances: TestAudio[] = []
+    vi.stubGlobal(
+      'AudioContext',
+      class {
+        close() {
+          return Promise.resolve()
+        }
+      },
+    )
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Promise.reject(new Error('Skip waveform decoding'))),
+    )
+    vi.stubGlobal(
+      'Audio',
+      class extends TestAudio {
+        constructor(src: string) {
+          super(src)
+          audioInstances.push(this)
+        }
+      },
+    )
+    const opened = createDemoProject()
+    opened.audioPath = '/music/latest-state.mp3'
+    harness.openProject.mockResolvedValueOnce({
+      requestId: 'latest-state-open',
+      path: '/projects/latest-state.oks',
+      contents: serializeProject(opened),
+    })
+    vi.mocked(harness.studio.resolveProjectAudio).mockResolvedValueOnce({
+      path: opened.audioPath,
+      name: 'latest-state.mp3',
+      url: 'file:///music/latest-state.mp3',
+    })
+    await click(buttonByLabel('Open project'))
+    expect(audioInstances).toHaveLength(1)
+
+    await click(buttonByText('Style'))
+    await chooseSize('96')
+    await act(async () => audioInstances[0]!.publishDuration(45_678))
+    await settle()
+    await click(buttonByText('Apply & close'))
+    await click(buttonByLabel('Save project'))
+
+    const applied = parseProject(harness.saveProject.mock.calls.at(-1)?.[0].contents)
+    expect(applied.durationMs).toBe(45_678)
+    expect(applied.stageStyle.lyrics.sizePx).toBe(96)
+    expect(applied.tracks).toEqual(opened.tracks)
+
+    await click(buttonByLabel('Undo'))
+    await click(buttonByLabel('Save project'))
+    const undone = parseProject(harness.saveProject.mock.calls.at(-1)?.[0].contents)
+    expect(undone.durationMs).toBe(45_678)
+    expect(undone.stageStyle.lyrics.sizePx).toBe(82)
     expect(buttonByLabel('Redo').disabled).toBe(false)
   })
 
@@ -367,7 +453,7 @@ describe('project typography App integration', () => {
     await click(buttonByText('Style'))
     await chooseSize('96')
     await click(buttonByText('Export'))
-    expect(document.body.textContent).toContain('Finish editing project lyrics?')
+    expect(document.body.textContent).toContain('Finish editing project Style?')
     expect(document.body.textContent).not.toContain('Export karaoke')
     await click(buttonByText('Apply changes'))
     expect(document.body.textContent).toContain('Export karaoke')

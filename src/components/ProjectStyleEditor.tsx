@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, type KeyboardEvent } from 'react'
 import type { InstalledFontState } from '../hooks/useInstalledFonts'
-import type { ProjectTypographySession } from '../hooks/useProjectTypographySession'
+import type { ProjectStyleSession } from '../hooks/useProjectStyleSession'
 import type { KaraokeProject } from '../lib/model'
 import {
   FONT_SIZE_OPTIONS,
@@ -11,22 +11,23 @@ import {
   resolveFontFace,
   type FontTypefaceDescriptor,
   type LyricTextStyle,
+  type StageStyle,
 } from '../lib/video-style'
 import '../video-style.css'
 import { KaraokePreview } from './KaraokePreview'
 import { TypefaceCombobox } from './TypefaceCombobox'
 import { Button } from './ui'
 
-export interface ProjectTypographyEditorProps {
+export interface ProjectStyleEditorProps {
   project: KaraokeProject
   playbackMs: number
-  draft: LyricTextStyle
+  draft: StageStyle
   fonts: InstalledFontState
-  onDraftChange: ProjectTypographySession['change']
+  onDraftChange: ProjectStyleSession['change']
   onRetryFonts: () => void
   onTogglePlayback: () => void
-  onCancel: ProjectTypographySession['cancel']
-  onApply: ProjectTypographySession['apply']
+  onCancel: ProjectStyleSession['cancel']
+  onApply: ProjectStyleSession['apply']
 }
 
 function isEditableTarget(target: EventTarget | null) {
@@ -36,7 +37,7 @@ function isEditableTarget(target: EventTarget | null) {
   )
 }
 
-export function ProjectTypographyEditor({
+export function ProjectStyleEditor({
   project,
   playbackMs,
   draft,
@@ -46,14 +47,21 @@ export function ProjectTypographyEditor({
   onTogglePlayback,
   onCancel,
   onApply,
-}: ProjectTypographyEditorProps) {
+}: ProjectStyleEditorProps) {
   const titleId = useId()
   const headingRef = useRef<HTMLHeadingElement>(null)
-  const effectiveFaceKey = fontFaceKey(resolveFontFace(draft.typeface, draft.fontStyle))
+  const lyrics = draft.lyrics
+  const effectiveFaceKey = fontFaceKey(resolveFontFace(lyrics.typeface, lyrics.fontStyle))
   const update = (patch: Partial<LyricTextStyle>) =>
-    onDraftChange((current) => ({ ...current, ...patch }))
+    onDraftChange((current) => ({
+      ...current,
+      lyrics: { ...current.lyrics, ...patch },
+    }))
   const chooseTypeface = (typeface: FontTypefaceDescriptor) =>
-    onDraftChange((current) => ({ ...current, typeface: cloneTypeface(typeface) }))
+    onDraftChange((current) => ({
+      ...current,
+      lyrics: { ...current.lyrics, typeface: cloneTypeface(typeface) },
+    }))
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     const exactShiftSpace =
       event.code === 'Space' && event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey
@@ -85,7 +93,7 @@ export function ProjectTypographyEditor({
           <div>
             <span className="eyebrow">Project lyrics</span>
             <h2 ref={headingRef} id={titleId} tabIndex={-1}>
-              Typography
+              Style
             </h2>
           </div>
         </header>
@@ -95,8 +103,8 @@ export function ProjectTypographyEditor({
             <h3 id={`${titleId}-typeface`}>Typeface</h3>
             <TypefaceCombobox
               {...fonts}
-              value={draft.typeface}
-              selectedFace={draft.fontStyle}
+              value={lyrics.typeface}
+              selectedFace={lyrics.fontStyle}
               onChange={chooseTypeface}
               onRetry={onRetryFonts}
             />
@@ -105,7 +113,7 @@ export function ProjectTypographyEditor({
           <section className="style-control-group" aria-labelledby={`${titleId}-face`}>
             <h3 id={`${titleId}-face`}>Available faces</h3>
             <div className="font-face-list">
-              {draft.typeface.faces.map((face) => (
+              {lyrics.typeface.faces.map((face) => (
                 <button
                   key={fontFaceKey(face)}
                   type="button"
@@ -117,7 +125,10 @@ export function ProjectTypographyEditor({
                     fontSynthesis: 'none',
                   }}
                   onClick={() => {
-                    onDraftChange((current) => ({ ...current, fontStyle: cloneFontFace(face) }))
+                    onDraftChange((current) => ({
+                      ...current,
+                      lyrics: { ...current.lyrics, fontStyle: cloneFontFace(face) },
+                    }))
                   }}
                 >
                   {face.style}
@@ -131,7 +142,7 @@ export function ProjectTypographyEditor({
               <span>Size</span>
               <select
                 aria-label="Project lyric font size"
-                value={draft.sizePx}
+                value={lyrics.sizePx}
                 onChange={(event) => {
                   const sizePx = Number(event.currentTarget.value)
                   if (isFontSizePx(sizePx)) update({ sizePx })
@@ -153,10 +164,10 @@ export function ProjectTypographyEditor({
                 <input
                   aria-label="Project lyric sung color"
                   type="color"
-                  value={draft.sungColor}
+                  value={lyrics.sungColor}
                   onChange={(event) => update({ sungColor: event.currentTarget.value })}
                 />
-                <output>{draft.sungColor.toUpperCase()}</output>
+                <output>{lyrics.sungColor.toUpperCase()}</output>
               </div>
             </label>
             <label className="style-color-field">
@@ -165,10 +176,10 @@ export function ProjectTypographyEditor({
                 <input
                   aria-label="Project lyric unsung color"
                   type="color"
-                  value={draft.unsungColor}
+                  value={lyrics.unsungColor}
                   onChange={(event) => update({ unsungColor: event.currentTarget.value })}
                 />
-                <output>{draft.unsungColor.toUpperCase()}</output>
+                <output>{lyrics.unsungColor.toUpperCase()}</output>
               </div>
             </label>
           </section>
@@ -189,7 +200,7 @@ export function ProjectTypographyEditor({
         playbackMs={playbackMs}
         lyricMs={playbackMs - project.offsetMs}
         selectedWordIds={new Set()}
-        designMode={{ target: 'project-lyrics', style: draft }}
+        designMode={{ target: 'project-lyrics', stageStyle: draft }}
       />
     </main>
   )
