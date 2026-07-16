@@ -480,13 +480,15 @@ describe('project-open media authorization', () => {
 
   it('authorizes only accepted B and ignores late A restoration without consuming B', async () => {
     const { capabilities, opens } = coordinator()
-    const projectA = projectWithBackground('A', '/media/a.png', 'a.mp3')
-    const projectB = projectWithBackground('B', '/media/b.jpg', 'b.mp3')
+    const imagePathA = resolve('/media/a.png')
+    const imagePathB = resolve('/media/b.jpg')
+    const projectA = projectWithBackground('A', imagePathA, 'a.mp3')
+    const projectB = projectWithBackground('B', imagePathB, 'b.mp3')
     const initialRevision = capabilities.backgroundState(9).revision
     expect(await stageAndAccept(opens, 9, '/projects/a.oks', projectA)).toBe(true)
     expect(capabilities.backgroundState(9).revision).not.toBe(initialRevision)
     const restoreA = capabilities.beginRestore(9, 'background', '/projects/a.oks')
-    expect(restoreA).toMatchObject({ authorized: true, filePath: resolve('/media/a.png') })
+    expect(restoreA).toMatchObject({ authorized: true, filePath: imagePathA })
 
     expect(await stageAndAccept(opens, 9, '/projects/b.oks', projectB)).toBe(true)
     const projectBRevision = capabilities.backgroundState(9).revision
@@ -497,7 +499,7 @@ describe('project-open media authorization', () => {
     expect(staleA.authorized).toBe(false)
 
     const restoreB = capabilities.beginRestore(9, 'background', '/projects/b.oks')
-    expect(restoreB).toMatchObject({ authorized: true, filePath: resolve('/media/b.jpg') })
+    expect(restoreB).toMatchObject({ authorized: true, filePath: imagePathB })
     expect(releaseCurrent(capabilities, 9, null)).toBe(false)
     const backgroundB = capabilities.registerRestoredBackground(
       9,
@@ -603,7 +605,7 @@ describe('project-open media authorization', () => {
   it('preserves exact restoration through chooser failures and blocks stale null release', async () => {
     const { capabilities, opens } = coordinator()
     const projectPath = '/projects/rearm.oks'
-    const imagePath = '/media/rearm.png'
+    const imagePath = resolve('/media/rearm.png')
     const staleNull = capabilities.backgroundState(13)
     expect(
       await stageAndAccept(opens, 13, projectPath, projectWithBackground('Rearm', imagePath)),
@@ -634,7 +636,7 @@ describe('project-open media authorization', () => {
     )
     expect(capabilities.settleBackgroundCandidate(13, declined, false)).toBe(true)
     const restored = capabilities.beginRestore(13, 'background', projectPath)
-    expect(restored).toMatchObject({ authorized: true, filePath: resolve(imagePath) })
+    expect(restored).toMatchObject({ authorized: true, filePath: imagePath })
     expect(
       capabilities.registerRestoredBackground(13, restored.filePath, image(132), restored.sequence),
     ).not.toBeNull()
@@ -665,7 +667,7 @@ describe('project-open media authorization', () => {
 
   it('authorizes an exact missing image path without rejecting the valid project', async () => {
     const { capabilities, opens } = coordinator()
-    const missingPath = '/private/missing-background.png'
+    const missingPath = resolve('/private/missing-background.png')
     expect(
       await stageAndAccept(
         opens,
@@ -677,7 +679,7 @@ describe('project-open media authorization', () => {
     const restoration = capabilities.beginRestore(10, 'background', '/projects/missing.oks')
     expect(restoration).toMatchObject({
       authorized: true,
-      filePath: resolve(missingPath),
+      filePath: missingPath,
     })
     expect(capabilities.requestIsCurrent(10, 'background', restoration.sequence)).toBe(true)
   })
