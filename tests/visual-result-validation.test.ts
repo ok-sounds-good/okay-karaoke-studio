@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import * as fileSystem from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -185,6 +186,121 @@ describe('visual result validation', () => {
       }),
     ).rejects.toThrow('VISUAL_SMOKE_RESULT_INVALID')
     expect(replaced).toBe(true)
+    await expect(
+      results.validateVisualResultDirectory(output, {
+        scenario: results.PROJECT_TYPOGRAPHY_SCENARIO,
+      }),
+    ).rejects.toThrow('VISUAL_SMOKE_RESULT_INVALID')
+  })
+
+  it('rejects replacement of a revalidated typography capture during a later final recheck', async () => {
+    const { output, root } = await freshResult(results.PROJECT_TYPOGRAPHY_SCENARIO)
+    const firstCapturePath = join(output, results.PROJECT_TYPOGRAPHY_NAMES[0])
+    const secondCapturePath = join(output, results.PROJECT_TYPOGRAPHY_NAMES[1])
+    let secondCaptureEntryChecks = 0
+    let replaced = false
+    const fsApi = {
+      ...fileSystem,
+      async lstat(filePath: string, options: { bigint: true }) {
+        if (filePath === secondCapturePath) {
+          secondCaptureEntryChecks += 1
+          // Initial consumption checks this entry before and after reading it;
+          // lookup three begins its final recheck, after earlier leaves passed.
+          if (secondCaptureEntryChecks === 3) {
+            replaced = true
+            await rename(firstCapturePath, join(root, 'displaced-revalidated-capture.png'))
+            await writeFile(firstCapturePath, validPng(1, 1))
+          }
+        }
+        return fileSystem.lstat(filePath, options)
+      },
+    }
+
+    await expect(
+      results.validateVisualResultDirectory(output, {
+        fsApi,
+        scenario: results.PROJECT_TYPOGRAPHY_SCENARIO,
+      }),
+    ).rejects.toThrow('VISUAL_SMOKE_RESULT_INVALID')
+    expect(replaced).toBe(true)
+    await expect(
+      results.validateVisualResultDirectory(output, {
+        scenario: results.PROJECT_TYPOGRAPHY_SCENARIO,
+      }),
+    ).rejects.toThrow('VISUAL_SMOKE_RESULT_INVALID')
+  })
+
+  it('rejects same-inode mutation of a revalidated capture during a later final recheck', async () => {
+    const { output } = await freshResult(results.PROJECT_TYPOGRAPHY_SCENARIO)
+    const firstCapturePath = join(output, results.PROJECT_TYPOGRAPHY_NAMES[0])
+    const secondCapturePath = join(output, results.PROJECT_TYPOGRAPHY_NAMES[1])
+    const original = await fileSystem.lstat(firstCapturePath, { bigint: true })
+    const originalBytes = await readFile(firstCapturePath)
+    const changedOffset = Math.floor(originalBytes.length / 2)
+    let retainedIdentity = false
+    let secondCaptureEntryChecks = 0
+    const fsApi = {
+      ...fileSystem,
+      async lstat(filePath: string, options: { bigint: true }) {
+        if (filePath === secondCapturePath) {
+          secondCaptureEntryChecks += 1
+          if (secondCaptureEntryChecks === 3) {
+            const handle = await fileSystem.open(firstCapturePath, 'r+')
+            try {
+              const changedByte = Buffer.from([originalBytes[changedOffset] ^ 0xff])
+              await handle.write(changedByte, 0, changedByte.length, changedOffset)
+              await handle.sync()
+            } finally {
+              await handle.close()
+            }
+            const changed = await fileSystem.lstat(firstCapturePath, { bigint: true })
+            retainedIdentity =
+              changed.dev === original.dev &&
+              changed.ino === original.ino &&
+              changed.size === original.size
+          }
+        }
+        return fileSystem.lstat(filePath, options)
+      },
+    }
+
+    await expect(
+      results.validateVisualResultDirectory(output, {
+        fsApi,
+        scenario: results.PROJECT_TYPOGRAPHY_SCENARIO,
+      }),
+    ).rejects.toThrow('VISUAL_SMOKE_RESULT_INVALID')
+    expect(retainedIdentity).toBe(true)
+    await expect(
+      results.validateVisualResultDirectory(output, {
+        scenario: results.PROJECT_TYPOGRAPHY_SCENARIO,
+      }),
+    ).rejects.toThrow('VISUAL_SMOKE_RESULT_INVALID')
+  })
+
+  it('publishes authoritative validated bytes independently of a later source mutation', async () => {
+    const { output, root } = await freshResult(results.PROJECT_TYPOGRAPHY_SCENARIO)
+    const validated = await results.validateVisualResultDirectory(output, {
+      scenario: results.PROJECT_TYPOGRAPHY_SCENARIO,
+    })
+    expect(validated.publishedArtifacts.map(({ name }: { name: string }) => name)).toEqual([
+      ...results.PROJECT_TYPOGRAPHY_NAMES,
+      results.RESULT_NAME,
+    ])
+    const authoritativeFirst = Buffer.from(validated.publishedArtifacts[0].bytes)
+    const published = join(root, 'published-evidence')
+    await publishArtifactBuffers(published, validated.publishedArtifacts)
+
+    await writeFile(join(output, results.PROJECT_TYPOGRAPHY_NAMES[0]), validPng(1, 1))
+
+    await expect(
+      results.validateVisualResultDirectory(published, {
+        scenario: results.PROJECT_TYPOGRAPHY_SCENARIO,
+      }),
+    ).resolves.toMatchObject({ ok: true, schemaVersion: 1 })
+    expect(await readFile(join(published, results.PROJECT_TYPOGRAPHY_NAMES[0]))).toEqual(
+      authoritativeFirst,
+    )
     await expect(
       results.validateVisualResultDirectory(output, {
         scenario: results.PROJECT_TYPOGRAPHY_SCENARIO,

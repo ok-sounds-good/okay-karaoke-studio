@@ -6,10 +6,12 @@ const path = require('node:path')
 const electronExecutable = require('electron')
 const {
   createOwnedSmokeProfile,
+  pathsAreSeparate,
   verifyRetainedSmokeProfile,
 } = require('../electron/smoke-profile.cjs')
 const {
   outputState,
+  publishArtifactBuffers,
   validateFreshOutputPath,
   writeFreshLauncherFailure,
 } = require('../electron/smoke-artifacts.cjs')
@@ -98,6 +100,21 @@ async function claimFreshOutput(rawOutput, dependencies = {}) {
   return state.output
 }
 
+async function createPrivateRawRoot(fsApi = fs) {
+  return createOwnedSmokeProfile('oks-visual-raw-', { fsApi })
+}
+
+function privateRawOutput(rawRoot, requested) {
+  try {
+    const root = validateFreshOutputPath(rawRoot?.path)
+    const output = validateFreshOutputPath(path.join(root, 'evidence'))
+    if (!pathsAreSeparate(output, requested)) throw launcherError('VISUAL_SMOKE_OUTPUT_INVALID')
+    return output
+  } catch {
+    throw launcherError('VISUAL_SMOKE_OUTPUT_INVALID')
+  }
+}
+
 function childArguments(output, scenario, userProfile, sessionProfile) {
   if (scenario !== BASELINE_SCENARIO && scenario !== PROJECT_TYPOGRAPHY_SCENARIO) {
     throw launcherError('VISUAL_SMOKE_SCENARIO_INVALID')
@@ -124,24 +141,29 @@ async function publishLauncherFailure(output, code, dependencies) {
     typeof code === 'string' && code.startsWith('VISUAL_SMOKE_')
       ? code
       : 'VISUAL_SMOKE_LAUNCHER_FAILED'
-  const current = await dependencies.outputState(output)
-  if (current.state === 'absent') {
-    try {
+  try {
+    const current = await dependencies.outputState(output)
+    if (current.state === 'absent') {
       await dependencies.writeFailure(output, { code: safeCode, ok: false })
-    } catch {
-      return 'VISUAL_SMOKE_OUTPUT_INVALID'
     }
+  } catch {
+    return 'VISUAL_SMOKE_OUTPUT_INVALID'
   }
   return safeCode
 }
 
 async function runLauncher(options = {}, supplied = {}) {
+  const fsApi = options.fsApi || fs
   const dependencies = {
+    createRawRoot: supplied.createRawRoot || (() => createPrivateRawRoot(fsApi)),
     createProfile: supplied.createProfile || createOwnedSmokeProfile,
     outputState: supplied.outputState || outputState,
+    publish: supplied.publish || publishArtifactBuffers,
     runChild: supplied.runChild || runBoundedChild,
     validateResult: supplied.validateResult || validateVisualResultDirectory,
     verifyProfile: supplied.verifyProfile || verifyRetainedSmokeProfile,
+    verifyRawRoot:
+      supplied.verifyRawRoot || ((rawRoot) => verifyRetainedSmokeProfile(rawRoot, { fsApi })),
     writeFailure: supplied.writeFailure || writeFreshLauncherFailure,
   }
   const argv = options.argv || []
@@ -149,13 +171,20 @@ async function runLauncher(options = {}, supplied = {}) {
   let output
   let scenario
   let profiles = []
+  let publishedArtifacts
+  let rawOutput
+  let rawRoot
+  let rawRootClaimed = false
   let failureCode = null
 
   try {
-    const request = await requestedRun(argv, environment, options.fsApi || fs)
+    const request = await requestedRun(argv, environment, fsApi)
     output = request.output
     scenario = request.scenario
     output = await claimFreshOutput(output, dependencies)
+    rawRoot = await dependencies.createRawRoot()
+    rawRootClaimed = true
+    rawOutput = privateRawOutput(rawRoot, output)
     const userProfile = await dependencies.createProfile('oks-visual-user-data-')
     profiles.push(userProfile)
     const sessionProfile = await dependencies.createProfile('oks-visual-session-data-')
@@ -163,7 +192,7 @@ async function runLauncher(options = {}, supplied = {}) {
 
     const outcome = await dependencies.runChild({
       executable: options.executable || electronExecutable,
-      args: childArguments(output, scenario, userProfile, sessionProfile),
+      args: childArguments(rawOutput, scenario, userProfile, sessionProfile),
       captureOutput: {
         classify: capturedFatalDiagnostic,
         maxBytesPerStream: MAX_DIAGNOSTIC_BYTES,
@@ -178,27 +207,45 @@ async function runLauncher(options = {}, supplied = {}) {
     ) {
       failureCode = 'VISUAL_SMOKE_CHILD_FAILED'
     }
-    if (!(await retainProfiles(profiles, dependencies.verifyProfile))) {
-      failureCode = 'VISUAL_SMOKE_PROFILE_IDENTITY_FAILED'
-    }
-    if (failureCode) {
-      failureCode = await publishLauncherFailure(output, failureCode, dependencies)
-      return Object.freeze({ code: failureCode, ok: false })
-    }
-    try {
-      await dependencies.validateResult(output, { scenario })
-    } catch {
-      failureCode = 'VISUAL_SMOKE_RESULT_INVALID'
-      return Object.freeze({ code: failureCode, ok: false })
-    }
-    return Object.freeze({ ok: true })
   } catch (error) {
     failureCode = typeof error?.code === 'string' ? error.code : 'VISUAL_SMOKE_LAUNCHER_FAILED'
-    if (output) failureCode = await publishLauncherFailure(output, failureCode, dependencies)
-    if (profiles.length > 0 && !(await retainProfiles(profiles, dependencies.verifyProfile))) {
-      failureCode = 'VISUAL_SMOKE_PROFILE_IDENTITY_FAILED'
+  }
+
+  if (profiles.length > 0 && !(await retainProfiles(profiles, dependencies.verifyProfile))) {
+    failureCode = 'VISUAL_SMOKE_PROFILE_IDENTITY_FAILED'
+  }
+
+  if (!failureCode) {
+    try {
+      const validated = await dependencies.validateResult(rawOutput, { scenario })
+      if (!Array.isArray(validated?.publishedArtifacts)) throw launcherError('invalid result')
+      publishedArtifacts = validated.publishedArtifacts
+    } catch {
+      failureCode = 'VISUAL_SMOKE_RESULT_INVALID'
     }
+  }
+
+  if (rawRootClaimed) {
+    try {
+      // Reuse the profile retention invariant: Node cannot recursively remove
+      // a directory conditionally by its held identity on every platform.
+      const retention = await dependencies.verifyRawRoot(rawRoot)
+      if (retention?.retained !== true) throw launcherError('invalid retention')
+    } catch {
+      return Object.freeze({ code: 'VISUAL_SMOKE_OUTPUT_INVALID', ok: false })
+    }
+  }
+
+  if (failureCode) {
+    if (output) failureCode = await publishLauncherFailure(output, failureCode, dependencies)
     return Object.freeze({ code: failureCode, ok: false })
+  }
+
+  try {
+    await dependencies.publish(output, publishedArtifacts)
+    return Object.freeze({ ok: true })
+  } catch {
+    return Object.freeze({ code: 'VISUAL_SMOKE_OUTPUT_INVALID', ok: false })
   }
 }
 

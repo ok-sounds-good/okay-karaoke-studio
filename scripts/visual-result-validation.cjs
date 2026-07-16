@@ -46,6 +46,20 @@ function sameIdentity(left, right) {
   return Boolean(left && right && left.dev === right.dev && left.ino === right.ino)
 }
 
+function stableDirectoryEvidence(stats) {
+  return Object.freeze({
+    ...statIdentity(stats),
+    ctimeNs: String(stats.ctimeNs),
+    mtimeNs: String(stats.mtimeNs),
+  })
+}
+
+function sameStableDirectoryEvidence(left, right) {
+  return Boolean(
+    sameIdentity(left, right) && left.ctimeNs === right.ctimeNs && left.mtimeNs === right.mtimeNs,
+  )
+}
+
 function stableFileEvidence(stats) {
   return Object.freeze({
     ...statIdentity(stats),
@@ -225,12 +239,13 @@ function createResultArtifacts(pngBytes) {
 
 async function assertDirectory(identity, fsApi) {
   try {
+    const realPath = await fsApi.realpath(identity.output)
     const stats = await fsApi.lstat(identity.output, { bigint: true })
     if (
       !stats.isDirectory() ||
       stats.isSymbolicLink() ||
-      !sameIdentity(statIdentity(stats), identity) ||
-      (await fsApi.realpath(identity.output)) !== identity.realPath
+      !sameStableDirectoryEvidence(stableDirectoryEvidence(stats), identity) ||
+      realPath !== identity.realPath
     )
       throw resultError()
   } catch (error) {
@@ -296,6 +311,15 @@ async function revalidateRegularFile(identity, original, fsApi) {
     throw resultError()
 }
 
+function authoritativeArtifacts(consumedFiles) {
+  const [resultFile, ...pngFiles] = consumedFiles
+  return Object.freeze(
+    [...pngFiles, resultFile].map(({ bytes, name }) =>
+      Object.freeze({ bytes: Buffer.from(bytes), name }),
+    ),
+  )
+}
+
 async function validateVisualResultDirectory(rawOutput, options = {}) {
   const fsApi = options.fsApi || fs
   const scenario = options.scenario ?? BASELINE_SCENARIO
@@ -307,7 +331,7 @@ async function validateVisualResultDirectory(rawOutput, options = {}) {
     const stats = await fsApi.lstat(output, { bigint: true })
     if (!stats.isDirectory() || stats.isSymbolicLink()) throw resultError()
     const identity = {
-      ...statIdentity(stats),
+      ...stableDirectoryEvidence(stats),
       output,
       realPath: await fsApi.realpath(output),
     }
@@ -351,14 +375,26 @@ async function validateVisualResultDirectory(rawOutput, options = {}) {
       )
         throw resultError()
     }
+    // These private copies, not the mutable child-output paths, are the bytes
+    // the launcher is authorized to publish after validation succeeds.
+    const publishedArtifacts = authoritativeArtifacts(consumedFiles)
     for (const consumed of consumedFiles) {
       await revalidateRegularFile(identity, consumed, fsApi)
     }
-    await assertDirectory(identity, fsApi)
+    // A concurrent diagnostic pass catches a leaf changed while a later leaf
+    // was being checked above. Publication safety does not depend on this pass:
+    // a still-later source mutation cannot change publishedArtifacts.
+    await Promise.all(
+      consumedFiles.map((consumed) => revalidateRegularFile(identity, consumed, fsApi)),
+    )
     if ((await fsApi.readdir(output)).sort().join(',') !== expectedFiles.join(',')) {
       throw resultError()
     }
-    return manifest
+    await assertDirectory(identity, fsApi)
+    return Object.freeze({
+      ...manifest,
+      publishedArtifacts,
+    })
   } catch (error) {
     if (error?.code === 'VISUAL_SMOKE_RESULT_INVALID') throw error
     throw resultError()
