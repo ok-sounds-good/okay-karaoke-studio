@@ -112,6 +112,26 @@ describe('visual result validation', () => {
           name: '05-background-solid-applied-1280x720.png',
           width: 1280,
         },
+        {
+          height: 720,
+          name: '06-title-card-destination-1280x720.png',
+          width: 1280,
+        },
+        {
+          height: 720,
+          name: '07-title-card-eyebrow-draft-1280x720.png',
+          width: 1280,
+        },
+        {
+          height: 720,
+          name: '08-title-card-artist-draft-1280x720.png',
+          width: 1280,
+        },
+        {
+          height: 720,
+          name: '09-title-card-applied-1280x720.png',
+          width: 1280,
+        },
       ],
       ok: true,
       schemaVersion: 1,

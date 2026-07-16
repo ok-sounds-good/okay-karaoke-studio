@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { KaraokePreview, type KaraokePreviewDesignMode } from '../src/components/KaraokePreview'
+import { titleCardDesignPreviewFonts } from '../src/hooks/usePreviewFonts'
 import { createProject } from '../src/lib/model'
 import { previewFrameStateAt } from '../src/lib/stage-frame-state'
 import { logicalStagePx } from '../src/lib/stage-layout'
@@ -187,6 +188,84 @@ describe('Karaoke Preview project-lyrics design mode', () => {
     expect(solidStage.dataset.backgroundMode).toBe('solid')
     expect(solidStage.style.background).toBe('#654321')
     expect(project).toEqual(snapshot)
+  })
+
+  it('renders a selected hidden Title card role truthfully outside the timeline handoff', () => {
+    const project = createProject({ title: 'Semantic title', artist: 'Semantic artist' })
+    const track = project.tracks[0]!
+    track.vocalStyle.syncAid = { enabled: true, minLeadMs: 2_000, maxLeadMs: 3_000 }
+    track.lines = [
+      {
+        id: 'title-design-line',
+        text: 'Timeline content',
+        startMs: 3_000,
+        endMs: 5_000,
+        words: [{ id: 'title-design-word', text: 'Timeline', startMs: 3_000, endMs: 5_000 }],
+      },
+    ]
+    const snapshot = structuredClone(project)
+    const stageStyle = cloneStageStyle(project.stageStyle)
+    Object.assign(stageStyle.titleCard.eyebrow, {
+      visible: false,
+      color: '#123456',
+      sizePx: 56,
+    })
+    stageStyle.titleCard.artist.visible = false
+    const frame = previewFrameStateAt(project, 1_000)
+    expect(frame.showTitle).toBe(false)
+    expect(frame.lines).toHaveLength(1)
+    expect(frame.syncAids).toHaveLength(1)
+
+    const rendered = document.createElement('div')
+    rendered.innerHTML = previewMarkup(
+      { target: 'title-card', role: 'eyebrow', stageStyle },
+      project,
+      1_000,
+    )
+    const panel = rendered.querySelector<HTMLElement>('[aria-label="Title card design preview"]')!
+    const stage = panel.querySelector<HTMLElement>('.karaoke-stage')!
+    const card = stage.querySelector<HTMLElement>('[data-design-preview="title-card"]')!
+    const eyebrow = card.querySelector<HTMLElement>('[data-title-card-role="eyebrow"]')!
+    const status = card.querySelector<HTMLElement>('[role="status"]')!
+
+    expect(stage.classList.contains('is-designing-title-card')).toBe(true)
+    expect(eyebrow.dataset.hiddenOutput).toBe('true')
+    expect(eyebrow.textContent).toBe("Tonight's performance")
+    expect(eyebrow.style.color).toBe('#123456')
+    expect(eyebrow.getAttribute('style')).toContain(`font-size:${logicalStagePx(56)}`)
+    expect(card.querySelector('[data-title-card-role="title"]')?.textContent).toBe('Semantic title')
+    expect(card.querySelector('[data-title-card-role="artist"]')).toBeNull()
+    expect(status.textContent).toBe('Hidden in output')
+    expect(eyebrow.contains(status)).toBe(false)
+    expect(stage.querySelector('.active-lines')).toBeNull()
+    expect(stage.querySelector('.sync-aid')).toBeNull()
+    expect(project).toEqual(snapshot)
+  })
+
+  it('selects hidden target and visible Title card and Stage frame fonts for design loading', () => {
+    const project = createProject()
+    const draft = cloneStageStyle(project.stageStyle)
+    const selected = localLyricStyle('Selected Hidden', 'SelectedHidden-Regular')
+    const title = localLyricStyle('Visible Title', 'VisibleTitle-Regular')
+    const artist = localLyricStyle('Hidden Artist', 'HiddenArtist-Regular')
+    const brand = localLyricStyle('Visible Brand', 'VisibleBrand-Regular')
+    const clock = localLyricStyle('Hidden Clock', 'HiddenClock-Regular')
+    const footer = localLyricStyle('Visible Footer', 'VisibleFooter-Regular')
+    applyFont(draft.titleCard.eyebrow, selected)
+    applyFont(draft.titleCard.title, title)
+    applyFont(draft.titleCard.artist, artist)
+    applyFont(draft.stageFrame.brand, brand)
+    applyFont(draft.stageFrame.clock, clock)
+    applyFont(draft.stageFrame.footer, footer)
+    draft.titleCard.eyebrow.visible = false
+    draft.titleCard.artist.visible = false
+    draft.stageFrame.clock.visible = false
+
+    expect(
+      titleCardDesignPreviewFonts(draft, 'eyebrow')
+        .map(({ typeface }) => typeface.family)
+        .sort(),
+    ).toEqual(['Selected Hidden', 'Visible Brand', 'Visible Footer', 'Visible Title'].sort())
   })
 
   it('hides sync aids even when the ordinary frame planner produces one', () => {

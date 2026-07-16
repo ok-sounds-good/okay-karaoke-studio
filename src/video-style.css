@@ -16,20 +16,23 @@
 
 .style-destination-tabs {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--style-destination-count), minmax(0, 1fr));
   gap: 5px;
   padding: 7px;
   border-bottom: 1px solid var(--line-soft);
 }
 
 .style-destination-tabs button {
+  min-width: 0;
   min-height: 31px;
+  padding: 0 5px;
   border: 1px solid transparent;
   border-radius: 8px;
   background: transparent;
   color: var(--muted);
   font-size: 10px;
   font-weight: 800;
+  white-space: nowrap;
 }
 
 .style-destination-tabs button[aria-selected='true'] {
@@ -56,12 +59,69 @@
   border-top: 1px solid var(--line-soft);
 }
 
-.style-control-group > h3 {
+.style-control-group > h3,
+.style-control-group > h4 {
   margin: 0 0 8px;
   color: var(--muted-strong);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.04em;
+}
+
+.title-card-role-selector {
+  min-width: 0;
+  margin: 0 0 14px;
+  padding: 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 9px;
+}
+
+.title-card-role-selector legend {
+  padding: 0 4px;
+  color: var(--muted-strong);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.title-card-role-selector [role='radiogroup'] {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.title-card-role-selector label,
+.style-visibility-field {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-soft);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.title-card-role-selector label {
+  justify-content: center;
+  min-width: 0;
+  min-height: 31px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.title-card-role-selector label:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--panel-strong);
+  color: var(--accent-soft);
+}
+
+.visible-text-role-editor > h3 {
+  margin: 0 0 9px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.style-visibility-field {
+  margin-bottom: 14px;
 }
 
 .style-background-mode {
@@ -287,6 +347,37 @@
   font-family: ui-monospace, monospace;
   font-size: 9px;
   text-overflow: ellipsis;
+}
+
+.karaoke-stage.is-designing-title-card [data-title-card-design-role] {
+  position: relative;
+  outline: max(1px, 0.12cqw) solid var(--accent);
+  outline-offset: 0.45cqw;
+  anchor-name: --title-card-design-target;
+}
+
+.karaoke-stage.is-designing-title-card .title-card {
+  position: relative;
+}
+
+.title-card-design-status {
+  position: absolute;
+  position-anchor: --title-card-design-target;
+  z-index: 4;
+  top: anchor(top);
+  left: anchor(right);
+  margin-left: 0.8cqw;
+  padding: 0.3cqw 0.5cqw;
+  border: 1px solid var(--accent);
+  border-radius: 0.35cqw;
+  background: var(--panel);
+  color: var(--accent-soft);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.62cqw;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .style-editor__actions {

@@ -44,6 +44,23 @@ export function designPreviewFonts(stageStyle: StageStyle) {
   return uniqueFonts(values)
 }
 
+export function titleCardDesignPreviewFonts(
+  stageStyle: StageStyle,
+  selectedRole: keyof StageStyle['titleCard'],
+) {
+  const values: FontSizeStyle[] = []
+  const stageFrame = stageStyle.stageFrame
+  if (stageFrame.enabled) {
+    if (stageFrame.brand.visible) values.push(stageFrame.brand)
+    if (stageFrame.clock.visible) values.push(stageFrame.clock)
+    if (stageFrame.footer.visible) values.push(stageFrame.footer)
+  }
+  Object.entries(stageStyle.titleCard).forEach(([role, style]) => {
+    if (style.visible || role === selectedRole) values.push(style)
+  })
+  return uniqueFonts(values)
+}
+
 interface PreviewFontRuntimeResult {
   key: string
   aliases: Record<string, string | null>

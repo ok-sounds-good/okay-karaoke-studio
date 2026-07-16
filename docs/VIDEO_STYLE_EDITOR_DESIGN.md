@@ -78,14 +78,25 @@ separate cohesive pull requests, but the navigation language remains stable.
   overridden.
 - Sung means the progressive performed fill, not the Scroll advance mode.
 
-### Title card and Stage frame
+### Title card
 
-- Title eyebrow, title, artist, frame brand, clock, and footer remain separate
-  semantic roles with independent visibility and typography.
+- Title eyebrow, title, and artist remain separate semantic roles with
+  independent visibility and typography.
+- A compact **Title card role** selector keeps the chosen role at its true stage
+  position while its controls repeat that role in their accessible names.
+- A selected hidden role remains hidden in output. Design Preview alone shows it
+  with its authored typography, a target outline, and a separate **Hidden in
+  output** status.
+- Project title and artist remain semantic content, not editable copies inside
+  the style model.
+
+### Stage frame
+
+- Frame brand, clock, and footer remain separate semantic roles with independent
+  visibility and typography.
 - The Stage frame master switch governs the visible frame and its built-in
   brand, clock, and song-metadata elements.
-- Project title, artist, and playback time remain content, not editable copies
-  inside the style model.
+- Playback time remains content, not an editable copy inside the style model.
 
 ### Vocal overrides and sync aid
 

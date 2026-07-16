@@ -142,6 +142,27 @@ function projectLyricsReadinessScript(viewport, contract = { kind: 'project-lyri
     const resizeObserver = new ResizeObserver(() => schedule())
     const mutationObserver = new MutationObserver(() => schedule())
     const fontSet = document.fonts
+    const fitFixture = document.createElement('div')
+    fitFixture.className = 'style-destination-tabs'
+    fitFixture.setAttribute('aria-hidden', 'true')
+    fitFixture.style.cssText = 'position:fixed;left:0;top:0;width:330px;visibility:hidden;pointer-events:none'
+    fitFixture.style.setProperty('--style-destination-count', '4')
+    for (const label of ['Project lyrics', 'Background', 'Title card', 'Stage frame']) {
+      const button = document.createElement('button')
+      button.textContent = label
+      fitFixture.append(button)
+    }
+    document.body.append(fitFixture)
+
+    const fourDestinationsFit = () => {
+      const fixtureBounds = fitFixture.getBoundingClientRect()
+      const buttons = [...fitFixture.querySelectorAll('button')]
+      const bounds = buttons.map((button) => button.getBoundingClientRect())
+      return fixtureBounds.width === 330 && fitFixture.scrollWidth <= fitFixture.clientWidth &&
+        bounds.length === 4 && bounds.every((box) => box.top === bounds[0].top &&
+          box.left >= fixtureBounds.left && box.right <= fixtureBounds.right) &&
+        buttons.every((button) => button.scrollWidth <= button.clientWidth)
+    }
 
     const sampleBackground = () => {
       const applied = contract.applied === true
@@ -214,8 +235,55 @@ function projectLyricsReadinessScript(viewport, contract = { kind: 'project-lyri
         stageHeight: bounds.height, stageWidth: bounds.width, width: expected.width }
     }
 
+    const sampleTitleCard = () => {
+      const applied = contract.applied === true
+      const workspace = document.querySelector('.style-workspace[role="dialog"]')
+      const panel = document.querySelector('[role="tabpanel"][aria-labelledby$="-title-card-tab"]')
+      const tab = document.querySelector('[role="tab"][data-style-destination="title-card"]')
+      const preview = document.querySelector(
+        applied ? '[aria-label="Karaoke preview"]' : '[aria-label="Title card design preview"]',
+      )
+      const stage = preview?.querySelector('.karaoke-stage')
+      const card = stage?.querySelector('.title-card')
+      const role = card?.querySelector('[data-title-card-design-role="' + contract.role + '"]')
+      const status = card?.querySelector('.title-card-design-status')
+      const eyebrow = card?.querySelector('[data-title-card-role="eyebrow"]')
+      const title = card?.querySelector('[data-title-card-role="title"]')
+      const artist = card?.querySelector('[data-title-card-role="artist"]')
+      const bounds = stage?.getBoundingClientRect()
+      if (!(preview instanceof HTMLElement) || !(stage instanceof HTMLElement) ||
+        !(card instanceof HTMLElement) || !(title instanceof HTMLElement) ||
+        !bounds || bounds.width <= 0 || Math.abs(bounds.width / bounds.height - 16 / 9) > .01 ||
+        document.documentElement.clientWidth !== expected.width ||
+        document.documentElement.clientHeight !== expected.height ||
+        document.documentElement.scrollWidth > expected.width || document.body.scrollWidth > expected.width ||
+        document.readyState !== 'complete' || fontSet?.status !== 'loaded' ||
+        window.location.href !== '${PACKAGED_APP_URL}' || document.querySelector('.stage-resource-warning') ||
+        stage.querySelector('.active-lines, .sync-aid')) return null
+      if (applied) {
+        if (workspace || stage.classList.contains('is-designing') || eyebrow || artist || status) return null
+      } else {
+        const selected = panel?.querySelector('input[value="' + contract.role + '"]')
+        const visibility = panel?.querySelector('[aria-label="Show ' +
+          contract.role[0].toUpperCase() + contract.role.slice(1) + ' in output"]')
+        const hidden = contract.role === 'eyebrow' ? contract.eyebrowHidden : contract.artistHidden
+        if (!(workspace instanceof HTMLElement) || !(panel instanceof HTMLElement) || panel.hidden ||
+          !(tab instanceof HTMLButtonElement) || tab.getAttribute('aria-selected') !== 'true' ||
+          !(selected instanceof HTMLInputElement) || !selected.checked ||
+          !(visibility instanceof HTMLInputElement) || visibility.checked === hidden ||
+          !(role instanceof HTMLElement) || (hidden !== (role.dataset.hiddenOutput === 'true')) ||
+          (hidden !== (status?.textContent === 'Hidden in output')) ||
+          (contract.eyebrowHidden && contract.role !== 'eyebrow' ? Boolean(eyebrow) : !eyebrow) ||
+          (contract.artistHidden && contract.role !== 'artist' ? Boolean(artist) : !artist) ||
+          workspace.querySelectorAll('.style-editor__body').length !== 1 || !fourDestinationsFit()) return null
+      }
+      return { applied, height: expected.height, resourcesReady: true, role: contract.role,
+        stageHeight: bounds.height, stageWidth: bounds.width, width: expected.width }
+    }
+
     const sample = () => {
       if (contract.kind === 'background') return sampleBackground()
+      if (contract.kind === 'title-card') return sampleTitleCard()
       const workspace = document.querySelector('.style-workspace[role="dialog"]')
       const typeface = document.querySelector('[role="combobox"][aria-label="Project lyric typeface"]')
       const preview = document.querySelector('[aria-label="Project lyrics design preview"]')
@@ -235,7 +303,7 @@ function projectLyricsReadinessScript(viewport, contract = { kind: 'project-lyri
         document.documentElement.clientHeight !== expected.height ||
         window.location.href !== '${PACKAGED_APP_URL}' ||
         fontSet?.status !== 'loaded' ||
-        Array.from(document.images).some(
+        !fourDestinationsFit() || Array.from(document.images).some(
           (image) => !image.complete || image.naturalWidth <= 0 || image.naturalHeight <= 0,
         )
       ) return null
@@ -268,6 +336,7 @@ function projectLyricsReadinessScript(viewport, contract = { kind: 'project-lyri
     const cleanup = () => {
       mutationObserver.disconnect()
       resizeObserver.disconnect()
+      fitFixture.remove()
       document.removeEventListener('load', schedule, true)
       document.removeEventListener('error', schedule, true)
       fontSet?.removeEventListener?.('loadingdone', schedule)
@@ -332,16 +401,31 @@ function styleSessionActionScript(action) {
     const workspace = document.querySelector('.style-workspace[role="dialog"]')
     const projectTab = document.querySelector('[role="tab"][data-style-destination="project-lyrics"]')
     const backgroundTab = document.querySelector('[role="tab"][data-style-destination="background"]')
+    const titleTab = document.querySelector('[role="tab"][data-style-destination="title-card"]')
     const gradient = document.querySelector('input[type="radio"][value="gradient"]')
     const solid = document.querySelector('input[type="radio"][value="solid"]')
-    const targets = { background: backgroundTab, solid, apply: workspace?.querySelector('[data-style-action="apply"]') }
+    const eyebrow = document.querySelector('input[type="radio"][value="eyebrow"]')
+    const artist = document.querySelector('input[type="radio"][value="artist"]')
+    const eyebrowVisibility = document.querySelector('[aria-label="Show Eyebrow in output"]')
+    const artistVisibility = document.querySelector('[aria-label="Show Artist in output"]')
+    const apply = workspace?.querySelector('[data-style-action="apply"]')
+    const targets = { background: backgroundTab, solid, apply, reopen:
+      document.querySelector('button.style-button[aria-label="Edit project Style"]'),
+      title: titleTab, 'eyebrow-visibility': eyebrowVisibility, artist,
+      'artist-visibility': artistVisibility, 'apply-title': apply }
     const target = targets[action]
     const semantic = action === 'background'
       ? projectTab?.getAttribute('aria-selected') === 'true' && backgroundTab?.getAttribute('aria-selected') === 'false'
       : action === 'solid'
         ? backgroundTab?.getAttribute('aria-selected') === 'true' && gradient?.checked && !solid?.checked
-        : action === 'apply' && backgroundTab?.getAttribute('aria-selected') === 'true' && solid?.checked
-    if (!(workspace instanceof HTMLElement) || !(target instanceof HTMLElement) || !semantic || target.disabled) return null
+        : action === 'apply' ? backgroundTab?.getAttribute('aria-selected') === 'true' && solid?.checked
+          : action === 'reopen' ? !workspace
+            : action === 'title' ? projectTab?.getAttribute('aria-selected') === 'true'
+              : action === 'eyebrow-visibility' ? titleTab?.getAttribute('aria-selected') === 'true' && eyebrow?.checked && eyebrowVisibility?.checked
+                : action === 'artist' ? eyebrow?.checked && !eyebrowVisibility?.checked && !artist?.checked
+                  : action === 'artist-visibility' ? artist?.checked && artistVisibility?.checked
+                    : action === 'apply-title' && artist?.checked && !eyebrowVisibility?.checked && !artistVisibility?.checked
+    if (!(target instanceof HTMLElement) || !semantic || target.disabled) return null
     const bounds = target.getBoundingClientRect()
     const style = getComputedStyle(target)
     if (bounds.width <= 0 || bounds.height <= 0 || style.display === 'none' ||
@@ -842,6 +926,37 @@ async function captureStyleSession(window, app, options) {
   )
   await activate('apply')
   await backgroundState('solid', colors, true)
+  pngs.push(await captureViewport(window, viewport))
+  const titleCardState = async (contract) => {
+    const state = await executeBeforeDeadline(
+      () =>
+        window.webContents.executeJavaScript(
+          projectLyricsReadinessScript(viewport, { kind: 'title-card', ...contract }),
+          false,
+        ),
+      options.readinessTimeoutMs,
+    )
+    if (
+      !state ||
+      state.resourcesReady !== true ||
+      state.role !== contract.role ||
+      state.applied !== (contract.applied === true)
+    )
+      throw smokeError('VISUAL_SMOKE_READINESS_INVALID')
+  }
+  await activate('reopen')
+  await activate('title')
+  await titleCardState({ role: 'eyebrow', eyebrowHidden: false, artistHidden: false })
+  pngs.push(await captureViewport(window, viewport))
+  await activate('eyebrow-visibility')
+  await titleCardState({ role: 'eyebrow', eyebrowHidden: true, artistHidden: false })
+  pngs.push(await captureViewport(window, viewport))
+  await activate('artist')
+  await activate('artist-visibility')
+  await titleCardState({ role: 'artist', eyebrowHidden: true, artistHidden: true })
+  pngs.push(await captureViewport(window, viewport))
+  await activate('apply-title')
+  await titleCardState({ applied: true, role: 'artist', eyebrowHidden: true, artistHidden: true })
   pngs.push(await captureViewport(window, viewport))
   return options.createScenarioArtifacts(STYLE_SESSION_SCENARIO, pngs).artifacts
 }

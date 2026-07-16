@@ -16,6 +16,8 @@ import {
 } from '../lib/video-style'
 import '../video-style.css'
 import { KaraokePreview } from './KaraokePreview'
+import { StyleDestinationTabs } from './StyleDestinationTabs'
+import { TitleCardStylePanel, type TitleCardRole } from './TitleCardStylePanel'
 import { TypefaceCombobox } from './TypefaceCombobox'
 import { Button } from './ui'
 
@@ -42,6 +44,7 @@ function isEditableTarget(target: EventTarget | null) {
 const STYLE_DESTINATIONS = [
   { id: 'project-lyrics', label: 'Project lyrics' },
   { id: 'background', label: 'Background' },
+  { id: 'title-card', label: 'Title card' },
 ] as const
 
 type StyleDestination = (typeof STYLE_DESTINATIONS)[number]['id']
@@ -87,6 +90,7 @@ export function ProjectStyleEditor({
   const titleId = useId()
   const headingRef = useRef<HTMLHeadingElement>(null)
   const [destination, setDestination] = useState<StyleDestination>('project-lyrics')
+  const [titleCardPreviewRole, setTitleCardPreviewRole] = useState<TitleCardRole>('eyebrow')
   const lyrics = draft.lyrics
   const background = draft.background
   const effectiveFaceKey = fontFaceKey(resolveFontFace(lyrics.typeface, lyrics.fontStyle))
@@ -105,26 +109,6 @@ export function ProjectStyleEditor({
       ...current,
       background: { ...current.background, ...patch },
     }))
-  const navigateDestinations = (event: KeyboardEvent<HTMLButtonElement>) => {
-    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
-    const tabs = [
-      ...(event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]') ??
-        []),
-    ]
-    const current = tabs.indexOf(event.currentTarget)
-    if (current < 0 || tabs.length !== STYLE_DESTINATIONS.length) return
-    event.preventDefault()
-    event.stopPropagation()
-    const nextIndex =
-      event.key === 'Home'
-        ? 0
-        : event.key === 'End'
-          ? tabs.length - 1
-          : (current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length
-    const next = tabs[nextIndex]
-    setDestination(next.dataset.styleDestination as StyleDestination)
-    next.focus()
-  }
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     const exactShiftSpace =
       event.code === 'Space' && event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey
@@ -164,7 +148,7 @@ export function ProjectStyleEditor({
         <header className="panel-header panel-title">
           <div>
             <span className="eyebrow">
-              {destination === 'project-lyrics' ? 'Project lyrics' : 'Background'}
+              {STYLE_DESTINATIONS.find(({ id }) => id === destination)?.label}
             </span>
             <h2 ref={headingRef} id={titleId} tabIndex={-1}>
               Style
@@ -172,24 +156,12 @@ export function ProjectStyleEditor({
           </div>
         </header>
 
-        <div className="style-destination-tabs" role="tablist" aria-label="Style destinations">
-          {STYLE_DESTINATIONS.map(({ id, label }) => (
-            <button
-              key={id}
-              id={`${titleId}-${id}-tab`}
-              type="button"
-              role="tab"
-              aria-controls={`${titleId}-${id}-panel`}
-              aria-selected={destination === id}
-              data-style-destination={id}
-              tabIndex={destination === id ? 0 : -1}
-              onClick={() => setDestination(id)}
-              onKeyDown={navigateDestinations}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <StyleDestinationTabs
+          destinations={STYLE_DESTINATIONS}
+          idPrefix={titleId}
+          selected={destination}
+          onSelect={setDestination}
+        />
 
         <div className="style-editor__body">
           <section
@@ -330,6 +302,17 @@ export function ProjectStyleEditor({
               readiness are not available in this Style destination yet.
             </p>
           </section>
+
+          <TitleCardStylePanel
+            active={destination === 'title-card'}
+            draft={draft}
+            fonts={fonts}
+            id={`${titleId}-title-card-panel`}
+            labelledBy={`${titleId}-title-card-tab`}
+            onDraftChange={onDraftChange}
+            onRetryFonts={onRetryFonts}
+            onSelectedRoleChange={setTitleCardPreviewRole}
+          />
         </div>
 
         <footer className="style-editor__actions">
@@ -347,7 +330,11 @@ export function ProjectStyleEditor({
         playbackMs={playbackMs}
         lyricMs={playbackMs - project.offsetMs}
         selectedWordIds={new Set()}
-        designMode={{ target: destination, stageStyle: draft }}
+        designMode={
+          destination === 'title-card'
+            ? { target: 'title-card', role: titleCardPreviewRole, stageStyle: draft }
+            : { target: destination, stageStyle: draft }
+        }
       />
     </main>
   )

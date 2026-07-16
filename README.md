@@ -102,12 +102,13 @@ bun run test:video
    cancelling leaves it unchanged.
 4. In Live Preview, choose 1 through 5 visible lyric lines and either **Clear**
    or **Scroll** advance behavior. These project settings also govern MP4 output.
-5. Choose **Style** beside the application identity to edit Project lyrics or
-   the project Background in the same window. Background supports editable
-   Solid and Gradient colors; linked Image settings remain preserved but are
-   not yet authorable or Preview/MP4-ready here. Changes appear in the fixed
-   16:9 Design preview. Choose **Apply & close** to create one undoable project
-   edit, or **Cancel** to leave the project unchanged.
+5. Choose **Style** beside the application identity to edit Project lyrics, the
+   project Background, or the independent Eyebrow, Title, and Artist roles on
+   the Title card in the same window. Background supports editable Solid and
+   Gradient colors; linked Image settings remain preserved but are not yet
+   authorable or Preview/MP4-ready here. Changes appear in the fixed 16:9 Design
+   preview. Choose **Apply & close** to create one undoable project edit, or
+   **Cancel** to leave the project unchanged.
 6. Move the playhead to the desired start and choose **Start Sync** in the
    Lyric Timing editor. Live Preview is suspended and a lightweight Sync Focus shows the
    current and next lyric lines in cursor order.

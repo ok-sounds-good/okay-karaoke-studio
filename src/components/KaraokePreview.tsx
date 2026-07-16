@@ -4,6 +4,7 @@ import {
   designPreviewFonts,
   previewFontKey,
   projectPreviewFonts,
+  titleCardDesignPreviewFonts,
   usePreviewFonts,
 } from '../hooks/usePreviewFonts'
 import type { KaraokeProject, LyricDisplaySettings } from '../lib/model'
@@ -23,10 +24,13 @@ import {
 } from '../lib/video-style'
 import { Button } from './ui'
 
-export type KaraokePreviewDesignMode = {
-  target: 'project-lyrics' | 'background'
-  stageStyle: StageStyle
-}
+export type KaraokePreviewDesignMode =
+  | { target: 'project-lyrics' | 'background'; stageStyle: StageStyle }
+  | {
+      target: 'title-card'
+      role: keyof StageStyle['titleCard']
+      stageStyle: StageStyle
+    }
 
 interface KaraokePreviewProps {
   project: KaraokeProject
@@ -68,6 +72,53 @@ function projectLyricsDesignLine(style: LyricTextStyle): StageFrameLine {
       progress: index === 0 ? 1 : index === 1 ? 0.5 : 0,
     })),
   }
+}
+
+function PreviewTitleCard({
+  artist,
+  aliases,
+  designRole,
+  stageStyle,
+  title,
+}: {
+  artist: string
+  aliases: Record<string, string | null>
+  designRole?: keyof StageStyle['titleCard']
+  stageStyle: StageStyle
+  title: string
+}) {
+  const { eyebrow, title: titleStyle, artist: artistStyle } = stageStyle.titleCard
+  const selectedHidden = designRole ? !stageStyle.titleCard[designRole].visible : false
+  const roleProps = (role: keyof StageStyle['titleCard']) => ({
+    'data-hidden-output': selectedHidden && designRole === role ? 'true' : undefined,
+    'data-title-card-design-role': designRole === role ? role : undefined,
+    'data-title-card-role': role,
+  })
+
+  return (
+    <div className="title-card" data-design-preview={designRole ? 'title-card' : undefined}>
+      {(eyebrow.visible || designRole === 'eyebrow') && (
+        <span {...roleProps('eyebrow')} style={textStyle(eyebrow, aliases)}>
+          Tonight&apos;s performance
+        </span>
+      )}
+      {(titleStyle.visible || designRole === 'title') && (
+        <h3 {...roleProps('title')} style={textStyle(titleStyle, aliases)}>
+          {title}
+        </h3>
+      )}
+      {(artistStyle.visible || designRole === 'artist') && (
+        <p {...roleProps('artist')} style={textStyle(artistStyle, aliases)}>
+          {artist}
+        </p>
+      )}
+      {selectedHidden && (
+        <span className="title-card-design-status" role="status">
+          Hidden in output
+        </span>
+      )}
+    </div>
+  )
 }
 
 function PreviewLine({
@@ -188,10 +239,13 @@ export function KaraokePreview({
         : null,
     [designMode],
   )
+  const isTitleCardDesign = designMode?.target === 'title-card'
   const selectedFonts =
     designMode?.target === 'project-lyrics'
       ? designPreviewFonts(designMode.stageStyle)
-      : projectPreviewFonts(previewProject)
+      : isTitleCardDesign
+        ? titleCardDesignPreviewFonts(designMode.stageStyle, designMode.role)
+        : projectPreviewFonts(previewProject)
   const fontRuntime = usePreviewFonts(selectedFonts)
   const stageStyle = designStyle ?? frame.stageStyle
   const background = stageStyle.background
@@ -209,7 +263,7 @@ export function KaraokePreview({
   const stageFrame = stageStyle.stageFrame
   const stageVars = {
     ...backgroundStyle,
-    ...previewStageLayoutVariables(designLine ? 1 : frame.lines.length),
+    ...previewStageLayoutVariables(designLine || isTitleCardDesign ? 1 : frame.lines.length),
     '--stage-frame-color': stageFrame.lineColor,
     '--stage-frame-width': logicalStagePx(stageFrame.lineWidthPx),
   } as CSSProperties
@@ -217,8 +271,15 @@ export function KaraokePreview({
   const isDesigning = Boolean(designMode)
   const stageClassName = designLine
     ? 'karaoke-stage karaoke-stage--lines-1 is-designing'
-    : `karaoke-stage karaoke-stage--lines-${project.lyricDisplay.lineCount}${isDesigning ? ' is-designing' : ''}`
-  const designLabel = designMode?.target === 'background' ? 'Background' : 'Project lyrics'
+    : isTitleCardDesign
+      ? 'karaoke-stage karaoke-stage--lines-1 is-designing is-designing-title-card'
+      : `karaoke-stage karaoke-stage--lines-${project.lyricDisplay.lineCount}${isDesigning ? ' is-designing' : ''}`
+  const designLabel =
+    designMode?.target === 'background'
+      ? 'Background'
+      : isTitleCardDesign
+        ? 'Title card'
+        : 'Project lyrics'
 
   return (
     <section
@@ -319,7 +380,7 @@ export function KaraokePreview({
           </div>
         ) : (
           fontRuntime.failures[0] &&
-          (designLine ? (
+          (isDesigning ? (
             <div className="stage-resource-warning" role="status">
               Requested font {fontRuntime.failures[0]} is unavailable; Preview and MP4 use System
               UI. <button onClick={fontRuntime.retry}>Retry</button>
@@ -357,24 +418,14 @@ export function KaraokePreview({
                 aliases={fontRuntime.aliases}
               />
             </div>
-          ) : frame.showTitle ? (
-            <div className="title-card">
-              {stageStyle.titleCard.eyebrow.visible && (
-                <span style={textStyle(stageStyle.titleCard.eyebrow, fontRuntime.aliases)}>
-                  Tonight&apos;s performance
-                </span>
-              )}
-              {stageStyle.titleCard.title.visible && (
-                <h3 style={textStyle(stageStyle.titleCard.title, fontRuntime.aliases)}>
-                  {frame.title}
-                </h3>
-              )}
-              {stageStyle.titleCard.artist.visible && (
-                <p style={textStyle(stageStyle.titleCard.artist, fontRuntime.aliases)}>
-                  {frame.artist}
-                </p>
-              )}
-            </div>
+          ) : isTitleCardDesign || frame.showTitle ? (
+            <PreviewTitleCard
+              artist={frame.artist}
+              aliases={fontRuntime.aliases}
+              designRole={isTitleCardDesign ? designMode.role : undefined}
+              stageStyle={stageStyle}
+              title={frame.title}
+            />
           ) : frame.lines.length ? (
             <div className="active-lines">
               {frame.lines.map((line) => (
@@ -389,6 +440,7 @@ export function KaraokePreview({
           ) : null}
         </div>
         {!designLine &&
+          !isTitleCardDesign &&
           frame.syncAids.map((aid) => {
             const line = lines.get(lineKey(aid.trackId, aid.lineId))
             return line ? (

@@ -158,11 +158,15 @@ describe('ProjectStyleEditor', () => {
   it('uses automatic accessible destination tabs with wrapping Arrow and Home/End navigation', async () => {
     await renderEditor()
     const tabs = [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')]
-    const [lyricsTab, backgroundTab] = tabs
+    const [lyricsTab, backgroundTab, titleCardTab] = tabs
     const controlledPanel = (tab: HTMLButtonElement) =>
       container.querySelector<HTMLElement>(`#${CSS.escape(tab.getAttribute('aria-controls')!)}`)!
 
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['Project lyrics', 'Background'])
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      'Project lyrics',
+      'Background',
+      'Title card',
+    ])
     expect(controlledPanel(backgroundTab).hidden).toBe(true)
 
     lyricsTab.focus()
@@ -170,14 +174,66 @@ describe('ProjectStyleEditor', () => {
     expect(document.activeElement).toBe(backgroundTab)
 
     await act(async () => keyDown(backgroundTab, { code: 'ArrowRight', key: 'ArrowRight' }))
+    expect(document.activeElement).toBe(titleCardTab)
+    await act(async () => keyDown(titleCardTab, { code: 'ArrowRight', key: 'ArrowRight' }))
     expect(document.activeElement).toBe(lyricsTab)
     await act(async () => keyDown(lyricsTab, { code: 'End', key: 'End' }))
-    expect(document.activeElement).toBe(backgroundTab)
-    await act(async () => keyDown(backgroundTab, { code: 'Home', key: 'Home' }))
+    expect(document.activeElement).toBe(titleCardTab)
+    await act(async () => keyDown(titleCardTab, { code: 'Home', key: 'Home' }))
     expect(document.activeElement).toBe(lyricsTab)
     const wrapped = keyDown(lyricsTab, { code: 'ArrowLeft', key: 'ArrowLeft' })
     expect(wrapped.defaultPrevented).toBe(true)
-    expect(document.activeElement).toBe(backgroundTab)
+    expect(document.activeElement).toBe(titleCardTab)
+  })
+
+  it('edits only the selected Title card role through role-specific native controls', async () => {
+    const project = createProject({ id: 'title-card-roles' })
+    const snapshot = structuredClone(project)
+    const onDraftChange = vi.fn<ProjectStyleSession['change']>()
+    let draft = project.stageStyle
+    await renderEditor({ project, draft, onDraftChange })
+    await act(async () => findButton(container, 'Title card').click())
+
+    const panel = container.querySelector<HTMLElement>('[role="tabpanel"]:not([hidden])')!
+    const radios = [...panel.querySelectorAll<HTMLInputElement>('input[type="radio"]')]
+    expect(panel.querySelector('[role="radiogroup"]')?.getAttribute('aria-label')).toBe(
+      'Title card role',
+    )
+    expect(radios.map(({ value }) => value)).toEqual(['eyebrow', 'title', 'artist'])
+    expect(new Set(radios.map(({ name }) => name)).size).toBe(1)
+    expect(radios[0].checked).toBe(true)
+    expect(container.querySelector('[aria-label="Eyebrow typeface"]')).not.toBeNull()
+    expect(container.querySelector('[aria-label="Eyebrow font size"]')).not.toBeNull()
+    expect(container.querySelector('[aria-label="Eyebrow color"]')).not.toBeNull()
+
+    const visibility = container.querySelector<HTMLInputElement>(
+      '[aria-label="Show Eyebrow in output"]',
+    )!
+    await act(async () => visibility.click())
+    draft = applyChange(onDraftChange.mock.calls.at(-1)?.[0], draft)
+    expect(draft.titleCard.eyebrow.visible).toBe(false)
+    expect(draft.titleCard.title).toBe(project.stageStyle.titleCard.title)
+    expect(draft.titleCard.artist).toBe(project.stageStyle.titleCard.artist)
+    expect(draft.background).toBe(project.stageStyle.background)
+    expect(draft.lyrics).toBe(project.stageStyle.lyrics)
+    expect(draft.stageFrame).toBe(project.stageStyle.stageFrame)
+
+    await renderEditor({ project, draft, onDraftChange })
+    const artist = container
+      .querySelector<HTMLElement>('[role="tabpanel"]:not([hidden])')!
+      .querySelector<HTMLInputElement>('input[value="artist"]')!
+    artist.focus()
+    await act(async () => artist.click())
+    expect(document.activeElement).toBe(artist)
+    expect(container.querySelector('[aria-label="Artist typeface"]')).not.toBeNull()
+    expect(container.querySelector('[aria-label="Artist face Bold"]')).not.toBeNull()
+
+    const color = container.querySelector<HTMLInputElement>('[aria-label="Artist color"]')!
+    await act(async () => replaceInput(color, '#123456'))
+    draft = applyChange(onDraftChange.mock.calls.at(-1)?.[0], draft)
+    expect(draft.titleCard.artist.color).toBe('#123456')
+    expect(draft.titleCard.eyebrow.visible).toBe(false)
+    expect(project).toEqual(snapshot)
   })
 
   it('patches only the selected background field and preserves latent colors and image path', async () => {
@@ -195,11 +251,11 @@ describe('ProjectStyleEditor', () => {
     await renderEditor({ project, draft, onDraftChange })
     await act(async () => findButton(container, 'Background').click())
 
-    const radios = [...container.querySelectorAll<HTMLInputElement>('input[type="radio"]')]
+    const backgroundPanel = container.querySelector<HTMLElement>('[role="tabpanel"]:not([hidden])')!
+    const radios = [...backgroundPanel.querySelectorAll<HTMLInputElement>('input[type="radio"]')]
     expect(radios.map((radio) => radio.value)).toEqual(['solid', 'gradient', 'image'])
     expect(radios.find((radio) => radio.value === 'gradient')?.checked).toBe(true)
     expect(radios.find((radio) => radio.value === 'image')?.disabled).toBe(true)
-    const backgroundPanel = container.querySelector<HTMLElement>('[role="tabpanel"]:not([hidden])')!
     expect(
       [...backgroundPanel.querySelectorAll<HTMLInputElement>('input[type="color"]')].map((input) =>
         input.getAttribute('aria-label'),
@@ -279,7 +335,11 @@ describe('ProjectStyleEditor', () => {
     const onDraftChange = vi.fn<ProjectStyleSession['change']>()
     await renderEditor({ project, draft, onDraftChange })
 
-    const buttons = [...container.querySelectorAll<HTMLButtonElement>('.font-face-button')]
+    const buttons = [
+      ...container
+        .querySelector<HTMLElement>('[role="tabpanel"]:not([hidden])')!
+        .querySelectorAll<HTMLButtonElement>('.font-face-button'),
+    ]
     const effectiveStyle = resolveFontFace(typeface, requested).style
     expect(buttons.map((button) => button.textContent?.trim())).toEqual(['Regular', 'Black'])
     expect(

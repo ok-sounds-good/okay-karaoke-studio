@@ -130,6 +130,10 @@ function backgroundState(mode: 'gradient' | 'solid', applied = false) {
   }
 }
 
+function titleCardState(role: 'eyebrow' | 'artist', applied = false) {
+  return { applied, resourcesReady: true, role }
+}
+
 function fakeStyleSessionWindow(
   options: { displayScale?: number; readiness?: Promise<never>; target?: unknown } = {},
   capturePng = validPng,
@@ -138,6 +142,10 @@ function fakeStyleSessionWindow(
   const captures = [
     { height: 720, width: 1280 },
     { height: 900, width: 1440 },
+    { height: 720, width: 1280 },
+    { height: 720, width: 1280 },
+    { height: 720, width: 1280 },
+    { height: 720, width: 1280 },
     { height: 720, width: 1280 },
     { height: 720, width: 1280 },
     { height: 720, width: 1280 },
@@ -181,6 +189,16 @@ function fakeStyleSessionWindow(
       .mockResolvedValueOnce(backgroundState('solid'))
       .mockResolvedValueOnce(styleActionTarget('apply'))
       .mockResolvedValueOnce(backgroundState('solid', true))
+      .mockResolvedValueOnce(styleActionTarget('reopen'))
+      .mockResolvedValueOnce(styleActionTarget('title'))
+      .mockResolvedValueOnce(titleCardState('eyebrow'))
+      .mockResolvedValueOnce(styleActionTarget('eyebrow-visibility'))
+      .mockResolvedValueOnce(titleCardState('eyebrow'))
+      .mockResolvedValueOnce(styleActionTarget('artist'))
+      .mockResolvedValueOnce(styleActionTarget('artist-visibility'))
+      .mockResolvedValueOnce(titleCardState('artist'))
+      .mockResolvedValueOnce(styleActionTarget('apply-title'))
+      .mockResolvedValueOnce(titleCardState('artist', true))
   }
   return window
 }
@@ -278,6 +296,10 @@ describe('production-window visual smoke', () => {
         '03-background-gradient-draft-1280x720.png',
         '04-background-solid-draft-1280x720.png',
         '05-background-solid-applied-1280x720.png',
+        '06-title-card-destination-1280x720.png',
+        '07-title-card-eyebrow-draft-1280x720.png',
+        '08-title-card-artist-draft-1280x720.png',
+        '09-title-card-applied-1280x720.png',
         'result.json',
       ])
     })
@@ -295,11 +317,11 @@ describe('production-window visual smoke', () => {
       ),
     ).resolves.toEqual({ ok: true })
     const inputEvents = window.webContents.sendInputEvent.mock.calls.map(([event]) => event)
-    expect(inputEvents).toHaveLength(12)
-    expect(inputEvents.filter(({ type }) => type === 'mouseDown')).toHaveLength(4)
+    expect(inputEvents).toHaveLength(30)
+    expect(inputEvents.filter(({ type }) => type === 'mouseDown')).toHaveLength(10)
     expect(window.setContentSize.mock.calls).toContainEqual([1280, 720, false])
     expect(window.setContentSize.mock.calls).toContainEqual([1440, 900, false])
-    expect(window.webContents.capturePage).toHaveBeenCalledTimes(5)
+    expect(window.webContents.capturePage).toHaveBeenCalledTimes(9)
     expect(smoke.STYLE_TARGET_SCRIPT).not.toContain('.click(')
     expect(smoke.STYLE_TARGET_SCRIPT).not.toContain('setTimeout')
     const readinessScript = smoke.projectLyricsReadinessScript({ height: 720, width: 1280 })
@@ -347,7 +369,7 @@ describe('production-window visual smoke', () => {
       ),
     ).resolves.toEqual({ ok: true })
 
-    expect(window.webContents.sendInputEvent).toHaveBeenCalledTimes(12)
+    expect(window.webContents.sendInputEvent).toHaveBeenCalledTimes(30)
     expect(window.webContents.sendInputEvent.mock.calls[0][0]).toEqual({
       type: 'mouseMove',
       x: 61,
@@ -356,7 +378,7 @@ describe('production-window visual smoke', () => {
     expect(window.webContents.setZoomFactor).toHaveBeenCalledWith(0.5)
     expect(window.setContentSize.mock.calls).toContainEqual([640, 360, false])
     expect(window.setContentSize.mock.calls).toContainEqual([720, 450, false])
-    expect(window.webContents.capturePage).toHaveBeenCalledTimes(5)
+    expect(window.webContents.capturePage).toHaveBeenCalledTimes(9)
     expect(publish).toHaveBeenCalledOnce()
   })
 
@@ -487,7 +509,7 @@ describe('production-window visual smoke', () => {
         { focus: vi.fn(async () => true), publish, writeFailure },
       ),
     ).resolves.toEqual({ ok: false })
-    expect(window.webContents.capturePage).toHaveBeenCalledTimes(5)
+    expect(window.webContents.capturePage).toHaveBeenCalledTimes(9)
     expect(publish).not.toHaveBeenCalled()
     expect(writeFailure).toHaveBeenCalledOnce()
   })
