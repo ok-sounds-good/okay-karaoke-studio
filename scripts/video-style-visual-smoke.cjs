@@ -18,7 +18,7 @@ const {
 const { publicChildOutcomeCode, publicStatusLine, runBoundedChild } = require('./bounded-child.cjs')
 const {
   BASELINE_SCENARIO,
-  PROJECT_TYPOGRAPHY_SCENARIO,
+  STYLE_SESSION_SCENARIO,
   validateVisualResultDirectory,
 } = require('./visual-result-validation.cjs')
 const { FATAL_DIAGNOSTIC, OPTIONS, TRIGGER } = require('../electron/video-style-visual-smoke.cjs')
@@ -80,11 +80,11 @@ function requestedScenario(argv) {
   if (scenarioArguments.length === 0) return BASELINE_SCENARIO
   if (
     scenarioArguments.length !== 1 ||
-    scenarioArguments[0] !== `${SCENARIO_ARGUMENT}${PROJECT_TYPOGRAPHY_SCENARIO}`
+    scenarioArguments[0] !== `${SCENARIO_ARGUMENT}${STYLE_SESSION_SCENARIO}`
   ) {
     throw launcherError('VISUAL_SMOKE_SCENARIO_INVALID')
   }
-  return PROJECT_TYPOGRAPHY_SCENARIO
+  return STYLE_SESSION_SCENARIO
 }
 
 async function requestedRun(argv, environment, fsApi = fs) {
@@ -116,7 +116,7 @@ function privateRawOutput(rawRoot, requested) {
 }
 
 function childArguments(output, scenario, userProfile, sessionProfile) {
-  if (scenario !== BASELINE_SCENARIO && scenario !== PROJECT_TYPOGRAPHY_SCENARIO) {
+  if (scenario !== BASELINE_SCENARIO && scenario !== STYLE_SESSION_SCENARIO) {
     throw launcherError('VISUAL_SMOKE_SCENARIO_INVALID')
   }
   return Object.freeze([

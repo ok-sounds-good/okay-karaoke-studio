@@ -81,7 +81,7 @@ function fakeWindow(
   }
 }
 
-function typographyState(width: number, height: number) {
+function projectLyricsState(width: number, height: number) {
   return {
     fontFamily: '"System UI"',
     fontSize: '48px',
@@ -97,7 +97,7 @@ function typographyState(width: number, height: number) {
   }
 }
 
-function fakeTypographyWindow(
+function fakeStyleSessionWindow(
   options: { displayScale?: number; readiness?: Promise<never>; target?: unknown } = {},
 ) {
   const window = fakeWindow()
@@ -134,8 +134,8 @@ function fakeTypographyWindow(
     window.webContents.executeJavaScript.mockReturnValueOnce(options.readiness)
   } else {
     window.webContents.executeJavaScript
-      .mockResolvedValueOnce(typographyState(1280, 720))
-      .mockResolvedValueOnce(typographyState(1440, 900))
+      .mockResolvedValueOnce(projectLyricsState(1280, 720))
+      .mockResolvedValueOnce(projectLyricsState(1440, 900))
   }
   return window
 }
@@ -180,11 +180,16 @@ describe('production-window visual smoke', () => {
     expect(() =>
       smoke.parseVisualSmokeArguments(argv.filter((_, index) => index !== scenarioIndex)),
     ).toThrow('VISUAL_SMOKE_FLAG_INVALID')
-    const projectScenario = [...argv]
-    projectScenario[scenarioIndex] = `${smoke.OPTIONS.scenario}${smoke.PROJECT_TYPOGRAPHY_SCENARIO}`
-    expect(smoke.parseVisualSmokeArguments(projectScenario)).toMatchObject({
-      scenario: smoke.PROJECT_TYPOGRAPHY_SCENARIO,
+    const styleSessionScenario = [...argv]
+    styleSessionScenario[scenarioIndex] = `${smoke.OPTIONS.scenario}${smoke.STYLE_SESSION_SCENARIO}`
+    expect(smoke.parseVisualSmokeArguments(styleSessionScenario)).toMatchObject({
+      scenario: smoke.STYLE_SESSION_SCENARIO,
     })
+    const retiredScenario = [...argv]
+    retiredScenario[scenarioIndex] = `${smoke.OPTIONS.scenario}project-typography`
+    expect(() => smoke.parseVisualSmokeArguments(retiredScenario)).toThrow(
+      'VISUAL_SMOKE_FLAG_INVALID',
+    )
     const unknownScenario = [...argv]
     unknownScenario[scenarioIndex] = `${smoke.OPTIONS.scenario}unknown`
     expect(() => smoke.parseVisualSmokeArguments(unknownScenario)).toThrow(
@@ -218,13 +223,13 @@ describe('production-window visual smoke', () => {
     expect(window.destroy).toHaveBeenCalledOnce()
   })
 
-  it('uses trusted input and publishes exact project typography captures in viewport order', async () => {
-    const window = fakeTypographyWindow()
+  it('uses trusted input and publishes exact Style-session captures in viewport order', async () => {
+    const window = fakeStyleSessionWindow()
     const publish = vi.fn(async (_output, artifacts) => {
       expect(window.isDestroyed()).toBe(true)
       expect(artifacts.map(({ name }: { name: string }) => name)).toEqual([
-        '01-project-typography-1280x720.png',
-        '02-project-typography-1440x900.png',
+        '01-project-lyrics-1280x720.png',
+        '02-project-lyrics-1440x900.png',
         'result.json',
       ])
     })
@@ -234,7 +239,7 @@ describe('production-window visual smoke', () => {
           app: {},
           config: {
             output: '/safe/evidence',
-            scenario: smoke.PROJECT_TYPOGRAPHY_SCENARIO,
+            scenario: smoke.STYLE_SESSION_SCENARIO,
           },
           window,
         },
@@ -251,7 +256,7 @@ describe('production-window visual smoke', () => {
     expect(window.webContents.capturePage).toHaveBeenCalledTimes(2)
     expect(smoke.STYLE_TARGET_SCRIPT).not.toContain('.click(')
     expect(smoke.STYLE_TARGET_SCRIPT).not.toContain('setTimeout')
-    const readinessScript = smoke.projectTypographyReadinessScript({ height: 720, width: 1280 })
+    const readinessScript = smoke.projectLyricsReadinessScript({ height: 720, width: 1280 })
     for (const contract of [
       '.style-workspace[role="dialog"]',
       'Project lyric typeface',
@@ -267,7 +272,7 @@ describe('production-window visual smoke', () => {
   })
 
   it('converts Retina Style target coordinates for trusted input', async () => {
-    const window = fakeTypographyWindow({
+    const window = fakeStyleSessionWindow({
       displayScale: 2,
       target: {
         boundsHeight: 24,
@@ -288,7 +293,7 @@ describe('production-window visual smoke', () => {
           app: {},
           config: {
             output: '/safe/evidence',
-            scenario: smoke.PROJECT_TYPOGRAPHY_SCENARIO,
+            scenario: smoke.STYLE_SESSION_SCENARIO,
           },
           window,
         },
@@ -331,7 +336,7 @@ describe('production-window visual smoke', () => {
   })
 
   it('fails closed without capture when the trusted Style target is missing', async () => {
-    const window = fakeTypographyWindow({ target: null })
+    const window = fakeStyleSessionWindow({ target: null })
     const publish = vi.fn()
     const writeFailure = vi.fn(async () => undefined)
     await expect(
@@ -340,7 +345,7 @@ describe('production-window visual smoke', () => {
           app: {},
           config: {
             output: '/safe/evidence',
-            scenario: smoke.PROJECT_TYPOGRAPHY_SCENARIO,
+            scenario: smoke.STYLE_SESSION_SCENARIO,
           },
           window,
         },
@@ -358,7 +363,7 @@ describe('production-window visual smoke', () => {
   })
 
   it('uses a deadline only to fail closed when semantic readiness never arrives', async () => {
-    const window = fakeTypographyWindow({ readiness: new Promise(() => undefined) })
+    const window = fakeStyleSessionWindow({ readiness: new Promise(() => undefined) })
     const publish = vi.fn()
     const writeFailure = vi.fn(async () => undefined)
     await expect(
@@ -367,7 +372,7 @@ describe('production-window visual smoke', () => {
           app: {},
           config: {
             output: '/safe/evidence',
-            scenario: smoke.PROJECT_TYPOGRAPHY_SCENARIO,
+            scenario: smoke.STYLE_SESSION_SCENARIO,
           },
           window,
         },
@@ -387,7 +392,7 @@ describe('production-window visual smoke', () => {
   })
 
   it('publishes no partial scenario evidence when the second capture is invalid', async () => {
-    const window = fakeTypographyWindow()
+    const window = fakeStyleSessionWindow()
     window.webContents.capturePage
       .mockReset()
       .mockResolvedValueOnce({
@@ -408,7 +413,7 @@ describe('production-window visual smoke', () => {
           app: {},
           config: {
             output: '/safe/evidence',
-            scenario: smoke.PROJECT_TYPOGRAPHY_SCENARIO,
+            scenario: smoke.STYLE_SESSION_SCENARIO,
           },
           window,
         },

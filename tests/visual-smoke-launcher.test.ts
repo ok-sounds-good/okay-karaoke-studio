@@ -36,8 +36,8 @@ function profile(prefix: string) {
 
 function validatedArtifacts(scenario = smoke.BASELINE_SCENARIO) {
   const names =
-    scenario === smoke.PROJECT_TYPOGRAPHY_SCENARIO
-      ? visualResults.PROJECT_TYPOGRAPHY_NAMES
+    scenario === smoke.STYLE_SESSION_SCENARIO
+      ? visualResults.STYLE_SESSION_NAMES
       : [visualResults.BASELINE_NAME]
   return [
     ...names.map((name: string) => ({ bytes: Buffer.from(`png:${name}`), name })),
@@ -159,10 +159,10 @@ describe('visual smoke launcher', () => {
     expect(await readFile(join(retainedRoot, smokeProfiles.OWNER_FILE), 'utf8')).toContain('token')
   })
 
-  it('allowlists the project typography scenario before creating profiles or a child', async () => {
+  it('allowlists the Style-session scenario before creating profiles or a child', async () => {
     const output = await outputPath()
     const events: string[] = []
-    const authoritative = validatedArtifacts(smoke.PROJECT_TYPOGRAPHY_SCENARIO)
+    const authoritative = validatedArtifacts(smoke.STYLE_SESSION_SCENARIO)
     const runChild = vi.fn(async () => ({
       code: 0,
       diagnostics: { fatal: false, overflow: false },
@@ -178,7 +178,7 @@ describe('visual smoke launcher', () => {
     await expect(
       launcher.runLauncher(
         {
-          argv: [`${launcher.SCENARIO_ARGUMENT}${smoke.PROJECT_TYPOGRAPHY_SCENARIO}`, output],
+          argv: [`${launcher.SCENARIO_ARGUMENT}${smoke.STYLE_SESSION_SCENARIO}`, output],
           executable: '/electron',
         },
         {
@@ -193,11 +193,11 @@ describe('visual smoke launcher', () => {
       ),
     ).resolves.toEqual({ ok: true })
     expect(runChild.mock.calls[0][0].args).toContain(
-      `${smoke.OPTIONS.scenario}${smoke.PROJECT_TYPOGRAPHY_SCENARIO}`,
+      `${smoke.OPTIONS.scenario}${smoke.STYLE_SESSION_SCENARIO}`,
     )
     expect(runChild.mock.calls[0][0].args).toContain(`${smoke.OPTIONS.output}${rawOutput}`)
     expect(validateResult).toHaveBeenCalledWith(rawOutput, {
-      scenario: smoke.PROJECT_TYPOGRAPHY_SCENARIO,
+      scenario: smoke.STYLE_SESSION_SCENARIO,
     })
     expect(publish).toHaveBeenCalledWith(output, authoritative)
     expect(events).toEqual(['retention', 'publish'])
@@ -207,8 +207,9 @@ describe('visual smoke launcher', () => {
     '--scenario',
     '--scenario=',
     '--scenario=baseline',
+    '--scenario=project-typography',
     '--scenario=unknown',
-    '--scenario-project-typography',
+    '--scenario-style-session',
   ])(
     'rejects malformed or unallowlisted scenario argument %s before side effects',
     async (flag) => {
@@ -237,7 +238,7 @@ describe('visual smoke launcher', () => {
 
   it('rejects duplicate allowlisted scenario arguments before side effects', async () => {
     const output = await outputPath()
-    const scenario = `${launcher.SCENARIO_ARGUMENT}${smoke.PROJECT_TYPOGRAPHY_SCENARIO}`
+    const scenario = `${launcher.SCENARIO_ARGUMENT}${smoke.STYLE_SESSION_SCENARIO}`
     const createRawRoot = vi.fn()
     const createProfile = vi.fn()
     const runChild = vi.fn()

@@ -65,16 +65,16 @@ jobs:
           destination: video-style-visual-macOS
 
       - run:
-          name: Capture project-typography visual evidence
+          name: Capture style-session visual evidence
           command: |
             evidence_root="$CIRCLE_WORKING_DIRECTORY/.ci-artifacts"
             mkdir -p "$evidence_root"
-            export OKS_VISUAL_EVIDENCE_DIR="$evidence_root/project-typography-visual"
-            bun run test:visual -- --scenario=project-typography
+            export OKS_VISUAL_EVIDENCE_DIR="$evidence_root/style-session-visual"
+            bun run test:visual -- --scenario=style-session
 
       - store_artifacts:
-          path: .ci-artifacts/project-typography-visual
-          destination: project-typography-visual-macOS
+          path: .ci-artifacts/style-session-visual
+          destination: style-session-visual-macOS
 
       - run:
           name: Package unpacked desktop app
@@ -140,17 +140,17 @@ jobs:
           destination: video-style-visual-Windows
 
       - run:
-          name: Capture project-typography visual evidence
+          name: Capture style-session visual evidence
           command: |
             $evidenceRoot = Join-Path $env:CIRCLE_WORKING_DIRECTORY ".ci-artifacts"
             New-Item -ItemType Directory -Force -Path $evidenceRoot | Out-Null
-            $env:OKS_VISUAL_EVIDENCE_DIR = Join-Path $evidenceRoot "project-typography-visual"
-            bun run test:visual -- --scenario=project-typography
+            $env:OKS_VISUAL_EVIDENCE_DIR = Join-Path $evidenceRoot "style-session-visual"
+            bun run test:visual -- --scenario=style-session
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - store_artifacts:
-          path: .ci-artifacts/project-typography-visual
-          destination: project-typography-visual-Windows
+          path: .ci-artifacts/style-session-visual
+          destination: style-session-visual-Windows
 
       - run:
           name: Package unpacked desktop app

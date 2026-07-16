@@ -9,8 +9,8 @@ const {
 const { focusSmokeWindow } = require('./smoke-window-focus.cjs')
 const {
   BASELINE_SCENARIO,
-  PROJECT_TYPOGRAPHY_SCENARIO,
-  PROJECT_TYPOGRAPHY_VIEWPORTS,
+  STYLE_SESSION_SCENARIO,
+  STYLE_SESSION_VIEWPORTS,
   VIEWPORT,
   createResultArtifacts,
   createScenarioResultArtifacts,
@@ -29,7 +29,7 @@ const OPTIONS = Object.freeze({
 const PACKAGED_APP_URL = 'studio-app://app/index.html'
 const PUBLIC_FAILURE = Object.freeze({ code: 'VISUAL_SMOKE_FAILED', ok: false })
 const FATAL_DIAGNOSTIC = '[oks-visual-smoke:fatal]\n'
-const PROJECT_TYPOGRAPHY_READINESS_TIMEOUT_MS = 10_000
+const STYLE_SESSION_READINESS_TIMEOUT_MS = 10_000
 
 const STABLE_RENDERER_SCRIPT = `(() => {
   const frame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()))
@@ -131,7 +131,7 @@ const STYLE_TARGET_SCRIPT = `(() => new Promise((resolve) => {
   check()
 }))()`
 
-function projectTypographyReadinessScript(viewport) {
+function projectLyricsReadinessScript(viewport) {
   return `(() => new Promise((resolve) => {
     const expected = ${JSON.stringify(viewport)}
     const frame = () => new Promise((done) => requestAnimationFrame(() => done()))
@@ -384,7 +384,7 @@ function parseOption(args, prefix) {
 
 function parseScenario(args) {
   const scenario = parseOption(args, OPTIONS.scenario)
-  if (scenario !== BASELINE_SCENARIO && scenario !== PROJECT_TYPOGRAPHY_SCENARIO) {
+  if (scenario !== BASELINE_SCENARIO && scenario !== STYLE_SESSION_SCENARIO) {
     throw smokeError('VISUAL_SMOKE_FLAG_INVALID')
   }
   return scenario
@@ -570,7 +570,7 @@ function validStyleTarget(value) {
   )
 }
 
-function validProjectTypographyState(value, viewport) {
+function validProjectLyricsState(value, viewport) {
   return Boolean(
     value &&
     typeof value === 'object' &&
@@ -649,7 +649,7 @@ function sendTrustedStyleActivation(contents, target, displayScale) {
   }
 }
 
-async function captureProjectTypography(window, app, options) {
+async function captureStyleSession(window, app, options) {
   const displayScale = await prepareCaptureWindow(window, app, options)
   const target = await executeBeforeDeadline(
     () => window.webContents.executeJavaScript(STYLE_TARGET_SCRIPT, false),
@@ -659,18 +659,18 @@ async function captureProjectTypography(window, app, options) {
   sendTrustedStyleActivation(window.webContents, target, displayScale)
 
   const pngs = []
-  for (const viewport of PROJECT_TYPOGRAPHY_VIEWPORTS) {
+  for (const viewport of STYLE_SESSION_VIEWPORTS) {
     setExactViewport(window, viewport, displayScale)
     const state = await executeBeforeDeadline(
-      () => window.webContents.executeJavaScript(projectTypographyReadinessScript(viewport), false),
+      () => window.webContents.executeJavaScript(projectLyricsReadinessScript(viewport), false),
       options.readinessTimeoutMs,
     )
-    if (!validProjectTypographyState(state, viewport)) {
+    if (!validProjectLyricsState(state, viewport)) {
       throw smokeError('VISUAL_SMOKE_READINESS_INVALID')
     }
     pngs.push(await captureViewport(window, viewport))
   }
-  return options.createScenarioArtifacts(PROJECT_TYPOGRAPHY_SCENARIO, pngs).artifacts
+  return options.createScenarioArtifacts(STYLE_SESSION_SCENARIO, pngs).artifacts
 }
 
 function destroyWindow(window) {
@@ -700,7 +700,7 @@ async function runVisualSmoke({ app, config, fatalObserver, window }, dependenci
     createScenarioArtifacts: dependencies.createScenarioArtifacts || createScenarioResultArtifacts,
     focus: dependencies.focus || focusSmokeWindow,
     publish: dependencies.publish || publishArtifactBuffers,
-    readinessTimeoutMs: dependencies.readinessTimeoutMs ?? PROJECT_TYPOGRAPHY_READINESS_TIMEOUT_MS,
+    readinessTimeoutMs: dependencies.readinessTimeoutMs ?? STYLE_SESSION_READINESS_TIMEOUT_MS,
     settle: dependencies.settle || settleTeardown,
     writeFailure: dependencies.writeFailure || writeFreshLauncherFailure,
   }
@@ -711,8 +711,8 @@ async function runVisualSmoke({ app, config, fatalObserver, window }, dependenci
       const scenario = config.scenario ?? BASELINE_SCENARIO
       if (scenario === BASELINE_SCENARIO) {
         artifacts = await captureBaseline(window, app, options)
-      } else if (scenario === PROJECT_TYPOGRAPHY_SCENARIO) {
-        artifacts = await captureProjectTypography(window, app, options)
+      } else if (scenario === STYLE_SESSION_SCENARIO) {
+        artifacts = await captureStyleSession(window, app, options)
       } else {
         throw smokeError('VISUAL_SMOKE_SCENARIO_INVALID')
       }
@@ -751,22 +751,22 @@ module.exports = {
   FATAL_DIAGNOSTIC,
   OPTIONS,
   PACKAGED_APP_URL,
-  PROJECT_TYPOGRAPHY_READINESS_TIMEOUT_MS,
-  PROJECT_TYPOGRAPHY_SCENARIO,
   PUBLIC_FAILURE,
   STABLE_RENDERER_SCRIPT,
+  STYLE_SESSION_READINESS_TIMEOUT_MS,
+  STYLE_SESSION_SCENARIO,
   STYLE_TARGET_SCRIPT,
   TRIGGER,
   VIEWPORT,
   captureBaseline,
-  captureProjectTypography,
+  captureStyleSession,
   configureVisualSmokeBeforeReady,
   executeBeforeDeadline,
   installVisualSmokeFatalObserver,
   parseVisualSmokeArguments,
-  projectTypographyReadinessScript,
+  projectLyricsReadinessScript,
   runVisualSmoke,
   sendTrustedStyleActivation,
-  validProjectTypographyState,
+  validProjectLyricsState,
   validStyleTarget,
 }

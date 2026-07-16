@@ -73,22 +73,22 @@ describe('visual result validation', () => {
     })
   })
 
-  it('accepts the exact ordered project typography capture contract', async () => {
-    const { output } = await freshResult(results.PROJECT_TYPOGRAPHY_SCENARIO)
+  it('accepts the exact ordered Style-session capture contract', async () => {
+    const { output } = await freshResult(results.STYLE_SESSION_SCENARIO)
     await expect(
       results.validateVisualResultDirectory(output, {
-        scenario: results.PROJECT_TYPOGRAPHY_SCENARIO,
+        scenario: results.STYLE_SESSION_SCENARIO,
       }),
     ).resolves.toMatchObject({
       artifacts: [
         {
           height: 720,
-          name: '01-project-typography-1280x720.png',
+          name: '01-project-lyrics-1280x720.png',
           width: 1280,
         },
         {
           height: 900,
-          name: '02-project-typography-1440x900.png',
+          name: '02-project-lyrics-1440x900.png',
           width: 1440,
         },
       ],
@@ -101,18 +101,18 @@ describe('visual result validation', () => {
     const baseline = await freshResult()
     await expect(
       results.validateVisualResultDirectory(baseline.output, {
-        scenario: results.PROJECT_TYPOGRAPHY_SCENARIO,
+        scenario: results.STYLE_SESSION_SCENARIO,
       }),
     ).rejects.toThrow('VISUAL_SMOKE_RESULT_INVALID')
 
-    const typography = await freshResult(results.PROJECT_TYPOGRAPHY_SCENARIO)
-    await expect(results.validateVisualResultDirectory(typography.output)).rejects.toThrow(
+    const styleSession = await freshResult(results.STYLE_SESSION_SCENARIO)
+    await expect(results.validateVisualResultDirectory(styleSession.output)).rejects.toThrow(
       'VISUAL_SMOKE_RESULT_INVALID',
     )
-    await writeFile(join(typography.output, '01-baseline.png'), validPng(1280, 720))
+    await writeFile(join(styleSession.output, '01-baseline.png'), validPng(1280, 720))
     await expect(
-      results.validateVisualResultDirectory(typography.output, {
-        scenario: results.PROJECT_TYPOGRAPHY_SCENARIO,
+      results.validateVisualResultDirectory(styleSession.output, {
+        scenario: results.STYLE_SESSION_SCENARIO,
       }),
     ).rejects.toThrow('VISUAL_SMOKE_RESULT_INVALID')
   })
@@ -170,33 +170,33 @@ describe('visual result validation', () => {
     ).rejects.toThrow('VISUAL_SMOKE_RESULT_INVALID')
   })
 
-  it('rejects replacement of an earlier typography capture during a later read', async () => {
-    const { output, root } = await freshResult(results.PROJECT_TYPOGRAPHY_SCENARIO)
-    const firstCapture = results.PROJECT_TYPOGRAPHY_NAMES[0]
+  it('rejects replacement of an earlier Style-session capture during a later read', async () => {
+    const { output, root } = await freshResult(results.STYLE_SESSION_SCENARIO)
+    const firstCapture = results.STYLE_SESSION_NAMES[0]
     let replaced = false
     await expect(
       results.validateVisualResultDirectory(output, {
         beforeRead: async (_claimed: string, name: string) => {
-          if (replaced || name !== results.PROJECT_TYPOGRAPHY_NAMES[1]) return
+          if (replaced || name !== results.STYLE_SESSION_NAMES[1]) return
           replaced = true
           await rename(join(output, firstCapture), join(root, 'displaced-first-capture.png'))
           await writeFile(join(output, firstCapture), validPng(1, 1))
         },
-        scenario: results.PROJECT_TYPOGRAPHY_SCENARIO,
+        scenario: results.STYLE_SESSION_SCENARIO,
       }),
     ).rejects.toThrow('VISUAL_SMOKE_RESULT_INVALID')
     expect(replaced).toBe(true)
     await expect(
       results.validateVisualResultDirectory(output, {
-        scenario: results.PROJECT_TYPOGRAPHY_SCENARIO,
+        scenario: results.STYLE_SESSION_SCENARIO,
       }),
     ).rejects.toThrow('VISUAL_SMOKE_RESULT_INVALID')
   })
 
-  it('rejects replacement of a revalidated typography capture during a later final recheck', async () => {
-    const { output, root } = await freshResult(results.PROJECT_TYPOGRAPHY_SCENARIO)
-    const firstCapturePath = join(output, results.PROJECT_TYPOGRAPHY_NAMES[0])
-    const secondCapturePath = join(output, results.PROJECT_TYPOGRAPHY_NAMES[1])
+  it('rejects replacement of a revalidated Style-session capture during a later final recheck', async () => {
+    const { output, root } = await freshResult(results.STYLE_SESSION_SCENARIO)
+    const firstCapturePath = join(output, results.STYLE_SESSION_NAMES[0])
+    const secondCapturePath = join(output, results.STYLE_SESSION_NAMES[1])
     let secondCaptureEntryChecks = 0
     let replaced = false
     const fsApi = {
@@ -219,21 +219,21 @@ describe('visual result validation', () => {
     await expect(
       results.validateVisualResultDirectory(output, {
         fsApi,
-        scenario: results.PROJECT_TYPOGRAPHY_SCENARIO,
+        scenario: results.STYLE_SESSION_SCENARIO,
       }),
     ).rejects.toThrow('VISUAL_SMOKE_RESULT_INVALID')
     expect(replaced).toBe(true)
     await expect(
       results.validateVisualResultDirectory(output, {
-        scenario: results.PROJECT_TYPOGRAPHY_SCENARIO,
+        scenario: results.STYLE_SESSION_SCENARIO,
       }),
     ).rejects.toThrow('VISUAL_SMOKE_RESULT_INVALID')
   })
 
   it('rejects same-inode mutation of a revalidated capture during a later final recheck', async () => {
-    const { output } = await freshResult(results.PROJECT_TYPOGRAPHY_SCENARIO)
-    const firstCapturePath = join(output, results.PROJECT_TYPOGRAPHY_NAMES[0])
-    const secondCapturePath = join(output, results.PROJECT_TYPOGRAPHY_NAMES[1])
+    const { output } = await freshResult(results.STYLE_SESSION_SCENARIO)
+    const firstCapturePath = join(output, results.STYLE_SESSION_NAMES[0])
+    const secondCapturePath = join(output, results.STYLE_SESSION_NAMES[1])
     const original = await fileSystem.lstat(firstCapturePath, { bigint: true })
     const originalBytes = await readFile(firstCapturePath)
     const changedOffset = Math.floor(originalBytes.length / 2)
@@ -267,43 +267,43 @@ describe('visual result validation', () => {
     await expect(
       results.validateVisualResultDirectory(output, {
         fsApi,
-        scenario: results.PROJECT_TYPOGRAPHY_SCENARIO,
+        scenario: results.STYLE_SESSION_SCENARIO,
       }),
     ).rejects.toThrow('VISUAL_SMOKE_RESULT_INVALID')
     expect(retainedIdentity).toBe(true)
     await expect(
       results.validateVisualResultDirectory(output, {
-        scenario: results.PROJECT_TYPOGRAPHY_SCENARIO,
+        scenario: results.STYLE_SESSION_SCENARIO,
       }),
     ).rejects.toThrow('VISUAL_SMOKE_RESULT_INVALID')
   })
 
   it('publishes authoritative validated bytes independently of a later source mutation', async () => {
-    const { output, root } = await freshResult(results.PROJECT_TYPOGRAPHY_SCENARIO)
+    const { output, root } = await freshResult(results.STYLE_SESSION_SCENARIO)
     const validated = await results.validateVisualResultDirectory(output, {
-      scenario: results.PROJECT_TYPOGRAPHY_SCENARIO,
+      scenario: results.STYLE_SESSION_SCENARIO,
     })
     expect(validated.publishedArtifacts.map(({ name }: { name: string }) => name)).toEqual([
-      ...results.PROJECT_TYPOGRAPHY_NAMES,
+      ...results.STYLE_SESSION_NAMES,
       results.RESULT_NAME,
     ])
     const authoritativeFirst = Buffer.from(validated.publishedArtifacts[0].bytes)
     const published = join(root, 'published-evidence')
     await publishArtifactBuffers(published, validated.publishedArtifacts)
 
-    await writeFile(join(output, results.PROJECT_TYPOGRAPHY_NAMES[0]), validPng(1, 1))
+    await writeFile(join(output, results.STYLE_SESSION_NAMES[0]), validPng(1, 1))
 
     await expect(
       results.validateVisualResultDirectory(published, {
-        scenario: results.PROJECT_TYPOGRAPHY_SCENARIO,
+        scenario: results.STYLE_SESSION_SCENARIO,
       }),
     ).resolves.toMatchObject({ ok: true, schemaVersion: 1 })
-    expect(await readFile(join(published, results.PROJECT_TYPOGRAPHY_NAMES[0]))).toEqual(
+    expect(await readFile(join(published, results.STYLE_SESSION_NAMES[0]))).toEqual(
       authoritativeFirst,
     )
     await expect(
       results.validateVisualResultDirectory(output, {
-        scenario: results.PROJECT_TYPOGRAPHY_SCENARIO,
+        scenario: results.STYLE_SESSION_SCENARIO,
       }),
     ).rejects.toThrow('VISUAL_SMOKE_RESULT_INVALID')
   })

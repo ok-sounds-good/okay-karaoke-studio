@@ -7,24 +7,24 @@ const { PNG_LIMITS, parseBoundedPngContainer } = require('../electron/png-valida
 const { validateFreshOutputPath } = require('../electron/smoke-artifacts.cjs')
 
 const BASELINE_SCENARIO = 'baseline'
-const PROJECT_TYPOGRAPHY_SCENARIO = 'project-typography'
+const STYLE_SESSION_SCENARIO = 'style-session'
 const BASELINE_NAME = '01-baseline.png'
-const PROJECT_TYPOGRAPHY_NAMES = Object.freeze([
-  '01-project-typography-1280x720.png',
-  '02-project-typography-1440x900.png',
+const STYLE_SESSION_NAMES = Object.freeze([
+  '01-project-lyrics-1280x720.png',
+  '02-project-lyrics-1440x900.png',
 ])
 const RESULT_NAME = 'result.json'
 const EXPECTED_FILES = Object.freeze([BASELINE_NAME, RESULT_NAME])
 const VIEWPORT = Object.freeze({ height: 720, width: 1280 })
-const PROJECT_TYPOGRAPHY_VIEWPORTS = Object.freeze([
+const STYLE_SESSION_VIEWPORTS = Object.freeze([
   VIEWPORT,
   Object.freeze({ height: 900, width: 1440 }),
 ])
 const SCENARIO_CONTRACTS = Object.freeze({
   [BASELINE_SCENARIO]: Object.freeze([Object.freeze({ ...VIEWPORT, name: BASELINE_NAME })]),
-  [PROJECT_TYPOGRAPHY_SCENARIO]: Object.freeze(
-    PROJECT_TYPOGRAPHY_VIEWPORTS.map((viewport, index) =>
-      Object.freeze({ ...viewport, name: PROJECT_TYPOGRAPHY_NAMES[index] }),
+  [STYLE_SESSION_SCENARIO]: Object.freeze(
+    STYLE_SESSION_VIEWPORTS.map((viewport, index) =>
+      Object.freeze({ ...viewport, name: STYLE_SESSION_NAMES[index] }),
     ),
   ),
 })
@@ -417,11 +417,11 @@ module.exports = {
   BASELINE_SCENARIO,
   BASELINE_NAME,
   EXPECTED_FILES,
-  PROJECT_TYPOGRAPHY_NAMES,
-  PROJECT_TYPOGRAPHY_SCENARIO,
-  PROJECT_TYPOGRAPHY_VIEWPORTS,
   RESULT_NAME,
   SCENARIO_CONTRACTS,
+  STYLE_SESSION_NAMES,
+  STYLE_SESSION_SCENARIO,
+  STYLE_SESSION_VIEWPORTS,
   VIEWPORT,
   createResultArtifacts,
   createScenarioResultArtifacts,

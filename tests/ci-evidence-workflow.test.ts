@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 
 const require = createRequire(import.meta.url)
 const visualResults = require('../scripts/visual-result-validation.cjs') as {
-  PROJECT_TYPOGRAPHY_SCENARIO: string
+  STYLE_SESSION_SCENARIO: string
   expectedFilesForScenario: (scenario: string) => readonly string[]
 }
 const ACTIVE_WORKFLOW = '.circleci/config.yml'
@@ -18,15 +18,15 @@ const MAIN_PULL_REQUEST_CLAUSE =
   '(pipeline.event.name == "pull_request" and ' +
   'pipeline.event.github.pull_request.base.ref == "main")'
 const BASELINE_EVIDENCE_PATH = '.ci-artifacts/video-style-visual'
-const PROJECT_TYPOGRAPHY_EVIDENCE_PATH = '.ci-artifacts/project-typography-visual'
-const PROJECT_TYPOGRAPHY_EVIDENCE_LEAVES = [
-  '01-project-typography-1280x720.png',
-  '02-project-typography-1440x900.png',
+const STYLE_SESSION_EVIDENCE_PATH = '.ci-artifacts/style-session-visual'
+const STYLE_SESSION_EVIDENCE_LEAVES = [
+  '01-project-lyrics-1280x720.png',
+  '02-project-lyrics-1440x900.png',
   'result.json',
 ]
 const VISUAL_TEST_INVOCATIONS = [
   'bun run test:visual',
-  'bun run test:visual -- --scenario=project-typography',
+  'bun run test:visual -- --scenario=style-session',
 ]
 
 interface PipelineEvent {
@@ -234,22 +234,22 @@ describe('CI visual evidence contract', () => {
     expect(await repositoryFile('vite.config.ts')).not.toContain('format-diff-core.test.ts')
   })
 
-  it('captures and separately stores baseline and project-typography evidence', async () => {
+  it('captures and separately stores baseline and Style-session evidence', async () => {
     const workflow = await repositoryFile(ACTIVE_WORKFLOW)
     for (const platform of ['macOS', 'Windows'] as const) {
       const job = jobBlock(workflow, platform)
       const build = job.indexOf('name: Build renderer')
       const baselineCapture = job.indexOf('name: Capture production-window visual evidence')
       const baselineStore = job.indexOf(`path: ${BASELINE_EVIDENCE_PATH}`)
-      const typographyCapture = job.indexOf('name: Capture project-typography visual evidence')
-      const typographyStore = job.indexOf(`path: ${PROJECT_TYPOGRAPHY_EVIDENCE_PATH}`)
+      const styleSessionCapture = job.indexOf('name: Capture style-session visual evidence')
+      const styleSessionStore = job.indexOf(`path: ${STYLE_SESSION_EVIDENCE_PATH}`)
       const packageStep = job.indexOf('name: Package unpacked desktop app')
       expect(build).toBeGreaterThan(-1)
       expect(build).toBeLessThan(baselineCapture)
       expect(baselineCapture).toBeLessThan(baselineStore)
-      expect(baselineStore).toBeLessThan(typographyCapture)
-      expect(typographyCapture).toBeLessThan(typographyStore)
-      expect(typographyStore).toBeLessThan(packageStep)
+      expect(baselineStore).toBeLessThan(styleSessionCapture)
+      expect(styleSessionCapture).toBeLessThan(styleSessionStore)
+      expect(styleSessionStore).toBeLessThan(packageStep)
 
       expect(trimmedLines(job, (line) => line.startsWith('bun run test:visual'))).toEqual(
         VISUAL_TEST_INVOCATIONS,
@@ -258,27 +258,27 @@ describe('CI visual evidence contract', () => {
         platform === 'macOS'
           ? [
               'export OKS_VISUAL_EVIDENCE_DIR="$evidence_root/video-style-visual"',
-              'export OKS_VISUAL_EVIDENCE_DIR="$evidence_root/project-typography-visual"',
+              'export OKS_VISUAL_EVIDENCE_DIR="$evidence_root/style-session-visual"',
             ]
           : [
               '$env:OKS_VISUAL_EVIDENCE_DIR = Join-Path $evidenceRoot "video-style-visual"',
-              '$env:OKS_VISUAL_EVIDENCE_DIR = Join-Path $evidenceRoot "project-typography-visual"',
+              '$env:OKS_VISUAL_EVIDENCE_DIR = Join-Path $evidenceRoot "style-session-visual"',
             ],
       )
       expect(trimmedLines(job, (line) => line.startsWith('path: .ci-artifacts/'))).toEqual([
         `path: ${BASELINE_EVIDENCE_PATH}`,
-        `path: ${PROJECT_TYPOGRAPHY_EVIDENCE_PATH}`,
+        `path: ${STYLE_SESSION_EVIDENCE_PATH}`,
       ])
       expect(trimmedLines(job, (line) => line.startsWith('destination:'))).toEqual([
         `destination: video-style-visual-${platform}`,
-        `destination: project-typography-visual-${platform}`,
+        `destination: style-session-visual-${platform}`,
       ])
     }
 
     const packageJson = JSON.parse(await repositoryFile('package.json'))
     expect(packageJson.scripts['test:visual']).toBe('node scripts/video-style-visual-smoke.cjs')
-    expect(
-      visualResults.expectedFilesForScenario(visualResults.PROJECT_TYPOGRAPHY_SCENARIO),
-    ).toEqual(PROJECT_TYPOGRAPHY_EVIDENCE_LEAVES)
+    expect(visualResults.expectedFilesForScenario(visualResults.STYLE_SESSION_SCENARIO)).toEqual(
+      STYLE_SESSION_EVIDENCE_LEAVES,
+    )
   })
 })
