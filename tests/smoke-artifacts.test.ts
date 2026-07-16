@@ -37,6 +37,9 @@ const artifacts = require('../electron/smoke-artifacts.cjs') as {
     options?: Record<string, unknown>,
   ): Promise<string>
 }
+const visualResults = require('../scripts/visual-result-validation.cjs') as {
+  STYLE_SESSION_NAMES: readonly string[]
+}
 
 interface Artifact { bytes: Buffer; name: string }
 
@@ -248,6 +251,7 @@ describe('smoke artifact ownership and publication', () => {
 
   it('enforces inclusive count, per-artifact, and aggregate byte limits', () => {
     const { maxArtifactBytes, maxArtifacts, maxTotalBytes } = artifacts.ARTIFACT_LIMITS
+    expect(visualResults.STYLE_SESSION_NAMES.length + 1).toBe(maxArtifacts)
     const marker = { bytes: Buffer.from('x'), name: 'result.json' }
     const atCount = Array.from({ length: maxArtifacts - 1 }, (_, index) => ({
       bytes: Buffer.from('x'),

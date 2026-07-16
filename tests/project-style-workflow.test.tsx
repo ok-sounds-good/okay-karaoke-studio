@@ -394,6 +394,12 @@ describe('project Style App integration', () => {
     expect(document.querySelector('[title="Unsaved changes"]')).toBeNull()
 
     await click(style)
+    await click(buttonByText('Stage frame'))
+    await act(async () => document.querySelector<HTMLInputElement>('input[value="clock"]')!.click())
+    await click(buttonByText('Apply & close'))
+    expect(buttonByLabel('Undo').disabled).toBe(true)
+
+    await click(style)
     await chooseSize('96')
     await click(buttonByText('Apply & close'))
     expect(buttonByLabel('Undo').disabled).toBe(false)
@@ -411,14 +417,24 @@ describe('project Style App integration', () => {
     expect(buttonByLabel('Redo').disabled).toBe(false)
   })
 
-  it('applies, saves, reopens, undoes, and redoes the complete accepted background once', async () => {
+  it('applies, saves, reopens, undoes, and redoes accepted background and frame roles once', async () => {
     const style = buttonByText('Style')
+    const originalFrame = structuredClone(createDemoProject().stageStyle.stageFrame)
     await click(style)
     await click(buttonByText('Background'))
     await chooseColor('Background gradient start color', '#112233')
     await chooseColor('Background gradient end color', '#445566')
     await chooseBackgroundMode('solid')
     await chooseColor('Background solid color', '#778899')
+    await click(buttonByText('Stage frame'))
+    await act(async () => document.querySelector<HTMLInputElement>('input[value="clock"]')!.click())
+    await click(buttonByLabel('Clock face Bold'))
+    await act(async () =>
+      document.querySelector<HTMLInputElement>('input[value="footer"]')!.click(),
+    )
+    await act(async () =>
+      document.querySelector<HTMLInputElement>('[aria-label="Show Footer in output"]')!.click(),
+    )
     await click(buttonByText('Apply & close'))
 
     expect(buttonByLabel('Undo').disabled).toBe(false)
@@ -432,17 +448,29 @@ describe('project Style App integration', () => {
       gradientEndColor: '#445566',
       imagePath: null,
     })
+    const acceptedFrame = parseProject(acceptedContents).stageStyle.stageFrame
+    expect(acceptedFrame.lineColor).toBe(originalFrame.lineColor)
+    expect(acceptedFrame.lineWidthPx).toBe(originalFrame.lineWidthPx)
+    expect(acceptedFrame.brand).toEqual(originalFrame.brand)
+    expect(acceptedFrame.clock.fontStyle.style).toBe('Bold')
+    expect(acceptedFrame.footer.visible).toBe(false)
 
     await click(buttonByLabel('Undo'))
     await click(buttonByLabel('Save project'))
     expect(
       parseProject(harness.saveProject.mock.calls.at(-1)?.[0].contents).stageStyle.background,
     ).toMatchObject({ mode: 'gradient', solidColor: '#21182D' })
+    expect(
+      parseProject(harness.saveProject.mock.calls.at(-1)?.[0].contents).stageStyle.stageFrame,
+    ).toEqual(originalFrame)
     await click(buttonByLabel('Redo'))
     await click(buttonByLabel('Save project'))
     expect(
       parseProject(harness.saveProject.mock.calls.at(-1)?.[0].contents).stageStyle.background,
     ).toEqual(accepted)
+    expect(
+      parseProject(harness.saveProject.mock.calls.at(-1)?.[0].contents).stageStyle.stageFrame,
+    ).toEqual(acceptedFrame)
 
     harness.openProject.mockResolvedValueOnce({
       requestId: 'reopen-applied-background',
@@ -454,6 +482,10 @@ describe('project Style App integration', () => {
       'solid',
     )
     expect(document.querySelector<HTMLElement>('.karaoke-stage')?.style.background).toBe('#778899')
+    expect(document.querySelector('.karaoke-stage__footer')).toBeNull()
+    expect(document.querySelector<HTMLElement>('.karaoke-stage__time')?.style.fontWeight).toBe(
+      '700',
+    )
   })
 
   it('replaces only the latest StageStyle and preserves newer non-style state', async () => {

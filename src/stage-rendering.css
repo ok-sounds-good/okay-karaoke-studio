@@ -147,6 +147,15 @@
   letter-spacing: var(--stage-footer-spacing);
 }
 
+.karaoke-stage.is-designing-stage-frame .stage-frame-design-context {
+  opacity: 0.45;
+}
+
+.karaoke-stage.is-designing-stage-frame [data-stage-frame-design-role] {
+  outline: max(1px, 0.12cqw) solid var(--accent);
+  outline-offset: 0.45cqw;
+}
+
 .stage-resource-warning {
   position: absolute;
   z-index: 5;

@@ -158,7 +158,7 @@ describe('ProjectStyleEditor', () => {
   it('uses automatic accessible destination tabs with wrapping Arrow and Home/End navigation', async () => {
     await renderEditor()
     const tabs = [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')]
-    const [lyricsTab, backgroundTab, titleCardTab] = tabs
+    const [lyricsTab, backgroundTab, titleCardTab, stageFrameTab] = tabs
     const controlledPanel = (tab: HTMLButtonElement) =>
       container.querySelector<HTMLElement>(`#${CSS.escape(tab.getAttribute('aria-controls')!)}`)!
 
@@ -166,6 +166,7 @@ describe('ProjectStyleEditor', () => {
       'Project lyrics',
       'Background',
       'Title card',
+      'Stage frame',
     ])
     expect(controlledPanel(backgroundTab).hidden).toBe(true)
 
@@ -176,14 +177,108 @@ describe('ProjectStyleEditor', () => {
     await act(async () => keyDown(backgroundTab, { code: 'ArrowRight', key: 'ArrowRight' }))
     expect(document.activeElement).toBe(titleCardTab)
     await act(async () => keyDown(titleCardTab, { code: 'ArrowRight', key: 'ArrowRight' }))
+    expect(document.activeElement).toBe(stageFrameTab)
+    await act(async () => keyDown(stageFrameTab, { code: 'ArrowRight', key: 'ArrowRight' }))
     expect(document.activeElement).toBe(lyricsTab)
     await act(async () => keyDown(lyricsTab, { code: 'End', key: 'End' }))
-    expect(document.activeElement).toBe(titleCardTab)
-    await act(async () => keyDown(titleCardTab, { code: 'Home', key: 'Home' }))
+    expect(document.activeElement).toBe(stageFrameTab)
+    await act(async () => keyDown(stageFrameTab, { code: 'Home', key: 'Home' }))
     expect(document.activeElement).toBe(lyricsTab)
     const wrapped = keyDown(lyricsTab, { code: 'ArrowLeft', key: 'ArrowLeft' })
     expect(wrapped.defaultPrevented).toBe(true)
-    expect(document.activeElement).toBe(titleCardTab)
+    expect(document.activeElement).toBe(stageFrameTab)
+  })
+
+  it('edits independent Stage frame roles while preserving its unexposed frame line', async () => {
+    const project = createProject({ id: 'stage-frame-roles' })
+    project.stageStyle.stageFrame.lineColor = '#123456'
+    project.stageStyle.stageFrame.lineWidthPx = 7
+    const original = structuredClone(project.stageStyle.stageFrame)
+    const onDraftChange = vi.fn<ProjectStyleSession['change']>()
+    let draft = project.stageStyle
+    await renderEditor({ project, draft, onDraftChange })
+    await act(async () => findButton(container, 'Stage frame').click())
+
+    const panel = container.querySelector<HTMLElement>('[role="tabpanel"]:not([hidden])')!
+    const master = panel.querySelector<HTMLInputElement>(
+      '[aria-label="Show Stage frame in output"]',
+    )!
+    const radios = [...panel.querySelectorAll<HTMLInputElement>('input[type="radio"]')]
+    expect(panel.querySelector('[role="radiogroup"]')?.getAttribute('aria-label')).toBe(
+      'Stage frame role',
+    )
+    expect(radios.map(({ value }) => value)).toEqual(['brand', 'clock', 'footer'])
+    expect(new Set(radios.map(({ name }) => name)).size).toBe(1)
+    expect(radios[0].checked).toBe(true)
+    expect(panel.textContent).not.toContain('Line color')
+    expect(panel.textContent).not.toContain('Line width')
+
+    await act(async () => master.click())
+    draft = applyChange(onDraftChange.mock.calls.at(-1)?.[0], draft)
+    await renderEditor({ project, draft, onDraftChange })
+    const activePanel = container.querySelector<HTMLElement>('[role="tabpanel"]:not([hidden])')!
+    expect(
+      [
+        ...activePanel.querySelectorAll<HTMLInputElement | HTMLButtonElement | HTMLSelectElement>(
+          'input, button, select',
+        ),
+      ].every((control) => !control.disabled),
+    ).toBe(true)
+
+    onDraftChange.mockClear()
+    const clock = activePanel.querySelector<HTMLInputElement>('input[value="clock"]')!
+    await act(async () => clock.click())
+    expect(onDraftChange).not.toHaveBeenCalled()
+    expect(container.querySelector('[data-stage-frame-design-role="clock"]')?.textContent).toMatch(
+      /^\d{2}:\d{2}\.\d{3}$/u,
+    )
+
+    const visibility = container.querySelector<HTMLInputElement>(
+      '[aria-label="Show Clock in output"]',
+    )!
+    await act(async () => visibility.click())
+    draft = applyChange(onDraftChange.mock.calls.at(-1)?.[0], draft)
+    await renderEditor({ project, draft, onDraftChange })
+
+    const typeface = container.querySelector<HTMLInputElement>('[aria-label="Clock typeface"]')!
+    await act(async () => typeface.focus())
+    const systemUi = container.querySelector<HTMLElement>('[data-font-family="System UI"]')!
+    await act(async () =>
+      systemUi.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })),
+    )
+    draft = applyChange(onDraftChange.mock.calls.at(-1)?.[0], draft)
+    await renderEditor({ project, draft, onDraftChange })
+
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Clock face Bold"]')!.click(),
+    )
+    draft = applyChange(onDraftChange.mock.calls.at(-1)?.[0], draft)
+    await renderEditor({ project, draft, onDraftChange })
+    const size = container.querySelector<HTMLSelectElement>('[aria-label="Clock font size"]')!
+    await act(async () => {
+      size.value = '56'
+      size.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    draft = applyChange(onDraftChange.mock.calls.at(-1)?.[0], draft)
+    await renderEditor({ project, draft, onDraftChange })
+    await act(async () =>
+      replaceInput(container.querySelector('[aria-label="Clock color"]')!, '#abcdef'),
+    )
+    draft = applyChange(onDraftChange.mock.calls.at(-1)?.[0], draft)
+
+    expect(draft.stageFrame.enabled).toBe(false)
+    expect(draft.stageFrame.lineColor).toBe(original.lineColor)
+    expect(draft.stageFrame.lineWidthPx).toBe(original.lineWidthPx)
+    expect(draft.stageFrame.brand).toEqual(original.brand)
+    expect(draft.stageFrame.footer).toEqual(original.footer)
+    expect(draft.stageFrame.clock).toMatchObject({
+      color: '#abcdef',
+      sizePx: 56,
+      visible: false,
+    })
+    expect(draft.stageFrame.clock.typeface.family).toBe('System UI')
+    expect(draft.stageFrame.clock.fontStyle.style).toBe('Bold')
+    expect(project.stageStyle.stageFrame).toEqual(original)
   })
 
   it('edits only the selected Title card role through role-specific native controls', async () => {

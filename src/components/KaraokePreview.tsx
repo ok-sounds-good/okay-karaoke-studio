@@ -31,6 +31,13 @@ export type KaraokePreviewDesignMode =
       role: keyof StageStyle['titleCard']
       stageStyle: StageStyle
     }
+  | {
+      target: 'stage-frame'
+      role: StageFrameTextRole
+      stageStyle: StageStyle
+    }
+
+type StageFrameTextRole = 'brand' | 'clock' | 'footer'
 
 interface KaraokePreviewProps {
   project: KaraokeProject
@@ -240,12 +247,15 @@ export function KaraokePreview({
     [designMode],
   )
   const isTitleCardDesign = designMode?.target === 'title-card'
+  const stageFrameDesign = designMode?.target === 'stage-frame' ? designMode : null
   const selectedFonts =
     designMode?.target === 'project-lyrics'
       ? designPreviewFonts(designMode.stageStyle)
       : isTitleCardDesign
         ? titleCardDesignPreviewFonts(designMode.stageStyle, designMode.role)
-        : projectPreviewFonts(previewProject)
+        : stageFrameDesign
+          ? projectPreviewFonts({ ...project, stageStyle: stageFrameDesign.stageStyle })
+          : projectPreviewFonts(previewProject)
   const fontRuntime = usePreviewFonts(selectedFonts)
   const stageStyle = designStyle ?? frame.stageStyle
   const background = stageStyle.background
@@ -273,13 +283,51 @@ export function KaraokePreview({
     ? 'karaoke-stage karaoke-stage--lines-1 is-designing'
     : isTitleCardDesign
       ? 'karaoke-stage karaoke-stage--lines-1 is-designing is-designing-title-card'
-      : `karaoke-stage karaoke-stage--lines-${project.lyricDisplay.lineCount}${isDesigning ? ' is-designing' : ''}`
+      : stageFrameDesign
+        ? `karaoke-stage karaoke-stage--lines-${project.lyricDisplay.lineCount} is-designing is-designing-stage-frame`
+        : `karaoke-stage karaoke-stage--lines-${project.lyricDisplay.lineCount}${isDesigning ? ' is-designing' : ''}`
   const designLabel =
     designMode?.target === 'background'
       ? 'Background'
       : isTitleCardDesign
         ? 'Title card'
-        : 'Project lyrics'
+        : stageFrameDesign
+          ? 'Stage frame'
+          : 'Project lyrics'
+  const rolePresentation = (role: StageFrameTextRole) => {
+    const selected = stageFrameDesign?.role === role
+    const outputVisible = stageFrame.enabled && stageFrame[role].visible
+    const rendered =
+      outputVisible || Boolean(stageFrameDesign && (selected || stageFrame[role].visible))
+    const designOnly = Boolean(
+      stageFrameDesign && (!stageFrame.enabled || !stageFrame[role].visible),
+    )
+    return {
+      className:
+        stageFrameDesign && !stageFrame.enabled && !selected ? ' stage-frame-design-context' : '',
+      data: {
+        'data-design-only': designOnly ? 'true' : undefined,
+        'data-stage-frame-design-role': selected ? role : undefined,
+        'data-stage-frame-role': role,
+      },
+      rendered,
+    }
+  }
+  const brandPresentation = rolePresentation('brand')
+  const clockPresentation = rolePresentation('clock')
+  const footerPresentation = rolePresentation('footer')
+  const renderStageFrameLine =
+    stageFrame.lineWidthPx > 0 && (stageFrame.enabled || Boolean(stageFrameDesign))
+  const stageFrameStatus = !stageFrameDesign
+    ? null
+    : !stageFrame.enabled
+      ? { accessibleName: 'Stage frame off in output', text: 'Stage frame off in output' }
+      : !stageFrame[stageFrameDesign.role].visible
+        ? {
+            accessibleName: `${stageFrameDesign.role[0].toUpperCase()}${stageFrameDesign.role.slice(1)} hidden in output`,
+            text: 'Hidden in output',
+          }
+        : null
 
   return (
     <section
@@ -298,6 +346,16 @@ export function KaraokePreview({
         </div>
         {isDesigning ? (
           <div className="preview-badges">
+            {stageFrameStatus && (
+              <span
+                className="status-pill"
+                role="status"
+                aria-label={stageFrameStatus.accessibleName}
+                data-stage-frame-output-status
+              >
+                {stageFrameStatus.text}
+              </span>
+            )}
             <span className="status-pill">Fixed 1920 × 1080 stage</span>
             <span className="status-pill">
               <ShieldCheck size={12} /> Title safe
@@ -392,18 +450,26 @@ export function KaraokePreview({
             </div>
           ))
         )}
-        {stageFrame.enabled && <div className="karaoke-stage__safe-area" aria-hidden="true" />}
-        {stageFrame.enabled && stageFrame.brand.visible && (
+        {renderStageFrameLine && (
           <div
-            className="karaoke-stage__brand"
+            className={`karaoke-stage__safe-area${stageFrameDesign && !stageFrame.enabled ? ' stage-frame-design-context' : ''}`}
+            aria-hidden="true"
+            data-stage-frame-line
+          />
+        )}
+        {brandPresentation.rendered && (
+          <div
+            className={`karaoke-stage__brand${brandPresentation.className}`}
+            {...brandPresentation.data}
             style={textStyle(stageFrame.brand, fontRuntime.aliases)}
           >
             OKAY / STUDIO
           </div>
         )}
-        {stageFrame.enabled && stageFrame.clock.visible && (
+        {clockPresentation.rendered && (
           <div
-            className="karaoke-stage__time"
+            className={`karaoke-stage__time${clockPresentation.className}`}
+            {...clockPresentation.data}
             style={textStyle(stageFrame.clock, fontRuntime.aliases)}
           >
             {formatTime(playbackMs)}
@@ -451,12 +517,12 @@ export function KaraokePreview({
               />
             ) : null
           })}
-        {stageFrame.enabled && stageFrame.footer.visible && (
+        {footerPresentation.rendered && (
           <div
-            className="karaoke-stage__footer"
+            className={`karaoke-stage__footer${footerPresentation.className}`}
             style={textStyle(stageFrame.footer, fontRuntime.aliases)}
           >
-            <span>
+            <span {...footerPresentation.data}>
               {frame.artist} · {frame.title}
             </span>
           </div>

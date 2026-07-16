@@ -90,7 +90,8 @@
 }
 
 .title-card-role-selector label,
-.style-visibility-field {
+.style-visibility-field,
+.stage-frame-master-field {
   display: flex;
   align-items: center;
   gap: 5px;
@@ -121,6 +122,10 @@
 }
 
 .style-visibility-field {
+  margin-bottom: 14px;
+}
+
+.stage-frame-master-field {
   margin-bottom: 14px;
 }
 

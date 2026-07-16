@@ -29,6 +29,11 @@ const STYLE_SESSION_EVIDENCE_LEAVES = [
   '07-title-card-eyebrow-draft-1280x720.png',
   '08-title-card-artist-draft-1280x720.png',
   '09-title-card-applied-1280x720.png',
+  '10-stage-frame-destination-1280x720.png',
+  '11-stage-frame-master-off-draft-1280x720.png',
+  '12-stage-frame-clock-draft-1280x720.png',
+  '13-stage-frame-footer-hidden-draft-1280x720.png',
+  '14-stage-frame-applied-1280x720.png',
   'result.json',
 ]
 const VISUAL_TEST_INVOCATIONS = [

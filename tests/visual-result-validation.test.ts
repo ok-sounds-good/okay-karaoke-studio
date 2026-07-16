@@ -132,6 +132,31 @@ describe('visual result validation', () => {
           name: '09-title-card-applied-1280x720.png',
           width: 1280,
         },
+        {
+          height: 720,
+          name: '10-stage-frame-destination-1280x720.png',
+          width: 1280,
+        },
+        {
+          height: 720,
+          name: '11-stage-frame-master-off-draft-1280x720.png',
+          width: 1280,
+        },
+        {
+          height: 720,
+          name: '12-stage-frame-clock-draft-1280x720.png',
+          width: 1280,
+        },
+        {
+          height: 720,
+          name: '13-stage-frame-footer-hidden-draft-1280x720.png',
+          width: 1280,
+        },
+        {
+          height: 720,
+          name: '14-stage-frame-applied-1280x720.png',
+          width: 1280,
+        },
       ],
       ok: true,
       schemaVersion: 1,
@@ -144,6 +169,18 @@ describe('visual result validation', () => {
     const manifest = JSON.parse(await readFile(join(output, results.RESULT_NAME), 'utf8'))
     manifest.artifacts[2] = { ...manifest.artifacts[0], name: results.STYLE_SESSION_NAMES[2] }
     await writeFile(join(output, results.STYLE_SESSION_NAMES[2]), duplicate)
+    await writeFile(join(output, results.RESULT_NAME), `${JSON.stringify(manifest)}\n`)
+    await expect(
+      results.validateVisualResultDirectory(output, { scenario: results.STYLE_SESSION_SCENARIO }),
+    ).rejects.toThrow('VISUAL_SMOKE_RESULT_INVALID')
+  })
+
+  it('rejects the retired nine-capture Style-session directory', async () => {
+    const { output } = await freshResult(results.STYLE_SESSION_SCENARIO)
+    const retired = results.STYLE_SESSION_NAMES.slice(9)
+    await Promise.all(retired.map((name: string) => rm(join(output, name))))
+    const manifest = JSON.parse(await readFile(join(output, results.RESULT_NAME), 'utf8'))
+    manifest.artifacts = manifest.artifacts.slice(0, 9)
     await writeFile(join(output, results.RESULT_NAME), `${JSON.stringify(manifest)}\n`)
     await expect(
       results.validateVisualResultDirectory(output, { scenario: results.STYLE_SESSION_SCENARIO }),

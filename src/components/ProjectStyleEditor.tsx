@@ -16,6 +16,7 @@ import {
 } from '../lib/video-style'
 import '../video-style.css'
 import { KaraokePreview } from './KaraokePreview'
+import { StageFrameStylePanel, type StageFrameRole } from './StageFrameStylePanel'
 import { StyleDestinationTabs } from './StyleDestinationTabs'
 import { TitleCardStylePanel, type TitleCardRole } from './TitleCardStylePanel'
 import { TypefaceCombobox } from './TypefaceCombobox'
@@ -45,6 +46,7 @@ const STYLE_DESTINATIONS = [
   { id: 'project-lyrics', label: 'Project lyrics' },
   { id: 'background', label: 'Background' },
   { id: 'title-card', label: 'Title card' },
+  { id: 'stage-frame', label: 'Stage frame' },
 ] as const
 
 type StyleDestination = (typeof STYLE_DESTINATIONS)[number]['id']
@@ -91,6 +93,7 @@ export function ProjectStyleEditor({
   const headingRef = useRef<HTMLHeadingElement>(null)
   const [destination, setDestination] = useState<StyleDestination>('project-lyrics')
   const [titleCardPreviewRole, setTitleCardPreviewRole] = useState<TitleCardRole>('eyebrow')
+  const [stageFramePreviewRole, setStageFramePreviewRole] = useState<StageFrameRole>('brand')
   const lyrics = draft.lyrics
   const background = draft.background
   const effectiveFaceKey = fontFaceKey(resolveFontFace(lyrics.typeface, lyrics.fontStyle))
@@ -313,6 +316,17 @@ export function ProjectStyleEditor({
             onRetryFonts={onRetryFonts}
             onSelectedRoleChange={setTitleCardPreviewRole}
           />
+
+          <StageFrameStylePanel
+            active={destination === 'stage-frame'}
+            draft={draft}
+            fonts={fonts}
+            id={`${titleId}-stage-frame-panel`}
+            labelledBy={`${titleId}-stage-frame-tab`}
+            onDraftChange={onDraftChange}
+            onRetryFonts={onRetryFonts}
+            onSelectedRoleChange={setStageFramePreviewRole}
+          />
         </div>
 
         <footer className="style-editor__actions">
@@ -333,7 +347,9 @@ export function ProjectStyleEditor({
         designMode={
           destination === 'title-card'
             ? { target: 'title-card', role: titleCardPreviewRole, stageStyle: draft }
-            : { target: destination, stageStyle: draft }
+            : destination === 'stage-frame'
+              ? { target: 'stage-frame', role: stageFramePreviewRole, stageStyle: draft }
+              : { target: destination, stageStyle: draft }
         }
       />
     </main>

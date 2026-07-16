@@ -134,6 +134,28 @@ function titleCardState(role: 'eyebrow' | 'artist', applied = false) {
   return { applied, resourcesReady: true, role }
 }
 
+function stageFrameState(
+  role: 'brand' | 'clock' | 'footer',
+  options: { applied?: boolean; changedClock?: boolean } = {},
+) {
+  return {
+    applied: options.applied === true,
+    brandStyle: 'color: rgb(193, 187, 199); font-weight: 700;',
+    clockStyle: options.changedClock
+      ? 'color: rgb(187, 183, 192); font-weight: 700;'
+      : 'color: rgb(187, 183, 192); font-weight: 600;',
+    clockWeight: options.changedClock ? '700' : '600',
+    height: 720,
+    lineColor: '#473C54',
+    lineWidth: '0.10416666666666667cqw',
+    resourcesReady: true,
+    role,
+    stageHeight: 480,
+    stageWidth: 853.33,
+    width: 1280,
+  }
+}
+
 function fakeStyleSessionWindow(
   options: { displayScale?: number; readiness?: Promise<never>; target?: unknown } = {},
   capturePng = validPng,
@@ -142,6 +164,11 @@ function fakeStyleSessionWindow(
   const captures = [
     { height: 720, width: 1280 },
     { height: 900, width: 1440 },
+    { height: 720, width: 1280 },
+    { height: 720, width: 1280 },
+    { height: 720, width: 1280 },
+    { height: 720, width: 1280 },
+    { height: 720, width: 1280 },
     { height: 720, width: 1280 },
     { height: 720, width: 1280 },
     { height: 720, width: 1280 },
@@ -199,6 +226,20 @@ function fakeStyleSessionWindow(
       .mockResolvedValueOnce(titleCardState('artist'))
       .mockResolvedValueOnce(styleActionTarget('apply-title'))
       .mockResolvedValueOnce(titleCardState('artist', true))
+      .mockResolvedValueOnce(styleActionTarget('reopen'))
+      .mockResolvedValueOnce(styleActionTarget('stage'))
+      .mockResolvedValueOnce(stageFrameState('brand'))
+      .mockResolvedValueOnce(styleActionTarget('stage-off'))
+      .mockResolvedValueOnce(stageFrameState('brand'))
+      .mockResolvedValueOnce(styleActionTarget('stage-on'))
+      .mockResolvedValueOnce(styleActionTarget('clock'))
+      .mockResolvedValueOnce(styleActionTarget('clock-face'))
+      .mockResolvedValueOnce(stageFrameState('clock', { changedClock: true }))
+      .mockResolvedValueOnce(styleActionTarget('footer'))
+      .mockResolvedValueOnce(styleActionTarget('footer-visibility'))
+      .mockResolvedValueOnce(stageFrameState('footer', { changedClock: true }))
+      .mockResolvedValueOnce(styleActionTarget('apply-stage'))
+      .mockResolvedValueOnce(stageFrameState('footer', { applied: true, changedClock: true }))
   }
   return window
 }
@@ -300,6 +341,11 @@ describe('production-window visual smoke', () => {
         '07-title-card-eyebrow-draft-1280x720.png',
         '08-title-card-artist-draft-1280x720.png',
         '09-title-card-applied-1280x720.png',
+        '10-stage-frame-destination-1280x720.png',
+        '11-stage-frame-master-off-draft-1280x720.png',
+        '12-stage-frame-clock-draft-1280x720.png',
+        '13-stage-frame-footer-hidden-draft-1280x720.png',
+        '14-stage-frame-applied-1280x720.png',
         'result.json',
       ])
     })
@@ -317,11 +363,11 @@ describe('production-window visual smoke', () => {
       ),
     ).resolves.toEqual({ ok: true })
     const inputEvents = window.webContents.sendInputEvent.mock.calls.map(([event]) => event)
-    expect(inputEvents).toHaveLength(30)
-    expect(inputEvents.filter(({ type }) => type === 'mouseDown')).toHaveLength(10)
+    expect(inputEvents).toHaveLength(57)
+    expect(inputEvents.filter(({ type }) => type === 'mouseDown')).toHaveLength(19)
     expect(window.setContentSize.mock.calls).toContainEqual([1280, 720, false])
     expect(window.setContentSize.mock.calls).toContainEqual([1440, 900, false])
-    expect(window.webContents.capturePage).toHaveBeenCalledTimes(9)
+    expect(window.webContents.capturePage).toHaveBeenCalledTimes(14)
     expect(smoke.STYLE_TARGET_SCRIPT).not.toContain('.click(')
     expect(smoke.STYLE_TARGET_SCRIPT).not.toContain('setTimeout')
     const readinessScript = smoke.projectLyricsReadinessScript({ height: 720, width: 1280 })
@@ -369,7 +415,7 @@ describe('production-window visual smoke', () => {
       ),
     ).resolves.toEqual({ ok: true })
 
-    expect(window.webContents.sendInputEvent).toHaveBeenCalledTimes(30)
+    expect(window.webContents.sendInputEvent).toHaveBeenCalledTimes(57)
     expect(window.webContents.sendInputEvent.mock.calls[0][0]).toEqual({
       type: 'mouseMove',
       x: 61,
@@ -378,7 +424,7 @@ describe('production-window visual smoke', () => {
     expect(window.webContents.setZoomFactor).toHaveBeenCalledWith(0.5)
     expect(window.setContentSize.mock.calls).toContainEqual([640, 360, false])
     expect(window.setContentSize.mock.calls).toContainEqual([720, 450, false])
-    expect(window.webContents.capturePage).toHaveBeenCalledTimes(9)
+    expect(window.webContents.capturePage).toHaveBeenCalledTimes(14)
     expect(publish).toHaveBeenCalledOnce()
   })
 
@@ -509,7 +555,7 @@ describe('production-window visual smoke', () => {
         { focus: vi.fn(async () => true), publish, writeFailure },
       ),
     ).resolves.toEqual({ ok: false })
-    expect(window.webContents.capturePage).toHaveBeenCalledTimes(9)
+    expect(window.webContents.capturePage).toHaveBeenCalledTimes(14)
     expect(publish).not.toHaveBeenCalled()
     expect(writeFailure).toHaveBeenCalledOnce()
   })

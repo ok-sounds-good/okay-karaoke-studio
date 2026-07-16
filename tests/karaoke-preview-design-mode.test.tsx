@@ -242,6 +242,107 @@ describe('Karaoke Preview project-lyrics design mode', () => {
     expect(project).toEqual(snapshot)
   })
 
+  it('renders the three Stage frame design states without leaking them into ordinary Preview', () => {
+    const project = createProject({ title: 'Semantic title', artist: 'Semantic artist' })
+    const renderStageFrame = (stageStyle = cloneStageStyle(project.stageStyle), role = 'brand') => {
+      const rendered = document.createElement('div')
+      rendered.innerHTML = previewMarkup(
+        { target: 'stage-frame', role: role as 'brand' | 'clock' | 'footer', stageStyle },
+        project,
+        1_250,
+      )
+      return rendered
+    }
+
+    const visible = renderStageFrame()
+    const visiblePanel = visible.querySelector<HTMLElement>(
+      '[aria-label="Stage frame design preview"]',
+    )!
+    const visibleStage = visiblePanel.querySelector<HTMLElement>('.karaoke-stage')!
+    expect(visibleStage.classList.contains('is-designing-stage-frame')).toBe(true)
+    expect(visibleStage.querySelector('[data-stage-frame-line]')).not.toBeNull()
+    const brand = visibleStage.querySelector<HTMLElement>('[data-stage-frame-design-role="brand"]')!
+    const clock = visibleStage.querySelector<HTMLElement>('[data-stage-frame-role="clock"]')!
+    const footer = visibleStage.querySelector<HTMLElement>('[data-stage-frame-role="footer"]')!
+    expect(brand.textContent).toBe('OKAY / STUDIO')
+    expect(brand.classList.contains('karaoke-stage__brand')).toBe(true)
+    expect(clock.textContent).toBe('00:01.250')
+    expect(clock.classList.contains('karaoke-stage__time')).toBe(true)
+    expect(footer.textContent).toBe('Semantic artist · Semantic title')
+    expect(footer.closest('.karaoke-stage__footer')).not.toBeNull()
+    expect(visiblePanel.querySelector('[data-stage-frame-output-status]')).toBeNull()
+    expect(visibleStage.querySelector('.stage-frame-design-context')).toBeNull()
+
+    const hiddenDraft = cloneStageStyle(project.stageStyle)
+    hiddenDraft.stageFrame.clock.visible = false
+    hiddenDraft.stageFrame.footer.visible = false
+    const hidden = renderStageFrame(hiddenDraft, 'clock')
+    const hiddenPanel = hidden.querySelector<HTMLElement>(
+      '[aria-label="Stage frame design preview"]',
+    )!
+    const hiddenStage = hiddenPanel.querySelector<HTMLElement>('.karaoke-stage')!
+    const hiddenClock = hiddenStage.querySelector<HTMLElement>(
+      '[data-stage-frame-design-role="clock"]',
+    )!
+    expect(hiddenClock.dataset.designOnly).toBe('true')
+    expect(hiddenStage.querySelector('[data-stage-frame-role="footer"]')).toBeNull()
+    expect(hiddenStage.querySelector('[data-stage-frame-line]')).not.toBeNull()
+    expect(hiddenPanel.querySelectorAll('[data-stage-frame-output-status]')).toHaveLength(1)
+    expect(
+      hiddenPanel.querySelector('[data-stage-frame-output-status]')?.getAttribute('aria-label'),
+    ).toBe('Clock hidden in output')
+    expect(hiddenPanel.querySelector('[data-stage-frame-output-status]')?.textContent).toBe(
+      'Hidden in output',
+    )
+
+    const offDraft = cloneStageStyle(hiddenDraft)
+    offDraft.stageFrame.enabled = false
+    offDraft.stageFrame.brand.visible = false
+    offDraft.stageFrame.clock.visible = true
+    const off = renderStageFrame(offDraft)
+    const offPanel = off.querySelector<HTMLElement>('[aria-label="Stage frame design preview"]')!
+    const offStage = offPanel.querySelector<HTMLElement>('.karaoke-stage')!
+    expect(offStage.querySelector('[data-stage-frame-design-role="brand"]')).not.toBeNull()
+    expect(
+      offStage
+        .querySelector('[data-stage-frame-design-role="brand"]')
+        ?.classList.contains('stage-frame-design-context'),
+    ).toBe(false)
+    expect(
+      offStage
+        .querySelector('[data-stage-frame-role="clock"]')
+        ?.classList.contains('stage-frame-design-context'),
+    ).toBe(true)
+    expect(
+      offStage
+        .querySelector('[data-stage-frame-line]')
+        ?.classList.contains('stage-frame-design-context'),
+    ).toBe(true)
+    expect(offStage.querySelector('[data-stage-frame-role="footer"]')).toBeNull()
+    expect(offPanel.querySelectorAll('[data-stage-frame-output-status]')).toHaveLength(1)
+    expect(offPanel.querySelector('[data-stage-frame-output-status]')?.textContent).toBe(
+      'Stage frame off in output',
+    )
+
+    offDraft.stageFrame.lineWidthPx = 0
+    expect(renderStageFrame(offDraft).querySelector('[data-stage-frame-line]')).toBeNull()
+
+    project.stageStyle = offDraft
+    const ordinary = document.createElement('div')
+    ordinary.innerHTML = renderToStaticMarkup(
+      <KaraokePreview
+        project={project}
+        playbackMs={1_250}
+        lyricMs={1_250}
+        selectedWordIds={new Set()}
+      />,
+    )
+    expect(ordinary.querySelector('[data-stage-frame-line]')).toBeNull()
+    expect(ordinary.querySelector('[data-stage-frame-role]')).toBeNull()
+    expect(ordinary.querySelector('[data-stage-frame-output-status]')).toBeNull()
+    expect(ordinary.querySelector('.is-designing-stage-frame')).toBeNull()
+  })
+
   it('selects hidden target and visible Title card and Stage frame fonts for design loading', () => {
     const project = createProject()
     const draft = cloneStageStyle(project.stageStyle)
@@ -435,6 +536,68 @@ describe('Karaoke Preview project-lyrics design mode', () => {
     expect(failedLine.style.fontWeight).toBe('700')
     expect(fontTypefaceKey(missing.typeface)).toBe(typefaceBefore)
     expect(fontFaceKey(missing.fontStyle)).toBe(faceBefore)
+    await act(async () => root.unmount())
+  })
+
+  it('resolves and retries a selected hidden Stage frame font while its master is off', async () => {
+    const attempts = new Map<string, number>()
+    vi.stubGlobal(
+      'FontFace',
+      class {
+        constructor(
+          public family: string,
+          private source: string,
+        ) {
+          attempts.set(source, (attempts.get(source) ?? 0) + 1)
+        }
+
+        async load() {
+          if (attempts.get(this.source) === 1) throw new Error('first load fails')
+          return this
+        }
+      },
+    )
+    Object.defineProperty(document, 'fonts', {
+      configurable: true,
+      value: { add: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn() },
+    })
+    const project = createProject()
+    const draft = cloneStageStyle(project.stageStyle)
+    const hiddenClock = localLyricStyle('Hidden Frame Clock', 'HiddenFrameClock-Regular')
+    applyFont(draft.stageFrame.clock, hiddenClock)
+    draft.stageFrame.enabled = false
+    draft.stageFrame.clock.visible = false
+    const container = document.createElement('div')
+    document.body.append(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(
+        <KaraokePreview
+          project={project}
+          playbackMs={0}
+          lyricMs={0}
+          selectedWordIds={new Set()}
+          designMode={{ target: 'stage-frame', role: 'clock', stageStyle: draft }}
+        />,
+      )
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(container.querySelector('.stage-resource-warning')?.textContent).toContain(
+      'Hidden Frame Clock Regular is unavailable',
+    )
+    const retry = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Retry',
+    )!
+    await act(async () => {
+      retry.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(attempts.get('local("HiddenFrameClock-Regular")')).toBe(2)
+    expect(container.querySelector('.stage-resource-warning')).toBeNull()
+    expect(container.querySelector('[data-stage-frame-design-role="clock"]')).not.toBeNull()
     await act(async () => root.unmount())
   })
 
