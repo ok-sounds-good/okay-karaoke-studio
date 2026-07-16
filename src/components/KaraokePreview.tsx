@@ -141,6 +141,7 @@ function PreviewLine({
   return (
     <div
       className={`stage-line stage-line--${line.style.alignment}`}
+      data-stage-font-size={line.style.sizePx}
       style={
         {
           '--track-color': line.style.sungColor,
@@ -230,7 +231,7 @@ export function KaraokePreview({
   const designStyle = designMode?.stageStyle ?? null
   const previewProject = useMemo(
     () =>
-      designMode?.target === 'background'
+      designMode?.target === 'background' || designMode?.target === 'stage-frame'
         ? { ...project, stageStyle: designMode.stageStyle }
         : project,
     [designMode, project],
@@ -253,9 +254,7 @@ export function KaraokePreview({
       ? designPreviewFonts(designMode.stageStyle)
       : isTitleCardDesign
         ? titleCardDesignPreviewFonts(designMode.stageStyle, designMode.role)
-        : stageFrameDesign
-          ? projectPreviewFonts({ ...project, stageStyle: stageFrameDesign.stageStyle })
-          : projectPreviewFonts(previewProject)
+        : projectPreviewFonts(previewProject)
   const fontRuntime = usePreviewFonts(selectedFonts)
   const stageStyle = designStyle ?? frame.stageStyle
   const background = stageStyle.background

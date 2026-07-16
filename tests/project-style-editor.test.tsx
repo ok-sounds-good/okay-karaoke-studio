@@ -281,6 +281,73 @@ describe('ProjectStyleEditor', () => {
     expect(project.stageStyle.stageFrame).toEqual(original)
   })
 
+  it('uses one accumulated lyric draft for timed Stage frame context and font loading', async () => {
+    const project = createProject({
+      id: 'stage-frame-draft-context',
+      title: 'Accepted title',
+      artist: 'Accepted artist',
+    })
+    const track = project.tracks[0]!
+    track.lines = [
+      {
+        id: 'accepted-line',
+        text: 'Accepted timed words',
+        startMs: 1_000,
+        endMs: 2_000,
+        words: [
+          { id: 'accepted-word-1', text: 'Accepted', startMs: 1_000, endMs: 1_500 },
+          { id: 'accepted-word-2', text: 'timed words', startMs: 1_500, endMs: 2_000 },
+        ],
+      },
+    ]
+    const face = {
+      ...testFace('Regular', 400),
+      fullName: 'Draft Local Regular',
+      postscriptName: 'DraftLocal-Regular',
+    }
+    const typeface: FontTypefaceDescriptor = { kind: 'local', family: 'Draft Local', faces: [face] }
+    const draft = structuredClone(project.stageStyle)
+    Object.assign(draft.lyrics, {
+      typeface,
+      fontStyle: face,
+      sizePx: 104,
+      sungColor: '#445566',
+      unsungColor: '#778899',
+    })
+    const accepted = structuredClone(project)
+    const onApply = vi.fn()
+    let alias = ''
+    vi.stubGlobal(
+      'FontFace',
+      class {
+        constructor(public family: string) {
+          alias = family
+        }
+        async load() {
+          return this
+        }
+      },
+    )
+
+    await renderEditor({ project, draft, onApply })
+    await act(async () => {
+      findButton(container, 'Stage frame').click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    const line = container.querySelector<HTMLElement>('.active-lines .stage-line')!
+    expect(line.textContent).toBe('Accepted timed words')
+    expect(line.style.fontFamily.split(',')[0]).toBe(alias)
+    expect(line.dataset.stageFontSize).toBe('104')
+    expect(line.style.getPropertyValue('--track-color')).toBe('#445566')
+    expect(line.style.getPropertyValue('--unsung-color')).toBe('#778899')
+    expect(container.querySelector('.karaoke-stage__footer')?.textContent).toBe(
+      'Accepted artist · Accepted title',
+    )
+    expect(project).toEqual(accepted)
+    expect(onApply).not.toHaveBeenCalled()
+  })
+
   it('edits only the selected Title card role through role-specific native controls', async () => {
     const project = createProject({ id: 'title-card-roles' })
     const snapshot = structuredClone(project)

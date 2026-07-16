@@ -6,6 +6,7 @@ const {
   validateFreshOutputPath,
   writeFreshLauncherFailure,
 } = require('./smoke-artifacts.cjs')
+const { parseBoundedPngContainer } = require('./png-validation.cjs')
 const { focusSmokeWindow } = require('./smoke-window-focus.cjs')
 const {
   BASELINE_SCENARIO,
@@ -29,7 +30,66 @@ const OPTIONS = Object.freeze({
 const PACKAGED_APP_URL = 'studio-app://app/index.html'
 const PUBLIC_FAILURE = Object.freeze({ code: 'VISUAL_SMOKE_FAILED', ok: false })
 const FATAL_DIAGNOSTIC = '[oks-visual-smoke:fatal]\n'
+const CAPTURE_STABILITY_CANDIDATE_LIMIT = 5
+const CAPTURE_STABILITY_SETTLE_MS = 50
 const STYLE_SESSION_READINESS_TIMEOUT_MS = 10_000
+const STYLE_KEY_SEQUENCE = Object.freeze([
+  'Tab',
+  'Tab',
+  'Shift+Tab',
+  'Tab',
+  'Left',
+  'Shift+Tab',
+  'Tab',
+  'Up',
+  'Shift+Tab',
+  'Tab',
+  'Right',
+  'Right',
+  'Up',
+  'Down',
+  'Tab',
+  'Tab',
+  'Escape',
+  'Tab',
+  'Tab',
+  'Tab',
+  'Tab',
+  'Tab',
+  'Tab',
+  'Tab',
+  'Tab',
+  'Tab',
+  'Enter',
+])
+const STYLE_KEY_FOCUS = Object.freeze([
+  'master',
+  'role:brand',
+  'master',
+  'role:brand',
+  'role:footer',
+  'master',
+  'role:footer',
+  'role:clock',
+  'master',
+  'role:clock',
+  'role:footer',
+  'role:brand',
+  'role:footer',
+  'role:brand',
+  'visibility',
+  'typeface',
+  'face:Regular',
+  'face:Italic',
+  'face:Semi Bold',
+  'face:Bold',
+  'face:Extra Bold',
+  'size',
+  'color',
+  'cancel',
+  'apply',
+])
+const STYLE_KEY_CHANGES = Object.freeze(['footer', 'clock', 'footer', 'brand', 'footer', 'brand'])
 
 const STABLE_RENDERER_SCRIPT = `(() => {
   const frame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()))
@@ -129,6 +189,65 @@ const STYLE_TARGET_SCRIPT = `(() => new Promise((resolve) => {
   })
   resizeObserver.observe(document.documentElement)
   check()
+}))()`
+
+const STYLE_KEY_RECORDER_SCRIPT = `(() => {
+  const storage = '__oksStyleKeyboardRecorder'
+  if (globalThis[storage]) return false
+  const focus = []
+  const changes = []
+  const describe = (target) => {
+    if (!(target instanceof HTMLElement)) return null
+    if (target.matches('[aria-label="Show Stage frame in output"]')) return 'master'
+    if (target.matches('input[type="radio"]')) return 'role:' + target.value
+    const label = target.getAttribute('aria-label')
+    if (label === 'Show Brand in output') return 'visibility'
+    if (label === 'Brand typeface') return 'typeface'
+    if (label?.startsWith('Brand face ')) return 'face:' + label.slice(11)
+    if (label === 'Brand font size') return 'size'
+    if (label === 'Brand color') return 'color'
+    return target.dataset.styleAction ?? null
+  }
+  const onFocus = (event) => {
+    const value = describe(event.target)
+    if (value) focus.push(value)
+  }
+  const onChange = (event) => {
+    const target = event.target
+    const roles = [...document.querySelectorAll(
+      '[aria-label="Stage frame role"] input[type="radio"]',
+    )]
+    if (target instanceof HTMLInputElement && roles.includes(target)) changes.push({
+      active: document.activeElement === target,
+      checked: target.checked,
+      checkedCount: roles.filter((role) => role.checked).length,
+      role: target.value,
+    })
+  }
+  document.addEventListener('focusin', onFocus, true)
+  document.addEventListener('change', onChange, true)
+  globalThis[storage] = { changes, focus, dispose() {
+    document.removeEventListener('focusin', onFocus, true)
+    document.removeEventListener('change', onChange, true)
+  } }
+  return true
+})()`
+
+const STYLE_KEY_RESULT_SCRIPT = `(() => new Promise((resolve) => {
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const storage = '__oksStyleKeyboardRecorder'
+    const recorder = globalThis[storage]
+    const undo = document.querySelector('[aria-label="Undo"]')
+    const redo = document.querySelector('[aria-label="Redo"]')
+    const result = recorder ? { changes: [...recorder.changes], focus: [...recorder.focus],
+      closed: !document.querySelector('.style-workspace[role="dialog"]'),
+      clean: !document.querySelector('[title="Unsaved changes"]'),
+      redoDisabled: redo instanceof HTMLButtonElement && redo.disabled,
+      undoDisabled: undo instanceof HTMLButtonElement && undo.disabled } : null
+    recorder?.dispose()
+    delete globalThis[storage]
+    resolve(result)
+  }))
 }))()`
 
 function projectLyricsReadinessScript(viewport, contract = { kind: 'project-lyrics' }) {
@@ -668,6 +787,10 @@ function settleTeardown() {
   return new Promise((resolve) => setImmediate(resolve))
 }
 
+function settleCapture() {
+  return new Promise((resolve) => setTimeout(resolve, CAPTURE_STABILITY_SETTLE_MS))
+}
+
 function parseOption(args, prefix) {
   const matches = args.filter((argument) => argument.startsWith(prefix))
   if (matches.length !== 1) throw smokeError('VISUAL_SMOKE_FLAG_INVALID')
@@ -814,7 +937,7 @@ async function prepareCaptureWindow(window, app, options) {
   return displayScale
 }
 
-async function captureViewport(window, viewport) {
+async function capturePngCandidate(window, viewport) {
   let image
   try {
     image = await window.webContents.capturePage()
@@ -828,18 +951,47 @@ async function captureViewport(window, viewport) {
     image.getSize().height !== viewport.height
   )
     throw smokeError('VISUAL_SMOKE_CAPTURE_INVALID')
+  let bytes
+  let parsed
   try {
-    return image.toPNG()
+    bytes = image.toPNG()
+    if (!Buffer.isBuffer(bytes)) throw smokeError('VISUAL_SMOKE_CAPTURE_INVALID')
+    parsed = parseBoundedPngContainer(bytes)
   } catch {
     throw smokeError('VISUAL_SMOKE_CAPTURE_INVALID')
   }
+  if (parsed.animated || parsed.width !== viewport.width || parsed.height !== viewport.height) {
+    throw smokeError('VISUAL_SMOKE_CAPTURE_INVALID')
+  }
+  return Buffer.from(bytes)
+}
+
+async function captureViewport(window, viewport, settle = settleCapture) {
+  let previous
+  for (
+    let candidateIndex = 0;
+    candidateIndex < CAPTURE_STABILITY_CANDIDATE_LIMIT;
+    candidateIndex += 1
+  ) {
+    const candidate = await capturePngCandidate(window, viewport)
+    if (previous && previous.equals(candidate)) return candidate
+    previous = candidate
+    if (candidateIndex < CAPTURE_STABILITY_CANDIDATE_LIMIT - 1) {
+      try {
+        await settle()
+      } catch {
+        throw smokeError('VISUAL_SMOKE_CAPTURE_INVALID')
+      }
+    }
+  }
+  throw smokeError('VISUAL_SMOKE_CAPTURE_INVALID')
 }
 
 async function captureBaseline(window, app, options) {
   await prepareCaptureWindow(window, app, options)
   const rendererState = await window.webContents.executeJavaScript(STABLE_RENDERER_SCRIPT, false)
   if (!validRendererState(rendererState)) throw smokeError('VISUAL_SMOKE_RENDERER_INVALID')
-  const png = await captureViewport(window, VIEWPORT)
+  const png = await captureViewport(window, VIEWPORT, options.captureSettle)
   return options.createArtifacts(png).artifacts
 }
 
@@ -934,6 +1086,28 @@ function validStageFrameState(value, viewport, contract) {
   )
 }
 
+function validStyleKeyboardState(value) {
+  return Boolean(
+    value &&
+    value.closed === true &&
+    value.clean === true &&
+    value.undoDisabled === true &&
+    value.redoDisabled === true &&
+    JSON.stringify(value.focus) === JSON.stringify(STYLE_KEY_FOCUS) &&
+    Array.isArray(value.changes) &&
+    value.changes.length === STYLE_KEY_CHANGES.length &&
+    value.changes.every((change, index) =>
+      Boolean(
+        change &&
+        change.active === true &&
+        change.checked === true &&
+        change.checkedCount === 1 &&
+        change.role === STYLE_KEY_CHANGES[index],
+      ),
+    ),
+  )
+}
+
 function executeBeforeDeadline(operation, timeoutMs) {
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
     throw smokeError('VISUAL_SMOKE_READINESS_INVALID')
@@ -990,8 +1164,30 @@ function sendTrustedStyleActivation(contents, target, displayScale) {
   }
 }
 
+function sendTrustedStyleKey(contents, accelerator) {
+  if (
+    !contents ||
+    typeof contents.sendInputEvent !== 'function' ||
+    !STYLE_KEY_SEQUENCE.includes(accelerator)
+  )
+    throw smokeError('VISUAL_SMOKE_ACTIVATION_INVALID')
+  const shifted = accelerator.startsWith('Shift+')
+  const keyCode = shifted ? accelerator.slice(6) : accelerator
+  const eventTypes = accelerator === 'Enter' ? ['keyDown', 'char', 'keyUp'] : ['keyDown', 'keyUp']
+  try {
+    for (const type of eventTypes) {
+      const event = { keyCode, type }
+      if (shifted) event.modifiers = ['shift']
+      contents.sendInputEvent(event)
+    }
+  } catch {
+    throw smokeError('VISUAL_SMOKE_ACTIVATION_INVALID')
+  }
+}
+
 async function captureStyleSession(window, app, options) {
   const displayScale = await prepareCaptureWindow(window, app, options)
+  const capture = (viewport) => captureViewport(window, viewport, options.captureSettle)
   const target = await executeBeforeDeadline(
     () => window.webContents.executeJavaScript(STYLE_TARGET_SCRIPT, false),
     options.readinessTimeoutMs,
@@ -1009,7 +1205,7 @@ async function captureStyleSession(window, app, options) {
     if (!validProjectLyricsState(state, viewport)) {
       throw smokeError('VISUAL_SMOKE_READINESS_INVALID')
     }
-    pngs.push(await captureViewport(window, viewport))
+    pngs.push(await capture(viewport))
   }
   const viewport = STYLE_SESSION_VIEWPORTS[2]
   setExactViewport(window, viewport, displayScale)
@@ -1028,6 +1224,30 @@ async function captureStyleSession(window, app, options) {
       throw smokeError('VISUAL_SMOKE_ACTIVATION_INVALID')
     sendTrustedStyleActivation(window.webContents, actionTarget, displayScale)
   }
+  const stageFrameState = async (contract) => {
+    const state = await executeBeforeDeadline(
+      () =>
+        window.webContents.executeJavaScript(
+          projectLyricsReadinessScript(viewport, { kind: 'stage-frame', ...contract }),
+          false,
+        ),
+      options.readinessTimeoutMs,
+    )
+    if (!validStageFrameState(state, viewport, contract))
+      throw smokeError('VISUAL_SMOKE_READINESS_INVALID')
+    return state
+  }
+  await activate('stage')
+  await stageFrameState({ enabled: true, role: 'brand', roleVisible: true })
+  const armed = await window.webContents.executeJavaScript(STYLE_KEY_RECORDER_SCRIPT, false)
+  if (armed !== true) throw smokeError('VISUAL_SMOKE_ACTIVATION_INVALID')
+  STYLE_KEY_SEQUENCE.forEach((key) => sendTrustedStyleKey(window.webContents, key))
+  const keyboardState = await executeBeforeDeadline(
+    () => window.webContents.executeJavaScript(STYLE_KEY_RESULT_SCRIPT, false),
+    options.readinessTimeoutMs,
+  )
+  if (!validStyleKeyboardState(keyboardState)) throw smokeError('VISUAL_SMOKE_READINESS_INVALID')
+  await activate('reopen')
   const backgroundState = async (mode, colors = null, applied = false) => {
     const state = await executeBeforeDeadline(
       () =>
@@ -1049,16 +1269,16 @@ async function captureStyleSession(window, app, options) {
   }
   await activate('background')
   await backgroundState('gradient')
-  pngs.push(await captureViewport(window, viewport))
+  pngs.push(await capture(viewport))
   await activate('solid')
   const solid = await backgroundState('solid')
-  pngs.push(await captureViewport(window, viewport))
+  pngs.push(await capture(viewport))
   const colors = Object.fromEntries(
     ['gradientEndColor', 'gradientStartColor', 'solidColor'].map((key) => [key, solid[key]]),
   )
   await activate('apply')
   await backgroundState('solid', colors, true)
-  pngs.push(await captureViewport(window, viewport))
+  pngs.push(await capture(viewport))
   const titleCardState = async (contract) => {
     const state = await executeBeforeDeadline(
       () =>
@@ -1079,35 +1299,21 @@ async function captureStyleSession(window, app, options) {
   await activate('reopen')
   await activate('title')
   await titleCardState({ role: 'eyebrow', eyebrowHidden: false, artistHidden: false })
-  pngs.push(await captureViewport(window, viewport))
+  pngs.push(await capture(viewport))
   await activate('eyebrow-visibility')
   await titleCardState({ role: 'eyebrow', eyebrowHidden: true, artistHidden: false })
-  pngs.push(await captureViewport(window, viewport))
+  pngs.push(await capture(viewport))
   await activate('artist')
   await activate('artist-visibility')
   await titleCardState({ role: 'artist', eyebrowHidden: true, artistHidden: true })
-  pngs.push(await captureViewport(window, viewport))
+  pngs.push(await capture(viewport))
   await activate('apply-title')
   await titleCardState({ applied: true, role: 'artist', eyebrowHidden: true, artistHidden: true })
-  pngs.push(await captureViewport(window, viewport))
-  const stageFrameState = async (contract) => {
-    const state = await executeBeforeDeadline(
-      () =>
-        window.webContents.executeJavaScript(
-          projectLyricsReadinessScript(viewport, { kind: 'stage-frame', ...contract }),
-          false,
-        ),
-      options.readinessTimeoutMs,
-    )
-    if (!validStageFrameState(state, viewport, contract)) {
-      throw smokeError('VISUAL_SMOKE_READINESS_INVALID')
-    }
-    return state
-  }
+  pngs.push(await capture(viewport))
   await activate('reopen')
   await activate('stage')
   const baselineFrame = await stageFrameState({ enabled: true, role: 'brand', roleVisible: true })
-  pngs.push(await captureViewport(window, viewport))
+  pngs.push(await capture(viewport))
   const preservedFrame = {
     brandStyle: baselineFrame.brandStyle,
     clockStyle: baselineFrame.clockStyle,
@@ -1117,7 +1323,7 @@ async function captureStyleSession(window, app, options) {
   }
   await activate('stage-off')
   await stageFrameState({ ...preservedFrame, enabled: false, role: 'brand', roleVisible: true })
-  pngs.push(await captureViewport(window, viewport))
+  pngs.push(await capture(viewport))
   await activate('stage-on')
   await activate('clock')
   await activate('clock-face')
@@ -1129,12 +1335,12 @@ async function captureStyleSession(window, app, options) {
     role: 'clock',
     roleVisible: true,
   })
-  pngs.push(await captureViewport(window, viewport))
+  pngs.push(await capture(viewport))
   const changedFrame = { ...preservedFrame, clockStyle: clockFrame.clockStyle, clockWeight: '700' }
   await activate('footer')
   await activate('footer-visibility')
   await stageFrameState({ ...changedFrame, enabled: true, role: 'footer', roleVisible: false })
-  pngs.push(await captureViewport(window, viewport))
+  pngs.push(await capture(viewport))
   await activate('apply-stage')
   await stageFrameState({
     ...changedFrame,
@@ -1143,7 +1349,7 @@ async function captureStyleSession(window, app, options) {
     role: 'footer',
     roleVisible: false,
   })
-  pngs.push(await captureViewport(window, viewport))
+  pngs.push(await capture(viewport))
   return options.createScenarioArtifacts(STYLE_SESSION_SCENARIO, pngs).artifacts
 }
 
@@ -1170,6 +1376,7 @@ async function writeFailure(output, options) {
 
 async function runVisualSmoke({ app, config, fatalObserver, window }, dependencies = {}) {
   const options = {
+    captureSettle: dependencies.captureSettle || settleCapture,
     createArtifacts: dependencies.createArtifacts || createResultArtifacts,
     createScenarioArtifacts: dependencies.createScenarioArtifacts || createScenarioResultArtifacts,
     focus: dependencies.focus || focusSmokeWindow,
