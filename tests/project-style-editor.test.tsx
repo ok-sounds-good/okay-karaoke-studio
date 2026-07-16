@@ -155,6 +155,90 @@ describe('ProjectStyleEditor', () => {
     expect(onCancel).toHaveBeenCalledOnce()
   })
 
+  it('uses automatic accessible destination tabs with wrapping Arrow and Home/End navigation', async () => {
+    await renderEditor()
+    const tabs = [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')]
+    const [lyricsTab, backgroundTab] = tabs
+    const controlledPanel = (tab: HTMLButtonElement) =>
+      container.querySelector<HTMLElement>(`#${CSS.escape(tab.getAttribute('aria-controls')!)}`)!
+
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['Project lyrics', 'Background'])
+    expect(controlledPanel(backgroundTab).hidden).toBe(true)
+
+    lyricsTab.focus()
+    await act(async () => keyDown(lyricsTab, { code: 'ArrowRight', key: 'ArrowRight' }))
+    expect(document.activeElement).toBe(backgroundTab)
+
+    await act(async () => keyDown(backgroundTab, { code: 'ArrowRight', key: 'ArrowRight' }))
+    expect(document.activeElement).toBe(lyricsTab)
+    await act(async () => keyDown(lyricsTab, { code: 'End', key: 'End' }))
+    expect(document.activeElement).toBe(backgroundTab)
+    await act(async () => keyDown(backgroundTab, { code: 'Home', key: 'Home' }))
+    expect(document.activeElement).toBe(lyricsTab)
+    const wrapped = keyDown(lyricsTab, { code: 'ArrowLeft', key: 'ArrowLeft' })
+    expect(wrapped.defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(backgroundTab)
+  })
+
+  it('patches only the selected background field and preserves latent colors and image path', async () => {
+    const project = createProject({ id: 'background-draft' })
+    Object.assign(project.stageStyle.background, {
+      mode: 'gradient',
+      solidColor: '#102030',
+      gradientStartColor: '#405060',
+      gradientEndColor: '#708090',
+      imagePath: '/linked/latent-background.png',
+    })
+    const snapshot = structuredClone(project)
+    const onDraftChange = vi.fn<ProjectStyleSession['change']>()
+    let draft = project.stageStyle
+    await renderEditor({ project, draft, onDraftChange })
+    await act(async () => findButton(container, 'Background').click())
+
+    const radios = [...container.querySelectorAll<HTMLInputElement>('input[type="radio"]')]
+    expect(radios.map((radio) => radio.value)).toEqual(['solid', 'gradient', 'image'])
+    expect(radios.find((radio) => radio.value === 'gradient')?.checked).toBe(true)
+    expect(radios.find((radio) => radio.value === 'image')?.disabled).toBe(true)
+    const backgroundPanel = container.querySelector<HTMLElement>('[role="tabpanel"]:not([hidden])')!
+    expect(
+      [...backgroundPanel.querySelectorAll<HTMLInputElement>('input[type="color"]')].map((input) =>
+        input.getAttribute('aria-label'),
+      ),
+    ).toEqual(['Background gradient start color', 'Background gradient end color'])
+
+    const start = container.querySelector<HTMLInputElement>(
+      '[aria-label="Background gradient start color"]',
+    )!
+    await act(async () => replaceInput(start, '#112233'))
+    const beforeStart = draft
+    draft = applyChange(onDraftChange.mock.calls.at(-1)?.[0], draft)
+    expect(draft.background).toEqual({
+      ...beforeStart.background,
+      gradientStartColor: '#112233',
+    })
+
+    await renderEditor({ project, draft, onDraftChange })
+    await act(async () =>
+      container.querySelector<HTMLInputElement>('input[type="radio"][value="solid"]')!.click(),
+    )
+    draft = applyChange(onDraftChange.mock.calls.at(-1)?.[0], draft)
+
+    await renderEditor({ project, draft, onDraftChange })
+    const solid = container.querySelector<HTMLInputElement>(
+      '[aria-label="Background solid color"]',
+    )!
+    expect(container.querySelector('[aria-label="Background gradient start color"]')).toBeNull()
+    await act(async () => replaceInput(solid, '#abcdef'))
+    draft = applyChange(onDraftChange.mock.calls.at(-1)?.[0], draft)
+    expect(draft.background).toEqual({
+      ...beforeStart.background,
+      mode: 'solid',
+      solidColor: '#abcdef',
+      gradientStartColor: '#112233',
+    })
+    expect(project).toEqual(snapshot)
+  })
+
   it('replaces only the typeface through an immutable functional update', async () => {
     const onDraftChange = vi.fn<ProjectStyleSession['change']>()
     const { draft } = await renderEditor({ onDraftChange })
@@ -254,14 +338,15 @@ describe('ProjectStyleEditor', () => {
       stageFrame: { ...project.stageStyle.stageFrame, lineColor: '#456789' },
     }
     await renderEditor({ project, draft, onDraftChange })
+    const lyricsPanel = container.querySelector<HTMLElement>('[role="tabpanel"]:not([hidden])')!
 
     expect(
-      [...container.querySelectorAll('.style-color-field > span')].map(
+      [...lyricsPanel.querySelectorAll('.style-color-field > span')].map(
         (label) => label.textContent,
       ),
     ).toEqual(['Sung', 'Unsung'])
     expect(
-      [...container.querySelectorAll('.style-color-field output')].map(
+      [...lyricsPanel.querySelectorAll('.style-color-field output')].map(
         (output) => output.textContent,
       ),
     ).toEqual([draft.lyrics.sungColor.toUpperCase(), draft.lyrics.unsungColor.toUpperCase()])
@@ -293,9 +378,11 @@ describe('ProjectStyleEditor', () => {
       container.querySelector<HTMLElement>('.stage-line')?.style.getPropertyValue('--unsung-color'),
     ).toBe('#654321')
     expect(
-      [...container.querySelectorAll('.style-color-field output')].map(
-        (output) => output.textContent,
-      ),
+      [
+        ...container
+          .querySelector<HTMLElement>('[role="tabpanel"]:not([hidden])')!
+          .querySelectorAll('.style-color-field output'),
+      ].map((output) => output.textContent),
     ).toEqual(['#123456', '#654321'])
     expect(project).toEqual(snapshot)
   })
@@ -345,6 +432,18 @@ describe('ProjectStyleEditor', () => {
     const ordinaryEvent = keyDown(dialog, { code: 'Space', key: ' ' })
     expect(onTogglePlayback).toHaveBeenCalledOnce()
     expect(ordinaryEvent.defaultPrevented).toBe(false)
+
+    await act(async () => findButton(container, 'Background').click())
+    const radio = container.querySelector<HTMLInputElement>('input[type="radio"][value="solid"]')!
+    const radioShift = keyDown(radio, { code: 'Space', key: ' ', shiftKey: true })
+    expect(onTogglePlayback).toHaveBeenCalledTimes(2)
+    expect(radioShift.defaultPrevented).toBe(true)
+    const bubbledRadioSpace = vi.fn()
+    window.addEventListener('keydown', bubbledRadioSpace)
+    const radioSpace = keyDown(radio, { code: 'Space', key: ' ' })
+    window.removeEventListener('keydown', bubbledRadioSpace)
+    expect(radioSpace.defaultPrevented).toBe(false)
+    expect(bubbledRadioSpace).not.toHaveBeenCalled()
   })
 
   it('wires retry, Cancel, and Apply & close controls', async () => {

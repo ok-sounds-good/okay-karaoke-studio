@@ -131,9 +131,10 @@ const STYLE_TARGET_SCRIPT = `(() => new Promise((resolve) => {
   check()
 }))()`
 
-function projectLyricsReadinessScript(viewport) {
+function projectLyricsReadinessScript(viewport, contract = { kind: 'project-lyrics' }) {
   return `(() => new Promise((resolve) => {
     const expected = ${JSON.stringify(viewport)}
+    const contract = ${JSON.stringify(contract)}
     const frame = () => new Promise((done) => requestAnimationFrame(() => done()))
     let checking = false
     let finished = false
@@ -142,7 +143,79 @@ function projectLyricsReadinessScript(viewport) {
     const mutationObserver = new MutationObserver(() => schedule())
     const fontSet = document.fonts
 
+    const sampleBackground = () => {
+      const applied = contract.applied === true
+      const workspace = document.querySelector('.style-workspace[role="dialog"]')
+      const panel = document.querySelector('[role="tabpanel"][aria-labelledby$="-background-tab"]')
+      const tab = document.querySelector('[role="tab"][data-style-destination="background"]')
+      const preview = document.querySelector(
+        applied ? '[aria-label="Karaoke preview"]' : '[aria-label="Background design preview"]',
+      )
+      const stage = preview?.querySelector('.karaoke-stage')
+      const mode = stage?.getAttribute('data-background-mode')
+      const colors = {
+        gradientEndColor: stage?.getAttribute('data-background-gradient-end-color'),
+        gradientStartColor: stage?.getAttribute('data-background-gradient-start-color'),
+        solidColor: stage?.getAttribute('data-background-solid-color'),
+      }
+      if (
+        !(preview instanceof HTMLElement) || !(stage instanceof HTMLElement) ||
+        mode !== contract.mode || Object.values(colors).some((color) => !/^#[0-9a-f]{6}$/iu.test(color)) ||
+        (contract.colors && Object.entries(contract.colors).some(([key, value]) => colors[key] !== value)) ||
+        document.readyState !== 'complete' || fontSet?.status !== 'loaded' ||
+        document.documentElement.clientWidth !== expected.width ||
+        document.documentElement.clientHeight !== expected.height ||
+        document.documentElement.scrollWidth > expected.width || document.body.scrollWidth > expected.width ||
+        window.location.href !== '${PACKAGED_APP_URL}' || document.querySelector('.stage-resource-warning')
+      ) return null
+      if (applied) {
+        const trigger = document.querySelector('button.style-button[aria-label="Edit project Style"]')
+        if (workspace || !(trigger instanceof HTMLButtonElement) || stage.classList.contains('is-designing')) return null
+      } else {
+        const radios = panel?.querySelectorAll('input[type="radio"]') ?? []
+        const colorLabels = [...(panel?.querySelectorAll('input[type="color"]') ?? [])]
+          .map((input) => input.getAttribute('aria-label'))
+        const expectedLabels = mode === 'solid'
+          ? ['Background solid color']
+          : ['Background gradient start color', 'Background gradient end color']
+        if (
+          !(workspace instanceof HTMLElement) || !(panel instanceof HTMLElement) || panel.hidden ||
+          !(tab instanceof HTMLButtonElement) || tab.getAttribute('aria-selected') !== 'true' ||
+          radios.length !== 3 || colorLabels.join('|') !== expectedLabels.join('|')
+        ) return null
+      }
+      const hexRgb = (hex) => {
+        const value = Number.parseInt(hex.slice(1), 16)
+        return 'rgb(' + ((value >> 16) & 255) + ', ' + ((value >> 8) & 255) + ', ' +
+          (value & 255) + ')'
+      }
+      const style = getComputedStyle(stage)
+      const css = mode === 'solid' ? style.backgroundColor : style.backgroundImage
+      const expectedCss = mode === 'solid'
+        ? hexRgb(colors.solidColor)
+        : 'linear-gradient(145deg, ' + hexRgb(colors.gradientStartColor) + ', ' +
+          hexRgb(colors.gradientEndColor) + ')'
+      const bounds = stage.getBoundingClientRect()
+      const actions = applied ? [] : [
+        panel.querySelector('fieldset'),
+        workspace.querySelector('[data-style-action="cancel"]'),
+        workspace.querySelector('[data-style-action="apply"]'),
+      ]
+      if (
+        css.replace(/\s/gu, '') !== expectedCss.replace(/\s/gu, '') ||
+        bounds.width <= 0 || bounds.height <= 0 || Math.abs(bounds.width / bounds.height - 16 / 9) > .01 ||
+        actions.some((element) => {
+          const box = element?.getBoundingClientRect()
+          return !box || box.width <= 0 || box.height <= 0 || box.left < 0 || box.top < 0 ||
+            box.right > expected.width || box.bottom > expected.height
+        })
+      ) return null
+      return { applied, ...colors, css, height: expected.height, mode, resourcesReady: true,
+        stageHeight: bounds.height, stageWidth: bounds.width, width: expected.width }
+    }
+
     const sample = () => {
+      if (contract.kind === 'background') return sampleBackground()
       const workspace = document.querySelector('.style-workspace[role="dialog"]')
       const typeface = document.querySelector('[role="combobox"][aria-label="Project lyric typeface"]')
       const preview = document.querySelector('[aria-label="Project lyrics design preview"]')
@@ -251,6 +324,33 @@ function projectLyricsReadinessScript(viewport) {
     fontSet?.addEventListener?.('loadingerror', schedule)
     schedule()
   }))()`
+}
+
+function styleSessionActionScript(action) {
+  return `(() => {
+    const action = ${JSON.stringify(action)}
+    const workspace = document.querySelector('.style-workspace[role="dialog"]')
+    const projectTab = document.querySelector('[role="tab"][data-style-destination="project-lyrics"]')
+    const backgroundTab = document.querySelector('[role="tab"][data-style-destination="background"]')
+    const gradient = document.querySelector('input[type="radio"][value="gradient"]')
+    const solid = document.querySelector('input[type="radio"][value="solid"]')
+    const targets = { background: backgroundTab, solid, apply: workspace?.querySelector('[data-style-action="apply"]') }
+    const target = targets[action]
+    const semantic = action === 'background'
+      ? projectTab?.getAttribute('aria-selected') === 'true' && backgroundTab?.getAttribute('aria-selected') === 'false'
+      : action === 'solid'
+        ? backgroundTab?.getAttribute('aria-selected') === 'true' && gradient?.checked && !solid?.checked
+        : action === 'apply' && backgroundTab?.getAttribute('aria-selected') === 'true' && solid?.checked
+    if (!(workspace instanceof HTMLElement) || !(target instanceof HTMLElement) || !semantic || target.disabled) return null
+    const bounds = target.getBoundingClientRect()
+    const style = getComputedStyle(target)
+    if (bounds.width <= 0 || bounds.height <= 0 || style.display === 'none' ||
+      style.pointerEvents === 'none' || style.visibility !== 'visible') return null
+    return { action, boundsHeight: bounds.height, boundsWidth: bounds.width,
+      height: document.documentElement.clientHeight, href: window.location.href,
+      readyState: document.readyState, width: document.documentElement.clientWidth,
+      x: Math.round(bounds.left + bounds.width / 2), y: Math.round(bounds.top + bounds.height / 2) }
+  })()`
 }
 
 function smokeError(code = 'VISUAL_SMOKE_FAILED') {
@@ -570,6 +670,31 @@ function validStyleTarget(value) {
   )
 }
 
+function validStyleActionTarget(value, action) {
+  return validStyleTarget(value) && value.action === action
+}
+
+function validBackgroundState(value, viewport, mode, colors = null, applied = false) {
+  const colorKeys = ['gradientEndColor', 'gradientStartColor', 'solidColor']
+  return Boolean(
+    value &&
+    typeof value === 'object' &&
+    value.applied === applied &&
+    value.mode === mode &&
+    value.height === viewport.height &&
+    value.width === viewport.width &&
+    value.resourcesReady === true &&
+    typeof value.css === 'string' &&
+    value.css.length > 0 &&
+    Number.isFinite(value.stageHeight) &&
+    value.stageHeight > 0 &&
+    Number.isFinite(value.stageWidth) &&
+    value.stageWidth > 0 &&
+    colorKeys.every((key) => /^#[0-9a-f]{6}$/iu.test(value[key])) &&
+    (!colors || colorKeys.every((key) => value[key] === colors[key])),
+  )
+}
+
 function validProjectLyricsState(value, viewport) {
   return Boolean(
     value &&
@@ -659,7 +784,7 @@ async function captureStyleSession(window, app, options) {
   sendTrustedStyleActivation(window.webContents, target, displayScale)
 
   const pngs = []
-  for (const viewport of STYLE_SESSION_VIEWPORTS) {
+  for (const viewport of STYLE_SESSION_VIEWPORTS.slice(0, 2)) {
     setExactViewport(window, viewport, displayScale)
     const state = await executeBeforeDeadline(
       () => window.webContents.executeJavaScript(projectLyricsReadinessScript(viewport), false),
@@ -670,6 +795,54 @@ async function captureStyleSession(window, app, options) {
     }
     pngs.push(await captureViewport(window, viewport))
   }
+  const viewport = STYLE_SESSION_VIEWPORTS[2]
+  setExactViewport(window, viewport, displayScale)
+  const resized = await executeBeforeDeadline(
+    () => window.webContents.executeJavaScript(projectLyricsReadinessScript(viewport), false),
+    options.readinessTimeoutMs,
+  )
+  if (!validProjectLyricsState(resized, viewport))
+    throw smokeError('VISUAL_SMOKE_READINESS_INVALID')
+  const activate = async (action) => {
+    const actionTarget = await window.webContents.executeJavaScript(
+      styleSessionActionScript(action),
+      false,
+    )
+    if (!validStyleActionTarget(actionTarget, action))
+      throw smokeError('VISUAL_SMOKE_ACTIVATION_INVALID')
+    sendTrustedStyleActivation(window.webContents, actionTarget, displayScale)
+  }
+  const backgroundState = async (mode, colors = null, applied = false) => {
+    const state = await executeBeforeDeadline(
+      () =>
+        window.webContents.executeJavaScript(
+          projectLyricsReadinessScript(viewport, {
+            applied,
+            colors,
+            kind: 'background',
+            mode,
+          }),
+          false,
+        ),
+      options.readinessTimeoutMs,
+    )
+    if (!validBackgroundState(state, viewport, mode, colors, applied)) {
+      throw smokeError('VISUAL_SMOKE_READINESS_INVALID')
+    }
+    return state
+  }
+  await activate('background')
+  await backgroundState('gradient')
+  pngs.push(await captureViewport(window, viewport))
+  await activate('solid')
+  const solid = await backgroundState('solid')
+  pngs.push(await captureViewport(window, viewport))
+  const colors = Object.fromEntries(
+    ['gradientEndColor', 'gradientStartColor', 'solidColor'].map((key) => [key, solid[key]]),
+  )
+  await activate('apply')
+  await backgroundState('solid', colors, true)
+  pngs.push(await captureViewport(window, viewport))
   return options.createScenarioArtifacts(STYLE_SESSION_SCENARIO, pngs).artifacts
 }
 

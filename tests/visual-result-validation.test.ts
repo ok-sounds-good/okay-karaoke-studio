@@ -30,7 +30,12 @@ async function freshResult(scenario = results.BASELINE_SCENARIO) {
   const created =
     scenario === results.BASELINE_SCENARIO
       ? results.createResultArtifacts(validPng(1280, 720))
-      : results.createScenarioResultArtifacts(scenario, [validPng(1280, 720), validPng(1440, 900)])
+      : results.createScenarioResultArtifacts(
+          scenario,
+          results.STYLE_SESSION_VIEWPORTS.map(
+            ({ width, height }: { width: number; height: number }) => validPng(width, height),
+          ),
+        )
   await publishArtifactBuffers(output, created.artifacts)
   return { output, root }
 }
@@ -90,6 +95,21 @@ describe('visual result validation', () => {
           height: 900,
           name: '02-project-lyrics-1440x900.png',
           width: 1440,
+        },
+        {
+          height: 720,
+          name: '03-background-gradient-draft-1280x720.png',
+          width: 1280,
+        },
+        {
+          height: 720,
+          name: '04-background-solid-draft-1280x720.png',
+          width: 1280,
+        },
+        {
+          height: 720,
+          name: '05-background-solid-applied-1280x720.png',
+          width: 1280,
         },
       ],
       ok: true,

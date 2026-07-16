@@ -12,6 +12,9 @@ const BASELINE_NAME = '01-baseline.png'
 const STYLE_SESSION_NAMES = Object.freeze([
   '01-project-lyrics-1280x720.png',
   '02-project-lyrics-1440x900.png',
+  '03-background-gradient-draft-1280x720.png',
+  '04-background-solid-draft-1280x720.png',
+  '05-background-solid-applied-1280x720.png',
 ])
 const RESULT_NAME = 'result.json'
 const EXPECTED_FILES = Object.freeze([BASELINE_NAME, RESULT_NAME])
@@ -19,6 +22,9 @@ const VIEWPORT = Object.freeze({ height: 720, width: 1280 })
 const STYLE_SESSION_VIEWPORTS = Object.freeze([
   VIEWPORT,
   Object.freeze({ height: 900, width: 1440 }),
+  VIEWPORT,
+  VIEWPORT,
+  VIEWPORT,
 ])
 const SCENARIO_CONTRACTS = Object.freeze({
   [BASELINE_SCENARIO]: Object.freeze([Object.freeze({ ...VIEWPORT, name: BASELINE_NAME })]),

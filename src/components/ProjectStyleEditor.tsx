@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type KeyboardEvent } from 'react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
 import type { InstalledFontState } from '../hooks/useInstalledFonts'
 import type { ProjectStyleSession } from '../hooks/useProjectStyleSession'
 import type { KaraokeProject } from '../lib/model'
@@ -9,6 +9,7 @@ import {
   fontFaceKey,
   isFontSizePx,
   resolveFontFace,
+  type BackgroundMode,
   type FontTypefaceDescriptor,
   type LyricTextStyle,
   type StageStyle,
@@ -33,7 +34,42 @@ export interface ProjectStyleEditorProps {
 function isEditableTarget(target: EventTarget | null) {
   return (
     target instanceof HTMLElement &&
-    (target.isContentEditable || target.matches('input, textarea, select'))
+    (target.isContentEditable ||
+      target.matches('input:not([type="radio"]):not([type="checkbox"]), textarea, select'))
+  )
+}
+
+const STYLE_DESTINATIONS = [
+  { id: 'project-lyrics', label: 'Project lyrics' },
+  { id: 'background', label: 'Background' },
+] as const
+
+type StyleDestination = (typeof STYLE_DESTINATIONS)[number]['id']
+
+function StyleColorField({
+  label,
+  inputLabel,
+  value,
+  onChange,
+}: {
+  label: string
+  inputLabel: string
+  value: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <label className="style-color-field">
+      <span>{label}</span>
+      <div>
+        <input
+          aria-label={inputLabel}
+          type="color"
+          value={value}
+          onChange={(event) => onChange(event.currentTarget.value)}
+        />
+        <output>{value.toUpperCase()}</output>
+      </div>
+    </label>
   )
 }
 
@@ -50,7 +86,9 @@ export function ProjectStyleEditor({
 }: ProjectStyleEditorProps) {
   const titleId = useId()
   const headingRef = useRef<HTMLHeadingElement>(null)
+  const [destination, setDestination] = useState<StyleDestination>('project-lyrics')
   const lyrics = draft.lyrics
+  const background = draft.background
   const effectiveFaceKey = fontFaceKey(resolveFontFace(lyrics.typeface, lyrics.fontStyle))
   const update = (patch: Partial<LyricTextStyle>) =>
     onDraftChange((current) => ({
@@ -62,9 +100,42 @@ export function ProjectStyleEditor({
       ...current,
       lyrics: { ...current.lyrics, typeface: cloneTypeface(typeface) },
     }))
+  const updateBackground = (patch: Partial<StageStyle['background']>) =>
+    onDraftChange((current) => ({
+      ...current,
+      background: { ...current.background, ...patch },
+    }))
+  const navigateDestinations = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+    const tabs = [
+      ...(event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]') ??
+        []),
+    ]
+    const current = tabs.indexOf(event.currentTarget)
+    if (current < 0 || tabs.length !== STYLE_DESTINATIONS.length) return
+    event.preventDefault()
+    event.stopPropagation()
+    const nextIndex =
+      event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? tabs.length - 1
+          : (current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length
+    const next = tabs[nextIndex]
+    setDestination(next.dataset.styleDestination as StyleDestination)
+    next.focus()
+  }
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     const exactShiftSpace =
       event.code === 'Space' && event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey
+    const exactBareSpaceOnChoice =
+      event.code === 'Space' &&
+      !event.shiftKey &&
+      !event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      event.target instanceof HTMLInputElement &&
+      (event.target.type === 'radio' || event.target.type === 'checkbox')
     if (exactShiftSpace) {
       if (event.repeat || isEditableTarget(event.target)) return
       event.preventDefault()
@@ -72,6 +143,7 @@ export function ProjectStyleEditor({
       onTogglePlayback()
       return
     }
+    if (exactBareSpaceOnChoice) event.stopPropagation()
     if (event.key === 'Escape' && !event.defaultPrevented) {
       event.preventDefault()
       event.stopPropagation()
@@ -91,105 +163,180 @@ export function ProjectStyleEditor({
       <section className="style-editor panel">
         <header className="panel-header panel-title">
           <div>
-            <span className="eyebrow">Project lyrics</span>
+            <span className="eyebrow">
+              {destination === 'project-lyrics' ? 'Project lyrics' : 'Background'}
+            </span>
             <h2 ref={headingRef} id={titleId} tabIndex={-1}>
               Style
             </h2>
           </div>
         </header>
 
-        <div className="style-editor__body">
-          <section className="style-control-group" aria-labelledby={`${titleId}-typeface`}>
-            <h3 id={`${titleId}-typeface`}>Typeface</h3>
-            <TypefaceCombobox
-              {...fonts}
-              value={lyrics.typeface}
-              selectedFace={lyrics.fontStyle}
-              onChange={chooseTypeface}
-              onRetry={onRetryFonts}
-            />
-          </section>
+        <div className="style-destination-tabs" role="tablist" aria-label="Style destinations">
+          {STYLE_DESTINATIONS.map(({ id, label }) => (
+            <button
+              key={id}
+              id={`${titleId}-${id}-tab`}
+              type="button"
+              role="tab"
+              aria-controls={`${titleId}-${id}-panel`}
+              aria-selected={destination === id}
+              data-style-destination={id}
+              tabIndex={destination === id ? 0 : -1}
+              onClick={() => setDestination(id)}
+              onKeyDown={navigateDestinations}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
 
-          <section className="style-control-group" aria-labelledby={`${titleId}-face`}>
-            <h3 id={`${titleId}-face`}>Available faces</h3>
-            <div className="font-face-list">
-              {lyrics.typeface.faces.map((face) => (
-                <button
-                  key={fontFaceKey(face)}
-                  type="button"
-                  className="font-face-button"
-                  aria-pressed={fontFaceKey(face) === effectiveFaceKey}
-                  style={{
-                    fontStyle: face.slant,
-                    fontWeight: face.weight,
-                    fontSynthesis: 'none',
-                  }}
-                  onClick={() => {
-                    onDraftChange((current) => ({
-                      ...current,
-                      lyrics: { ...current.lyrics, fontStyle: cloneFontFace(face) },
-                    }))
+        <div className="style-editor__body">
+          <section
+            id={`${titleId}-project-lyrics-panel`}
+            role="tabpanel"
+            aria-labelledby={`${titleId}-project-lyrics-tab`}
+            hidden={destination !== 'project-lyrics'}
+          >
+            <section className="style-control-group" aria-labelledby={`${titleId}-typeface`}>
+              <h3 id={`${titleId}-typeface`}>Typeface</h3>
+              <TypefaceCombobox
+                {...fonts}
+                value={lyrics.typeface}
+                selectedFace={lyrics.fontStyle}
+                onChange={chooseTypeface}
+                onRetry={onRetryFonts}
+              />
+            </section>
+
+            <section className="style-control-group" aria-labelledby={`${titleId}-face`}>
+              <h3 id={`${titleId}-face`}>Available faces</h3>
+              <div className="font-face-list">
+                {lyrics.typeface.faces.map((face) => (
+                  <button
+                    key={fontFaceKey(face)}
+                    type="button"
+                    className="font-face-button"
+                    aria-pressed={fontFaceKey(face) === effectiveFaceKey}
+                    style={{
+                      fontStyle: face.slant,
+                      fontWeight: face.weight,
+                      fontSynthesis: 'none',
+                    }}
+                    onClick={() => {
+                      onDraftChange((current) => ({
+                        ...current,
+                        lyrics: { ...current.lyrics, fontStyle: cloneFontFace(face) },
+                      }))
+                    }}
+                  >
+                    {face.style}
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <section className="style-control-row">
+              <label className="style-field">
+                <span>Size</span>
+                <select
+                  aria-label="Project lyric font size"
+                  value={lyrics.sizePx}
+                  onChange={(event) => {
+                    const sizePx = Number(event.currentTarget.value)
+                    if (isFontSizePx(sizePx)) update({ sizePx })
                   }}
                 >
-                  {face.style}
-                </button>
-              ))}
-            </div>
+                  {FONT_SIZE_OPTIONS.map((size) => (
+                    <option key={size} value={size}>
+                      {size} px
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </section>
+
+            <section className="style-color-grid" aria-label="Project lyric colors">
+              <StyleColorField
+                label="Sung"
+                inputLabel="Project lyric sung color"
+                value={lyrics.sungColor}
+                onChange={(sungColor) => update({ sungColor })}
+              />
+              <StyleColorField
+                label="Unsung"
+                inputLabel="Project lyric unsung color"
+                value={lyrics.unsungColor}
+                onChange={(unsungColor) => update({ unsungColor })}
+              />
+            </section>
           </section>
 
-          <section className="style-control-row">
-            <label className="style-field">
-              <span>Size</span>
-              <select
-                aria-label="Project lyric font size"
-                value={lyrics.sizePx}
-                onChange={(event) => {
-                  const sizePx = Number(event.currentTarget.value)
-                  if (isFontSizePx(sizePx)) update({ sizePx })
-                }}
-              >
-                {FONT_SIZE_OPTIONS.map((size) => (
-                  <option key={size} value={size}>
-                    {size} px
-                  </option>
+          <section
+            id={`${titleId}-background-panel`}
+            role="tabpanel"
+            aria-labelledby={`${titleId}-background-tab`}
+            hidden={destination !== 'background'}
+          >
+            <fieldset className="style-background-mode">
+              <legend>Background mode</legend>
+              <div>
+                {(['solid', 'gradient', 'image'] as BackgroundMode[]).map((mode) => (
+                  <label key={mode}>
+                    <input
+                      type="radio"
+                      name={`${titleId}-background-mode`}
+                      value={mode}
+                      checked={background.mode === mode}
+                      disabled={mode === 'image'}
+                      onChange={() => {
+                        if (mode !== 'image') updateBackground({ mode })
+                      }}
+                    />
+                    {mode[0].toUpperCase() + mode.slice(1)}
+                  </label>
                 ))}
-              </select>
-            </label>
-          </section>
+              </div>
+            </fieldset>
 
-          <section className="style-color-grid" aria-label="Project lyric colors">
-            <label className="style-color-field">
-              <span>Sung</span>
-              <div>
-                <input
-                  aria-label="Project lyric sung color"
-                  type="color"
-                  value={lyrics.sungColor}
-                  onChange={(event) => update({ sungColor: event.currentTarget.value })}
+            {background.mode === 'solid' && (
+              <section className="style-color-grid style-color-grid--single">
+                <StyleColorField
+                  label="Solid color"
+                  inputLabel="Background solid color"
+                  value={background.solidColor}
+                  onChange={(solidColor) => updateBackground({ solidColor })}
                 />
-                <output>{lyrics.sungColor.toUpperCase()}</output>
-              </div>
-            </label>
-            <label className="style-color-field">
-              <span>Unsung</span>
-              <div>
-                <input
-                  aria-label="Project lyric unsung color"
-                  type="color"
-                  value={lyrics.unsungColor}
-                  onChange={(event) => update({ unsungColor: event.currentTarget.value })}
+              </section>
+            )}
+            {background.mode === 'gradient' && (
+              <section className="style-color-grid" aria-label="Background gradient colors">
+                <StyleColorField
+                  label="Start color"
+                  inputLabel="Background gradient start color"
+                  value={background.gradientStartColor}
+                  onChange={(gradientStartColor) => updateBackground({ gradientStartColor })}
                 />
-                <output>{lyrics.unsungColor.toUpperCase()}</output>
-              </div>
-            </label>
+                <StyleColorField
+                  label="End color"
+                  inputLabel="Background gradient end color"
+                  value={background.gradientEndColor}
+                  onChange={(gradientEndColor) => updateBackground({ gradientEndColor })}
+                />
+              </section>
+            )}
+            <p className="style-field-help">
+              Image backgrounds and their linked paths stay preserved, but Image authoring and
+              readiness are not available in this Style destination yet.
+            </p>
           </section>
         </div>
 
         <footer className="style-editor__actions">
-          <Button variant="ghost" onClick={onCancel}>
+          <Button variant="ghost" data-style-action="cancel" onClick={onCancel}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={onApply}>
+          <Button variant="primary" data-style-action="apply" onClick={onApply}>
             Apply &amp; close
           </Button>
         </footer>
@@ -200,7 +347,7 @@ export function ProjectStyleEditor({
         playbackMs={playbackMs}
         lyricMs={playbackMs - project.offsetMs}
         selectedWordIds={new Set()}
-        designMode={{ target: 'project-lyrics', stageStyle: draft }}
+        designMode={{ target: destination, stageStyle: draft }}
       />
     </main>
   )

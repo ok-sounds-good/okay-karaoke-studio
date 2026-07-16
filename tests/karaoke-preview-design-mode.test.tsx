@@ -152,6 +152,43 @@ describe('Karaoke Preview project-lyrics design mode', () => {
     expect(panel?.querySelector('.title-card')).toBeNull()
   })
 
+  it('renders canonical content through the complete Background draft with exact CSS evidence', () => {
+    const project = createProject({ title: 'Canonical title', artist: 'Canonical artist' })
+    const snapshot = structuredClone(project)
+    const gradient = cloneStageStyle(project.stageStyle)
+    Object.assign(gradient.background, {
+      mode: 'gradient',
+      solidColor: '#654321',
+      gradientStartColor: '#123456',
+      gradientEndColor: '#abcdef',
+      imagePath: '/linked/preserved.png',
+    })
+    gradient.titleCard.title.color = '#fedcba'
+    const rendered = document.createElement('div')
+    rendered.innerHTML = previewMarkup({ target: 'background', stageStyle: gradient }, project)
+    const panel = rendered.querySelector<HTMLElement>('[aria-label="Background design preview"]')!
+    const stage = panel.querySelector<HTMLElement>('.karaoke-stage')!
+
+    expect(stage.dataset.logicalStage).toBe('1920x1080')
+    expect(stage.classList.contains('is-designing')).toBe(true)
+    expect(stage.dataset.backgroundMode).toBe('gradient')
+    expect(stage.dataset.backgroundSolidColor).toBe('#654321')
+    expect(stage.dataset.backgroundGradientStartColor).toBe('#123456')
+    expect(stage.dataset.backgroundGradientEndColor).toBe('#abcdef')
+    expect(stage.style.background).toBe('linear-gradient(145deg, #123456, #abcdef)')
+    expect(stage.querySelector('.title-card h3')?.textContent).toBe('Canonical title')
+    expect(stage.querySelector<HTMLElement>('.title-card h3')?.style.color).toBe('#fedcba')
+    expect(panel.querySelector('[aria-label="Visible lyric lines"]')).toBeNull()
+
+    const solid = cloneStageStyle(gradient)
+    solid.background.mode = 'solid'
+    rendered.innerHTML = previewMarkup({ target: 'background', stageStyle: solid }, project)
+    const solidStage = rendered.querySelector<HTMLElement>('.karaoke-stage')!
+    expect(solidStage.dataset.backgroundMode).toBe('solid')
+    expect(solidStage.style.background).toBe('#654321')
+    expect(project).toEqual(snapshot)
+  })
+
   it('hides sync aids even when the ordinary frame planner produces one', () => {
     const project = createProject()
     const track = project.tracks[0]!

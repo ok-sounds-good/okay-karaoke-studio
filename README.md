@@ -102,25 +102,31 @@ bun run test:video
    cancelling leaves it unchanged.
 4. In Live Preview, choose 1 through 5 visible lyric lines and either **Clear**
    or **Scroll** advance behavior. These project settings also govern MP4 output.
-5. Move the playhead to the desired start and choose **Start Sync** in the
+5. Choose **Style** beside the application identity to edit Project lyrics or
+   the project Background in the same window. Background supports editable
+   Solid and Gradient colors; linked Image settings remain preserved but are
+   not yet authorable or Preview/MP4-ready here. Changes appear in the fixed
+   16:9 Design preview. Choose **Apply & close** to create one undoable project
+   edit, or **Cancel** to leave the project unchanged.
+6. Move the playhead to the desired start and choose **Start Sync** in the
    Lyric Timing editor. Live Preview is suspended and a lightweight Sync Focus shows the
    current and next lyric lines in cursor order.
-6. Press Space at each word onset. A new onset on the same line backfills the
+7. Press Space at each word onset. A new onset on the same line backfills the
    preceding word's end; hold the final word of a line until its sung end. The
    resulting timing remains bounded by the preceding and following timed words
    in lyric order, even across line boundaries. The authoritative playback
    clock supplies timestamps, and taps before lyric time `0:00` are ignored.
    Press Escape to finish the synchronization session and restore Live Preview.
-7. Verify timing in Live Preview, then select words in Lyric Timing.
+8. Verify timing in Live Preview, then select words in Lyric Timing.
    Command/Ctrl+A selects the active track outside text fields; dragging across
    empty Lyric Timing space creates a marquee selection. Drag blocks to move timing
    and drag either edge to resize; moves and resizes stop at the adjacent timed
    words in lyric order, including across line boundaries. A synchronization
    session is one undoable history step; individual Lyric Timing corrections remain
    undoable edits.
-8. Use Lyric Timing's **Clear Timing** or **Clear Timing After Cursor** controls
+9. Use Lyric Timing's **Clear Timing** or **Clear Timing After Cursor** controls
    when resynchronizing. Use transport **Stop** to pause and return to `0:00`.
-9. Review the timing status, save the current v0 `.oks` project, and export LRC,
+10. Review the timing status, save the current v0 `.oks` project, and export LRC,
    ASS, or an MP4 karaoke video. Video export requires attached audio and offers
    240p (426 x 240), 360p (640 x 360), 480p (854 x 480), 720p (1280 x 720),
    1080p (1920 x 1080), 1440p (2560 x 1440), and 2160p (3840 x 2160), each at

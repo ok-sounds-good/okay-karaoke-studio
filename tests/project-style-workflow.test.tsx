@@ -184,6 +184,22 @@ async function chooseSize(value: string) {
   })
 }
 
+async function chooseBackgroundMode(mode: 'solid' | 'gradient') {
+  const radio = document.querySelector<HTMLInputElement>(`input[type="radio"][value="${mode}"]`)
+  if (!radio) throw new Error(`Background mode was not mounted: ${mode}`)
+  await act(async () => radio.click())
+}
+
+async function chooseColor(label: string, value: string) {
+  const input = document.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+  if (!input || !setter) throw new Error(`Color input was not mounted: ${label}`)
+  await act(async () => {
+    setter.call(input, value)
+    input.dispatchEvent(new InputEvent('input', { bubbles: true, data: value }))
+  })
+}
+
 function dispatchPointer(
   target: EventTarget,
   type: string,
@@ -331,6 +347,14 @@ describe('project Style App integration', () => {
     ).toBe(false)
     expect(document.querySelector<HTMLInputElement>('[aria-label="Volume"]')?.disabled).toBe(false)
 
+    const timeBeforeTabs = document.querySelector('.time-readout strong')?.textContent
+    const projectLyricsTab = buttonByText('Project lyrics')
+    projectLyricsTab.focus()
+    dispatchKey(projectLyricsTab, { code: 'ArrowRight', key: 'ArrowRight' })
+    await settle()
+    expect(document.activeElement).toBe(buttonByText('Background'))
+    expect(document.querySelector('.time-readout strong')?.textContent).toBe(timeBeforeTabs)
+
     await click(buttonByLabel('Play'))
     expect(buttonByLabel('Pause')).not.toBeNull()
     expect(document.querySelector('.style-workspace')).not.toBeNull()
@@ -350,6 +374,21 @@ describe('project Style App integration', () => {
   it('preserves semantic no-op state and applies one undoable project Style step', async () => {
     const style = buttonByText('Style')
     await click(style)
+    await click(buttonByText('Background'))
+    await chooseBackgroundMode('solid')
+    expect(document.querySelector('.karaoke-stage')?.getAttribute('data-background-mode')).toBe(
+      'solid',
+    )
+    await click(buttonByText('Cancel'))
+    expect(document.querySelector('.karaoke-stage')?.getAttribute('data-background-mode')).toBe(
+      'gradient',
+    )
+    expect(buttonByLabel('Undo').disabled).toBe(true)
+
+    await click(style)
+    await click(buttonByText('Background'))
+    await chooseBackgroundMode('solid')
+    await chooseBackgroundMode('gradient')
     await click(buttonByText('Apply & close'))
     expect(buttonByLabel('Undo').disabled).toBe(true)
     expect(document.querySelector('[title="Unsaved changes"]')).toBeNull()
@@ -370,6 +409,51 @@ describe('project Style App integration', () => {
       parseProject(harness.saveProject.mock.calls.at(-1)?.[0].contents).stageStyle.lyrics.sizePx,
     ).toBe(82)
     expect(buttonByLabel('Redo').disabled).toBe(false)
+  })
+
+  it('applies, saves, reopens, undoes, and redoes the complete accepted background once', async () => {
+    const style = buttonByText('Style')
+    await click(style)
+    await click(buttonByText('Background'))
+    await chooseColor('Background gradient start color', '#112233')
+    await chooseColor('Background gradient end color', '#445566')
+    await chooseBackgroundMode('solid')
+    await chooseColor('Background solid color', '#778899')
+    await click(buttonByText('Apply & close'))
+
+    expect(buttonByLabel('Undo').disabled).toBe(false)
+    await click(buttonByLabel('Save project'))
+    const acceptedContents = harness.saveProject.mock.calls.at(-1)?.[0].contents
+    const accepted = parseProject(acceptedContents).stageStyle.background
+    expect(accepted).toEqual({
+      mode: 'solid',
+      solidColor: '#778899',
+      gradientStartColor: '#112233',
+      gradientEndColor: '#445566',
+      imagePath: null,
+    })
+
+    await click(buttonByLabel('Undo'))
+    await click(buttonByLabel('Save project'))
+    expect(
+      parseProject(harness.saveProject.mock.calls.at(-1)?.[0].contents).stageStyle.background,
+    ).toMatchObject({ mode: 'gradient', solidColor: '#21182D' })
+    await click(buttonByLabel('Redo'))
+    await click(buttonByLabel('Save project'))
+    expect(
+      parseProject(harness.saveProject.mock.calls.at(-1)?.[0].contents).stageStyle.background,
+    ).toEqual(accepted)
+
+    harness.openProject.mockResolvedValueOnce({
+      requestId: 'reopen-applied-background',
+      path: '/projects/reopened-background.oks',
+      contents: acceptedContents,
+    })
+    await click(buttonByLabel('Open project'))
+    expect(document.querySelector('.karaoke-stage')?.getAttribute('data-background-mode')).toBe(
+      'solid',
+    )
+    expect(document.querySelector<HTMLElement>('.karaoke-stage')?.style.background).toBe('#778899')
   })
 
   it('replaces only the latest StageStyle and preserves newer non-style state', async () => {

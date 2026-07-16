@@ -22,6 +22,9 @@ const STYLE_SESSION_EVIDENCE_PATH = '.ci-artifacts/style-session-visual'
 const STYLE_SESSION_EVIDENCE_LEAVES = [
   '01-project-lyrics-1280x720.png',
   '02-project-lyrics-1440x900.png',
+  '03-background-gradient-draft-1280x720.png',
+  '04-background-solid-draft-1280x720.png',
+  '05-background-solid-applied-1280x720.png',
   'result.json',
 ]
 const VISUAL_TEST_INVOCATIONS = [

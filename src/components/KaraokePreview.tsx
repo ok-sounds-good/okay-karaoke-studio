@@ -24,7 +24,7 @@ import {
 import { Button } from './ui'
 
 export type KaraokePreviewDesignMode = {
-  target: 'project-lyrics'
+  target: 'project-lyrics' | 'background'
   stageStyle: StageStyle
 }
 
@@ -169,15 +169,29 @@ export function KaraokePreview({
   onEditLyrics,
   designMode,
 }: KaraokePreviewProps) {
-  const frame = useMemo(() => previewFrameStateAt(project, playbackMs), [playbackMs, project])
   const designStyle = designMode?.stageStyle ?? null
-  const designLine = useMemo(
-    () => (designStyle ? projectLyricsDesignLine(designStyle.lyrics) : null),
-    [designStyle],
+  const previewProject = useMemo(
+    () =>
+      designMode?.target === 'background'
+        ? { ...project, stageStyle: designMode.stageStyle }
+        : project,
+    [designMode, project],
   )
-  const selectedFonts = designMode
-    ? designPreviewFonts(designMode.stageStyle)
-    : projectPreviewFonts(project)
+  const frame = useMemo(
+    () => previewFrameStateAt(previewProject, playbackMs),
+    [playbackMs, previewProject],
+  )
+  const designLine = useMemo(
+    () =>
+      designMode?.target === 'project-lyrics'
+        ? projectLyricsDesignLine(designMode.stageStyle.lyrics)
+        : null,
+    [designMode],
+  )
+  const selectedFonts =
+    designMode?.target === 'project-lyrics'
+      ? designPreviewFonts(designMode.stageStyle)
+      : projectPreviewFonts(previewProject)
   const fontRuntime = usePreviewFonts(selectedFonts)
   const stageStyle = designStyle ?? frame.stageStyle
   const background = stageStyle.background
@@ -200,14 +214,16 @@ export function KaraokePreview({
     '--stage-frame-width': logicalStagePx(stageFrame.lineWidthPx),
   } as CSSProperties
   const lines = new Map(frame.lines.map((line) => [lineKey(line.trackId, line.id), line]))
+  const isDesigning = Boolean(designMode)
   const stageClassName = designLine
     ? 'karaoke-stage karaoke-stage--lines-1 is-designing'
-    : `karaoke-stage karaoke-stage--lines-${project.lyricDisplay.lineCount}`
+    : `karaoke-stage karaoke-stage--lines-${project.lyricDisplay.lineCount}${isDesigning ? ' is-designing' : ''}`
+  const designLabel = designMode?.target === 'background' ? 'Background' : 'Project lyrics'
 
   return (
     <section
       className="preview-panel panel"
-      aria-label={designLine ? 'Project lyrics design preview' : 'Karaoke preview'}
+      aria-label={isDesigning ? `${designLabel} design preview` : 'Karaoke preview'}
     >
       <header className="panel-header preview-panel__header">
         <div className="panel-title">
@@ -215,11 +231,11 @@ export function KaraokePreview({
             <MonitorPlay size={16} />
           </span>
           <div>
-            <span className="eyebrow">{designLine ? 'Project lyrics' : 'Stage monitor'}</span>
-            <h2>{designLine ? 'Design preview' : 'Live preview'}</h2>
+            <span className="eyebrow">{isDesigning ? designLabel : 'Stage monitor'}</span>
+            <h2>{isDesigning ? 'Design preview' : 'Live preview'}</h2>
           </div>
         </div>
-        {designLine ? (
+        {isDesigning ? (
           <div className="preview-badges">
             <span className="status-pill">Fixed 1920 × 1080 stage</span>
             <span className="status-pill">
@@ -285,7 +301,11 @@ export function KaraokePreview({
 
       <div
         className={stageClassName}
-        data-logical-stage={designLine ? '1920x1080' : undefined}
+        data-background-gradient-end-color={background.gradientEndColor}
+        data-background-gradient-start-color={background.gradientStartColor}
+        data-background-mode={background.mode}
+        data-background-solid-color={background.solidColor}
+        data-logical-stage={isDesigning ? '1920x1080' : undefined}
         style={stageVars}
       >
         <div className="karaoke-stage__grain" />
