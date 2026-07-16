@@ -6,10 +6,28 @@ const path = require('node:path')
 const { PNG_LIMITS, parseBoundedPngContainer } = require('../electron/png-validation.cjs')
 const { validateFreshOutputPath } = require('../electron/smoke-artifacts.cjs')
 
+const BASELINE_SCENARIO = 'baseline'
+const PROJECT_TYPOGRAPHY_SCENARIO = 'project-typography'
 const BASELINE_NAME = '01-baseline.png'
+const PROJECT_TYPOGRAPHY_NAMES = Object.freeze([
+  '01-project-typography-1280x720.png',
+  '02-project-typography-1440x900.png',
+])
 const RESULT_NAME = 'result.json'
 const EXPECTED_FILES = Object.freeze([BASELINE_NAME, RESULT_NAME])
 const VIEWPORT = Object.freeze({ height: 720, width: 1280 })
+const PROJECT_TYPOGRAPHY_VIEWPORTS = Object.freeze([
+  VIEWPORT,
+  Object.freeze({ height: 900, width: 1440 }),
+])
+const SCENARIO_CONTRACTS = Object.freeze({
+  [BASELINE_SCENARIO]: Object.freeze([Object.freeze({ ...VIEWPORT, name: BASELINE_NAME })]),
+  [PROJECT_TYPOGRAPHY_SCENARIO]: Object.freeze(
+    PROJECT_TYPOGRAPHY_VIEWPORTS.map((viewport, index) =>
+      Object.freeze({ ...viewport, name: PROJECT_TYPOGRAPHY_NAMES[index] }),
+    ),
+  ),
+})
 const MAX_RESULT_BYTES = 16 * 1024
 const WORKFLOW_EVIDENCE_NAME = 'okay-karaoke-studio-video-style-visual'
 const WORKFLOW_PATH_ARGUMENT = '--emit-workflow-evidence-path'
@@ -87,73 +105,104 @@ function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex')
 }
 
-function validateBaselinePng(bytes) {
+function scenarioContract(scenario) {
+  if (typeof scenario !== 'string' || !Object.hasOwn(SCENARIO_CONTRACTS, scenario)) {
+    throw resultError()
+  }
+  return SCENARIO_CONTRACTS[scenario]
+}
+
+function expectedFilesForScenario(scenario) {
+  return Object.freeze([...scenarioContract(scenario).map(({ name }) => name), RESULT_NAME].sort())
+}
+
+function validatePng(bytes, expected) {
+  if (!Buffer.isBuffer(bytes)) throw resultError()
   let parsed
   try {
     parsed = parseBoundedPngContainer(bytes)
   } catch {
     throw resultError()
   }
-  if (parsed.animated || parsed.width !== VIEWPORT.width || parsed.height !== VIEWPORT.height)
+  if (parsed.animated || parsed.width !== expected.width || parsed.height !== expected.height)
     throw resultError()
   return Object.freeze({
     bytes: bytes.length,
     height: parsed.height,
-    name: BASELINE_NAME,
+    name: expected.name,
     sha256: sha256(bytes),
     width: parsed.width,
   })
 }
 
-function normalizeManifest(value) {
+function validateBaselinePng(bytes) {
+  return validatePng(bytes, scenarioContract(BASELINE_SCENARIO)[0])
+}
+
+function normalizeManifest(value, scenario = BASELINE_SCENARIO) {
+  const contract = scenarioContract(scenario)
   const manifest = plainDataObject(value, ['artifacts', 'ok', 'schemaVersion'])
   if (
     manifest.ok !== true ||
     manifest.schemaVersion !== 1 ||
     !Array.isArray(manifest.artifacts) ||
-    manifest.artifacts.length !== 1
+    manifest.artifacts.length !== contract.length
   )
     throw resultError()
-  const artifact = plainDataObject(manifest.artifacts[0], [
-    'bytes',
-    'height',
-    'name',
-    'sha256',
-    'width',
-  ])
-  if (
-    artifact.name !== BASELINE_NAME ||
-    !Number.isSafeInteger(artifact.bytes) ||
-    artifact.bytes < 1 ||
-    artifact.bytes > PNG_LIMITS.maxBytes ||
-    artifact.width !== VIEWPORT.width ||
-    artifact.height !== VIEWPORT.height ||
-    typeof artifact.sha256 !== 'string' ||
-    !/^[0-9a-f]{64}$/u.test(artifact.sha256)
-  )
-    throw resultError()
+  const artifacts = manifest.artifacts.map((value, index) => {
+    const expected = contract[index]
+    const artifact = plainDataObject(value, ['bytes', 'height', 'name', 'sha256', 'width'])
+    if (
+      artifact.name !== expected.name ||
+      !Number.isSafeInteger(artifact.bytes) ||
+      artifact.bytes < 1 ||
+      artifact.bytes > PNG_LIMITS.maxBytes ||
+      artifact.width !== expected.width ||
+      artifact.height !== expected.height ||
+      typeof artifact.sha256 !== 'string' ||
+      !/^[0-9a-f]{64}$/u.test(artifact.sha256)
+    )
+      throw resultError()
+    return Object.freeze(artifact)
+  })
   return Object.freeze({
-    artifacts: [Object.freeze(artifact)],
+    artifacts: Object.freeze(artifacts),
     ok: true,
     schemaVersion: 1,
   })
 }
 
-function serializeManifest(manifest) {
-  return `${JSON.stringify(normalizeManifest(manifest))}\n`
+function serializeManifest(manifest, scenario = BASELINE_SCENARIO) {
+  return `${JSON.stringify(normalizeManifest(manifest, scenario))}\n`
 }
 
-function createResultArtifacts(pngBytes) {
-  if (!Buffer.isBuffer(pngBytes)) throw resultError()
-  const artifact = validateBaselinePng(pngBytes)
-  const manifest = normalizeManifest({ artifacts: [artifact], ok: true, schemaVersion: 1 })
+function createScenarioResultArtifacts(scenario, pngBytes) {
+  const contract = scenarioContract(scenario)
+  if (!Array.isArray(pngBytes) || pngBytes.length !== contract.length) throw resultError()
+  const manifest = normalizeManifest(
+    {
+      artifacts: pngBytes.map((bytes, index) => validatePng(bytes, contract[index])),
+      ok: true,
+      schemaVersion: 1,
+    },
+    scenario,
+  )
   return Object.freeze({
     artifacts: Object.freeze([
-      Object.freeze({ bytes: Buffer.from(pngBytes), name: BASELINE_NAME }),
-      Object.freeze({ bytes: Buffer.from(serializeManifest(manifest)), name: RESULT_NAME }),
+      ...pngBytes.map((bytes, index) =>
+        Object.freeze({ bytes: Buffer.from(bytes), name: contract[index].name }),
+      ),
+      Object.freeze({
+        bytes: Buffer.from(serializeManifest(manifest, scenario)),
+        name: RESULT_NAME,
+      }),
     ]),
     manifest,
   })
+}
+
+function createResultArtifacts(pngBytes) {
+  return createScenarioResultArtifacts(BASELINE_SCENARIO, [pngBytes])
 }
 
 async function assertDirectory(identity, fsApi) {
@@ -215,6 +264,9 @@ async function readRegularFile(identity, name, limit, options, fsApi) {
 
 async function validateVisualResultDirectory(rawOutput, options = {}) {
   const fsApi = options.fsApi || fs
+  const scenario = options.scenario ?? BASELINE_SCENARIO
+  const contract = scenarioContract(scenario)
+  const expectedFiles = expectedFilesForScenario(scenario)
   let output
   try {
     output = validateFreshOutputPath(rawOutput)
@@ -227,7 +279,7 @@ async function validateVisualResultDirectory(rawOutput, options = {}) {
     }
     await assertDirectory(identity, fsApi)
     const names = (await fsApi.readdir(output)).sort()
-    if (names.join(',') !== EXPECTED_FILES.join(',')) throw resultError()
+    if (names.join(',') !== expectedFiles.join(',')) throw resultError()
 
     const resultBytes = await readRegularFile(
       identity,
@@ -242,24 +294,26 @@ async function validateVisualResultDirectory(rawOutput, options = {}) {
     } catch {
       throw resultError()
     }
-    const manifest = normalizeManifest(parsed)
-    if (!resultBytes.equals(Buffer.from(serializeManifest(manifest)))) throw resultError()
+    const manifest = normalizeManifest(parsed, scenario)
+    if (!resultBytes.equals(Buffer.from(serializeManifest(manifest, scenario)))) throw resultError()
 
-    const pngBytes = await readRegularFile(
-      identity,
-      BASELINE_NAME,
-      manifest.artifacts[0].bytes,
-      options,
-      fsApi,
-    )
-    const actual = validateBaselinePng(pngBytes)
-    if (
-      actual.bytes !== manifest.artifacts[0].bytes ||
-      actual.sha256 !== manifest.artifacts[0].sha256
-    )
-      throw resultError()
+    for (const [index, expected] of contract.entries()) {
+      const pngBytes = await readRegularFile(
+        identity,
+        expected.name,
+        manifest.artifacts[index].bytes,
+        options,
+        fsApi,
+      )
+      const actual = validatePng(pngBytes, expected)
+      if (
+        actual.bytes !== manifest.artifacts[index].bytes ||
+        actual.sha256 !== manifest.artifacts[index].sha256
+      )
+        throw resultError()
+    }
     await assertDirectory(identity, fsApi)
-    if ((await fsApi.readdir(output)).sort().join(',') !== EXPECTED_FILES.join(',')) {
+    if ((await fsApi.readdir(output)).sort().join(',') !== expectedFiles.join(',')) {
       throw resultError()
     }
     return manifest
@@ -282,12 +336,20 @@ if (require.main === module) {
 }
 
 module.exports = {
+  BASELINE_SCENARIO,
   BASELINE_NAME,
   EXPECTED_FILES,
+  PROJECT_TYPOGRAPHY_NAMES,
+  PROJECT_TYPOGRAPHY_SCENARIO,
+  PROJECT_TYPOGRAPHY_VIEWPORTS,
   RESULT_NAME,
+  SCENARIO_CONTRACTS,
   VIEWPORT,
   createResultArtifacts,
+  createScenarioResultArtifacts,
+  expectedFilesForScenario,
   normalizeManifest,
+  scenarioContract,
   serializeManifest,
   validateBaselinePng,
   validateVisualResultDirectory,

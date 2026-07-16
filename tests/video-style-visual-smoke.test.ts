@@ -32,6 +32,7 @@ async function configuredArguments() {
     argv: [
       smoke.TRIGGER,
       `${smoke.OPTIONS.output}${output}`,
+      `${smoke.OPTIONS.scenario}${smoke.BASELINE_SCENARIO}`,
       `${smoke.OPTIONS.userData}${user.path}`,
       `${smoke.OPTIONS.userIdentity}${user.serializedIdentity}`,
       `${smoke.OPTIONS.sessionData}${session.path}`,
@@ -74,9 +75,67 @@ function fakeWindow(
       }),
       getURL: () => smoke.PACKAGED_APP_URL,
       isDestroyed: () => destroyed,
+      sendInputEvent: vi.fn(),
       setZoomFactor: vi.fn(),
     },
   }
+}
+
+function typographyState(width: number, height: number) {
+  return {
+    fontFamily: '"System UI"',
+    fontSize: '48px',
+    fontStatus: 'loaded',
+    height,
+    href: smoke.PACKAGED_APP_URL,
+    readyState: 'complete',
+    resourcesReady: true,
+    stageHeight: height / 2,
+    stageWidth: width / 2,
+    typeface: 'System UI',
+    width,
+  }
+}
+
+function fakeTypographyWindow(options: { readiness?: Promise<never>; target?: unknown } = {}) {
+  const window = fakeWindow()
+  const captures = [
+    { height: 720, width: 1280 },
+    { height: 900, width: 1440 },
+  ]
+  window.webContents.capturePage.mockImplementation(async () => {
+    const viewport = captures.shift()!
+    return {
+      getSize: () => viewport,
+      isEmpty: () => false,
+      toPNG: () => validPng(viewport.width, viewport.height),
+    }
+  })
+  window.webContents.executeJavaScript
+    .mockReset()
+    .mockResolvedValueOnce(1)
+    .mockResolvedValueOnce(
+      options.target === undefined
+        ? {
+            boundsHeight: 24,
+            boundsWidth: 60,
+            height: 720,
+            href: smoke.PACKAGED_APP_URL,
+            readyState: 'complete',
+            width: 1280,
+            x: 120,
+            y: 20,
+          }
+        : options.target,
+    )
+  if (options.readiness) {
+    window.webContents.executeJavaScript.mockReturnValueOnce(options.readiness)
+  } else {
+    window.webContents.executeJavaScript
+      .mockResolvedValueOnce(typographyState(1280, 720))
+      .mockResolvedValueOnce(typographyState(1440, 900))
+  }
+  return window
 }
 
 function fakeRendererContents() {
@@ -106,7 +165,7 @@ describe('production-window visual smoke', () => {
         },
         config,
       ),
-    ).toMatchObject({ output })
+    ).toMatchObject({ output, scenario: smoke.BASELINE_SCENARIO })
     expect(setPath.mock.calls.map(([name]) => name)).toEqual(['userData', 'sessionData'])
     expect(appendSwitch).toHaveBeenCalledWith('force-device-scale-factor', '1')
     expect(() => smoke.parseVisualSmokeArguments([...argv, argv[1]])).toThrow(
@@ -115,6 +174,20 @@ describe('production-window visual smoke', () => {
     expect(() =>
       smoke.parseVisualSmokeArguments([...argv, '--oks-video-style-visual-unknown=x']),
     ).toThrow('VISUAL_SMOKE_FLAG_INVALID')
+    const scenarioIndex = argv.findIndex((argument) => argument.startsWith(smoke.OPTIONS.scenario))
+    expect(() =>
+      smoke.parseVisualSmokeArguments(argv.filter((_, index) => index !== scenarioIndex)),
+    ).toThrow('VISUAL_SMOKE_FLAG_INVALID')
+    const projectScenario = [...argv]
+    projectScenario[scenarioIndex] = `${smoke.OPTIONS.scenario}${smoke.PROJECT_TYPOGRAPHY_SCENARIO}`
+    expect(smoke.parseVisualSmokeArguments(projectScenario)).toMatchObject({
+      scenario: smoke.PROJECT_TYPOGRAPHY_SCENARIO,
+    })
+    const unknownScenario = [...argv]
+    unknownScenario[scenarioIndex] = `${smoke.OPTIONS.scenario}unknown`
+    expect(() => smoke.parseVisualSmokeArguments(unknownScenario)).toThrow(
+      'VISUAL_SMOKE_FLAG_INVALID',
+    )
   })
 
   it('captures, validates, publishes baseline before result, and destroys the window', async () => {
@@ -140,6 +213,145 @@ describe('production-window visual smoke', () => {
     expect(window.setContentSize).toHaveBeenCalledWith(640, 360, false)
     expect(window.webContents.setZoomFactor).toHaveBeenCalledWith(0.5)
     expect(window.setMinimumSize).toHaveBeenCalledWith(1, 1)
+    expect(window.destroy).toHaveBeenCalledOnce()
+  })
+
+  it('uses trusted input and publishes exact project typography captures in viewport order', async () => {
+    const window = fakeTypographyWindow()
+    const publish = vi.fn(async (_output, artifacts) => {
+      expect(window.isDestroyed()).toBe(true)
+      expect(artifacts.map(({ name }: { name: string }) => name)).toEqual([
+        '01-project-typography-1280x720.png',
+        '02-project-typography-1440x900.png',
+        'result.json',
+      ])
+    })
+    await expect(
+      smoke.runVisualSmoke(
+        {
+          app: {},
+          config: {
+            output: '/safe/evidence',
+            scenario: smoke.PROJECT_TYPOGRAPHY_SCENARIO,
+          },
+          window,
+        },
+        { focus: vi.fn(async () => true), publish },
+      ),
+    ).resolves.toEqual({ ok: true })
+    expect(window.webContents.sendInputEvent.mock.calls.map(([event]) => event.type)).toEqual([
+      'mouseMove',
+      'mouseDown',
+      'mouseUp',
+    ])
+    expect(window.setContentSize.mock.calls).toContainEqual([1280, 720, false])
+    expect(window.setContentSize.mock.calls).toContainEqual([1440, 900, false])
+    expect(window.webContents.capturePage).toHaveBeenCalledTimes(2)
+    expect(smoke.STYLE_TARGET_SCRIPT).not.toContain('.click(')
+    expect(smoke.STYLE_TARGET_SCRIPT).not.toContain('setTimeout')
+    const readinessScript = smoke.projectTypographyReadinessScript({ height: 720, width: 1280 })
+    for (const contract of [
+      '.style-workspace[role="dialog"]',
+      'Project lyric typeface',
+      'Project lyrics design preview',
+      'data-logical-stage',
+      'document.fonts',
+      'document.images',
+      'MutationObserver',
+      'ResizeObserver',
+    ])
+      expect(readinessScript).toContain(contract)
+    expect(readinessScript).not.toContain('setTimeout')
+  })
+
+  it('fails closed without capture when the trusted Style target is missing', async () => {
+    const window = fakeTypographyWindow({ target: null })
+    const publish = vi.fn()
+    const writeFailure = vi.fn(async () => undefined)
+    await expect(
+      smoke.runVisualSmoke(
+        {
+          app: {},
+          config: {
+            output: '/safe/evidence',
+            scenario: smoke.PROJECT_TYPOGRAPHY_SCENARIO,
+          },
+          window,
+        },
+        { focus: vi.fn(async () => true), publish, writeFailure },
+      ),
+    ).resolves.toEqual({ ok: false })
+    expect(window.webContents.sendInputEvent).not.toHaveBeenCalled()
+    expect(window.webContents.capturePage).not.toHaveBeenCalled()
+    expect(publish).not.toHaveBeenCalled()
+    expect(writeFailure).toHaveBeenCalledWith('/safe/evidence', {
+      code: 'VISUAL_SMOKE_FAILED',
+      ok: false,
+    })
+    expect(window.destroy).toHaveBeenCalledOnce()
+  })
+
+  it('uses a deadline only to fail closed when semantic readiness never arrives', async () => {
+    const window = fakeTypographyWindow({ readiness: new Promise(() => undefined) })
+    const publish = vi.fn()
+    const writeFailure = vi.fn(async () => undefined)
+    await expect(
+      smoke.runVisualSmoke(
+        {
+          app: {},
+          config: {
+            output: '/safe/evidence',
+            scenario: smoke.PROJECT_TYPOGRAPHY_SCENARIO,
+          },
+          window,
+        },
+        {
+          focus: vi.fn(async () => true),
+          publish,
+          readinessTimeoutMs: 5,
+          writeFailure,
+        },
+      ),
+    ).resolves.toEqual({ ok: false })
+    expect(window.webContents.sendInputEvent).toHaveBeenCalledTimes(3)
+    expect(window.webContents.capturePage).not.toHaveBeenCalled()
+    expect(publish).not.toHaveBeenCalled()
+    expect(writeFailure).toHaveBeenCalledOnce()
+    expect(window.destroy).toHaveBeenCalledOnce()
+  })
+
+  it('publishes no partial scenario evidence when the second capture is invalid', async () => {
+    const window = fakeTypographyWindow()
+    window.webContents.capturePage
+      .mockReset()
+      .mockResolvedValueOnce({
+        getSize: () => ({ height: 720, width: 1280 }),
+        isEmpty: () => false,
+        toPNG: () => validPng(1280, 720),
+      })
+      .mockResolvedValueOnce({
+        getSize: () => ({ height: 720, width: 1280 }),
+        isEmpty: () => false,
+        toPNG: () => validPng(1280, 720),
+      })
+    const publish = vi.fn()
+    const writeFailure = vi.fn(async () => undefined)
+    await expect(
+      smoke.runVisualSmoke(
+        {
+          app: {},
+          config: {
+            output: '/safe/evidence',
+            scenario: smoke.PROJECT_TYPOGRAPHY_SCENARIO,
+          },
+          window,
+        },
+        { focus: vi.fn(async () => true), publish, writeFailure },
+      ),
+    ).resolves.toEqual({ ok: false })
+    expect(window.webContents.capturePage).toHaveBeenCalledTimes(2)
+    expect(publish).not.toHaveBeenCalled()
+    expect(writeFailure).toHaveBeenCalledOnce()
     expect(window.destroy).toHaveBeenCalledOnce()
   })
 

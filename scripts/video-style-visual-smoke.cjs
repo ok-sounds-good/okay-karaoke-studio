@@ -14,11 +14,16 @@ const {
   writeFreshLauncherFailure,
 } = require('../electron/smoke-artifacts.cjs')
 const { publicChildOutcomeCode, publicStatusLine, runBoundedChild } = require('./bounded-child.cjs')
-const { validateVisualResultDirectory } = require('./visual-result-validation.cjs')
+const {
+  BASELINE_SCENARIO,
+  PROJECT_TYPOGRAPHY_SCENARIO,
+  validateVisualResultDirectory,
+} = require('./visual-result-validation.cjs')
 const { FATAL_DIAGNOSTIC, OPTIONS, TRIGGER } = require('../electron/video-style-visual-smoke.cjs')
 
 const REPOSITORY_ROOT = path.resolve(__dirname, '..')
 const OUTPUT_ENVIRONMENT_KEY = 'OKS_VISUAL_EVIDENCE_DIR'
+const SCENARIO_ARGUMENT = '--scenario='
 const DEFAULT_TIMEOUT_MS = 45_000
 const MAX_DIAGNOSTIC_BYTES = 64 * 1024
 const FATAL_DIAGNOSTIC_PATTERNS = Object.freeze([
@@ -65,17 +70,43 @@ async function requestedOutput(argv, environment, fsApi = fs) {
   }
 }
 
+function requestedScenario(argv) {
+  if (!Array.isArray(argv) || argv.some((value) => typeof value !== 'string')) {
+    throw launcherError('VISUAL_SMOKE_SCENARIO_INVALID')
+  }
+  const scenarioArguments = argv.filter((value) => value.startsWith('--scenario'))
+  if (scenarioArguments.length === 0) return BASELINE_SCENARIO
+  if (
+    scenarioArguments.length !== 1 ||
+    scenarioArguments[0] !== `${SCENARIO_ARGUMENT}${PROJECT_TYPOGRAPHY_SCENARIO}`
+  ) {
+    throw launcherError('VISUAL_SMOKE_SCENARIO_INVALID')
+  }
+  return PROJECT_TYPOGRAPHY_SCENARIO
+}
+
+async function requestedRun(argv, environment, fsApi = fs) {
+  const scenario = requestedScenario(argv)
+  const outputArguments = argv.filter((value) => !value.startsWith('--scenario'))
+  const output = await requestedOutput(outputArguments, environment, fsApi)
+  return Object.freeze({ output, scenario })
+}
+
 async function claimFreshOutput(rawOutput, dependencies = {}) {
   const state = await (dependencies.outputState || outputState)(rawOutput)
   if (state.state !== 'absent') throw launcherError('VISUAL_SMOKE_OUTPUT_EXISTS')
   return state.output
 }
 
-function childArguments(output, userProfile, sessionProfile) {
+function childArguments(output, scenario, userProfile, sessionProfile) {
+  if (scenario !== BASELINE_SCENARIO && scenario !== PROJECT_TYPOGRAPHY_SCENARIO) {
+    throw launcherError('VISUAL_SMOKE_SCENARIO_INVALID')
+  }
   return Object.freeze([
     REPOSITORY_ROOT,
     TRIGGER,
     `${OPTIONS.output}${output}`,
+    `${OPTIONS.scenario}${scenario}`,
     `${OPTIONS.userData}${userProfile.path}`,
     `${OPTIONS.userIdentity}${userProfile.serializedIdentity}`,
     `${OPTIONS.sessionData}${sessionProfile.path}`,
@@ -116,11 +147,14 @@ async function runLauncher(options = {}, supplied = {}) {
   const argv = options.argv || []
   const environment = options.environment || {}
   let output
+  let scenario
   let profiles = []
   let failureCode = null
 
   try {
-    output = await requestedOutput(argv, environment, options.fsApi || fs)
+    const request = await requestedRun(argv, environment, options.fsApi || fs)
+    output = request.output
+    scenario = request.scenario
     output = await claimFreshOutput(output, dependencies)
     const userProfile = await dependencies.createProfile('oks-visual-user-data-')
     profiles.push(userProfile)
@@ -129,7 +163,7 @@ async function runLauncher(options = {}, supplied = {}) {
 
     const outcome = await dependencies.runChild({
       executable: options.executable || electronExecutable,
-      args: childArguments(output, userProfile, sessionProfile),
+      args: childArguments(output, scenario, userProfile, sessionProfile),
       captureOutput: {
         classify: capturedFatalDiagnostic,
         maxBytesPerStream: MAX_DIAGNOSTIC_BYTES,
@@ -152,7 +186,7 @@ async function runLauncher(options = {}, supplied = {}) {
       return Object.freeze({ code: failureCode, ok: false })
     }
     try {
-      await dependencies.validateResult(output)
+      await dependencies.validateResult(output, { scenario })
     } catch {
       failureCode = 'VISUAL_SMOKE_RESULT_INVALID'
       return Object.freeze({ code: failureCode, ok: false })
@@ -198,8 +232,11 @@ module.exports = {
   MAX_DIAGNOSTIC_BYTES,
   OUTPUT_ENVIRONMENT_KEY,
   REPOSITORY_ROOT,
+  SCENARIO_ARGUMENT,
   childArguments,
   claimFreshOutput,
   requestedOutput,
+  requestedRun,
+  requestedScenario,
   runLauncher,
 }

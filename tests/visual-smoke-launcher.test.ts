@@ -71,12 +71,86 @@ describe('visual smoke launcher', () => {
       launcher.REPOSITORY_ROOT,
       smoke.TRIGGER,
       `${smoke.OPTIONS.output}${output}`,
+      `${smoke.OPTIONS.scenario}${smoke.BASELINE_SCENARIO}`,
       `${smoke.OPTIONS.userData}/profiles/user`,
       `${smoke.OPTIONS.userIdentity}user-identity`,
       `${smoke.OPTIONS.sessionData}/profiles/session`,
       `${smoke.OPTIONS.sessionIdentity}session-identity`,
     ])
-    expect(validateResult).toHaveBeenCalledWith(output)
+    expect(validateResult).toHaveBeenCalledWith(output, { scenario: smoke.BASELINE_SCENARIO })
+  })
+
+  it('allowlists the project typography scenario before creating profiles or a child', async () => {
+    const output = await outputPath()
+    const runChild = vi.fn(async () => ({
+      code: 0,
+      diagnostics: { fatal: false, overflow: false },
+      signal: null,
+    }))
+    const validateResult = vi.fn(async () => ({ ok: true }))
+    const created = [profile('user'), profile('session')]
+    await expect(
+      launcher.runLauncher(
+        {
+          argv: [`${launcher.SCENARIO_ARGUMENT}${smoke.PROJECT_TYPOGRAPHY_SCENARIO}`, output],
+          executable: '/electron',
+        },
+        {
+          createProfile: vi.fn(async () => created.shift()),
+          outputState: vi.fn(async () => ({ output, state: 'absent' })),
+          runChild,
+          validateResult,
+          verifyProfile: vi.fn(async () => ({ retained: true })),
+        },
+      ),
+    ).resolves.toEqual({ ok: true })
+    expect(runChild.mock.calls[0][0].args).toContain(
+      `${smoke.OPTIONS.scenario}${smoke.PROJECT_TYPOGRAPHY_SCENARIO}`,
+    )
+    expect(validateResult).toHaveBeenCalledWith(output, {
+      scenario: smoke.PROJECT_TYPOGRAPHY_SCENARIO,
+    })
+  })
+
+  it.each([
+    '--scenario',
+    '--scenario=',
+    '--scenario=baseline',
+    '--scenario=unknown',
+    '--scenario-project-typography',
+  ])(
+    'rejects malformed or unallowlisted scenario argument %s before side effects',
+    async (flag) => {
+      const output = await outputPath()
+      const createProfile = vi.fn()
+      const outputState = vi.fn()
+      const runChild = vi.fn()
+      await expect(
+        launcher.runLauncher(
+          { argv: [flag, output] },
+          {
+            createProfile,
+            outputState,
+            runChild,
+          },
+        ),
+      ).resolves.toEqual({ code: 'VISUAL_SMOKE_SCENARIO_INVALID', ok: false })
+      expect(createProfile).not.toHaveBeenCalled()
+      expect(outputState).not.toHaveBeenCalled()
+      expect(runChild).not.toHaveBeenCalled()
+    },
+  )
+
+  it('rejects duplicate allowlisted scenario arguments before side effects', async () => {
+    const output = await outputPath()
+    const scenario = `${launcher.SCENARIO_ARGUMENT}${smoke.PROJECT_TYPOGRAPHY_SCENARIO}`
+    const createProfile = vi.fn()
+    const runChild = vi.fn()
+    await expect(
+      launcher.runLauncher({ argv: [scenario, scenario, output] }, { createProfile, runChild }),
+    ).resolves.toEqual({ code: 'VISUAL_SMOKE_SCENARIO_INVALID', ok: false })
+    expect(createProfile).not.toHaveBeenCalled()
+    expect(runChild).not.toHaveBeenCalled()
   })
 
   it('maps child failures to one sanitized fresh failure artifact', async () => {

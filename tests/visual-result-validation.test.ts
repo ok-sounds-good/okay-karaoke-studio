@@ -22,11 +22,14 @@ afterEach(async () =>
   ),
 )
 
-async function freshResult() {
+async function freshResult(scenario = results.BASELINE_SCENARIO) {
   const root = await mkdtemp(join(tmpdir(), 'oks-visual-result-'))
   roots.push(root)
   const output = join(root, 'evidence')
-  const created = results.createResultArtifacts(validPng(1280, 720))
+  const created =
+    scenario === results.BASELINE_SCENARIO
+      ? results.createResultArtifacts(validPng(1280, 720))
+      : results.createScenarioResultArtifacts(scenario, [validPng(1280, 720), validPng(1440, 900)])
   await publishArtifactBuffers(output, created.artifacts)
   return { output, root }
 }
@@ -67,6 +70,50 @@ describe('visual result validation', () => {
       ok: true,
       schemaVersion: 1,
     })
+  })
+
+  it('accepts the exact ordered project typography capture contract', async () => {
+    const { output } = await freshResult(results.PROJECT_TYPOGRAPHY_SCENARIO)
+    await expect(
+      results.validateVisualResultDirectory(output, {
+        scenario: results.PROJECT_TYPOGRAPHY_SCENARIO,
+      }),
+    ).resolves.toMatchObject({
+      artifacts: [
+        {
+          height: 720,
+          name: '01-project-typography-1280x720.png',
+          width: 1280,
+        },
+        {
+          height: 900,
+          name: '02-project-typography-1440x900.png',
+          width: 1440,
+        },
+      ],
+      ok: true,
+      schemaVersion: 1,
+    })
+  })
+
+  it('rejects cross-scenario and stale scenario artifacts', async () => {
+    const baseline = await freshResult()
+    await expect(
+      results.validateVisualResultDirectory(baseline.output, {
+        scenario: results.PROJECT_TYPOGRAPHY_SCENARIO,
+      }),
+    ).rejects.toThrow('VISUAL_SMOKE_RESULT_INVALID')
+
+    const typography = await freshResult(results.PROJECT_TYPOGRAPHY_SCENARIO)
+    await expect(results.validateVisualResultDirectory(typography.output)).rejects.toThrow(
+      'VISUAL_SMOKE_RESULT_INVALID',
+    )
+    await writeFile(join(typography.output, '01-baseline.png'), validPng(1280, 720))
+    await expect(
+      results.validateVisualResultDirectory(typography.output, {
+        scenario: results.PROJECT_TYPOGRAPHY_SCENARIO,
+      }),
+    ).rejects.toThrow('VISUAL_SMOKE_RESULT_INVALID')
   })
 
   it.each(['hash', 'dimensions'])('rejects a manifest-valid %s mismatch', async (kind) => {
