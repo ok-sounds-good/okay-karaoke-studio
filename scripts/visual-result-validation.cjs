@@ -46,6 +46,24 @@ function sameIdentity(left, right) {
   return Boolean(left && right && left.dev === right.dev && left.ino === right.ino)
 }
 
+function stableFileEvidence(stats) {
+  return Object.freeze({
+    ...statIdentity(stats),
+    ctimeNs: String(stats.ctimeNs),
+    mtimeNs: String(stats.mtimeNs),
+    size: String(stats.size),
+  })
+}
+
+function sameStableFileEvidence(left, right) {
+  return Boolean(
+    sameIdentity(left, right) &&
+    left.ctimeNs === right.ctimeNs &&
+    left.mtimeNs === right.mtimeNs &&
+    left.size === right.size,
+  )
+}
+
 function workflowEvidencePath(rawTemporaryRoot, pathApi = path) {
   try {
     if (
@@ -233,14 +251,17 @@ async function readRegularFile(identity, name, limit, options, fsApi) {
     }
     handle = await fsApi.open(filePath, 'r')
     const opened = await handle.stat({ bigint: true })
-    if (!opened.isFile() || !sameIdentity(statIdentity(linked), statIdentity(opened))) {
+    if (
+      !opened.isFile() ||
+      !sameStableFileEvidence(stableFileEvidence(linked), stableFileEvidence(opened))
+    ) {
       throw resultError()
     }
     const bytes = await handle.readFile()
     const afterRead = await handle.stat({ bigint: true })
     if (
       bytes.length !== Number(afterRead.size) ||
-      !sameIdentity(statIdentity(opened), statIdentity(afterRead))
+      !sameStableFileEvidence(stableFileEvidence(opened), stableFileEvidence(afterRead))
     )
       throw resultError()
     await handle.close()
@@ -249,17 +270,30 @@ async function readRegularFile(identity, name, limit, options, fsApi) {
     if (
       !finalLink.isFile() ||
       finalLink.isSymbolicLink() ||
-      !sameIdentity(statIdentity(opened), statIdentity(finalLink))
+      !sameStableFileEvidence(stableFileEvidence(afterRead), stableFileEvidence(finalLink))
     )
       throw resultError()
     await assertDirectory(identity, fsApi)
-    return bytes
+    return Object.freeze({
+      bytes,
+      evidence: stableFileEvidence(afterRead),
+      name,
+    })
   } catch (error) {
     if (error?.code === 'VISUAL_SMOKE_RESULT_INVALID') throw error
     throw resultError()
   } finally {
     await handle?.close()
   }
+}
+
+async function revalidateRegularFile(identity, original, fsApi) {
+  const current = await readRegularFile(identity, original.name, original.bytes.length, {}, fsApi)
+  if (
+    !sameStableFileEvidence(original.evidence, current.evidence) ||
+    !original.bytes.equals(current.bytes)
+  )
+    throw resultError()
 }
 
 async function validateVisualResultDirectory(rawOutput, options = {}) {
@@ -281,13 +315,16 @@ async function validateVisualResultDirectory(rawOutput, options = {}) {
     const names = (await fsApi.readdir(output)).sort()
     if (names.join(',') !== expectedFiles.join(',')) throw resultError()
 
-    const resultBytes = await readRegularFile(
+    const consumedFiles = []
+    const resultFile = await readRegularFile(
       identity,
       RESULT_NAME,
       MAX_RESULT_BYTES,
       options,
       fsApi,
     )
+    consumedFiles.push(resultFile)
+    const resultBytes = resultFile.bytes
     let parsed
     try {
       parsed = JSON.parse(resultBytes.toString('utf8'))
@@ -298,19 +335,24 @@ async function validateVisualResultDirectory(rawOutput, options = {}) {
     if (!resultBytes.equals(Buffer.from(serializeManifest(manifest, scenario)))) throw resultError()
 
     for (const [index, expected] of contract.entries()) {
-      const pngBytes = await readRegularFile(
+      const pngFile = await readRegularFile(
         identity,
         expected.name,
         manifest.artifacts[index].bytes,
         options,
         fsApi,
       )
+      consumedFiles.push(pngFile)
+      const pngBytes = pngFile.bytes
       const actual = validatePng(pngBytes, expected)
       if (
         actual.bytes !== manifest.artifacts[index].bytes ||
         actual.sha256 !== manifest.artifacts[index].sha256
       )
         throw resultError()
+    }
+    for (const consumed of consumedFiles) {
+      await revalidateRegularFile(identity, consumed, fsApi)
     }
     await assertDirectory(identity, fsApi)
     if ((await fsApi.readdir(output)).sort().join(',') !== expectedFiles.join(',')) {

@@ -168,4 +168,27 @@ describe('visual result validation', () => {
       }),
     ).rejects.toThrow('VISUAL_SMOKE_RESULT_INVALID')
   })
+
+  it('rejects replacement of an earlier typography capture during a later read', async () => {
+    const { output, root } = await freshResult(results.PROJECT_TYPOGRAPHY_SCENARIO)
+    const firstCapture = results.PROJECT_TYPOGRAPHY_NAMES[0]
+    let replaced = false
+    await expect(
+      results.validateVisualResultDirectory(output, {
+        beforeRead: async (_claimed: string, name: string) => {
+          if (replaced || name !== results.PROJECT_TYPOGRAPHY_NAMES[1]) return
+          replaced = true
+          await rename(join(output, firstCapture), join(root, 'displaced-first-capture.png'))
+          await writeFile(join(output, firstCapture), validPng(1, 1))
+        },
+        scenario: results.PROJECT_TYPOGRAPHY_SCENARIO,
+      }),
+    ).rejects.toThrow('VISUAL_SMOKE_RESULT_INVALID')
+    expect(replaced).toBe(true)
+    await expect(
+      results.validateVisualResultDirectory(output, {
+        scenario: results.PROJECT_TYPOGRAPHY_SCENARIO,
+      }),
+    ).rejects.toThrow('VISUAL_SMOKE_RESULT_INVALID')
+  })
 })
