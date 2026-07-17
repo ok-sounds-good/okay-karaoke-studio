@@ -34,11 +34,16 @@ Closes #
 
 - Environment-dependent or manual gaps:
 - Upstream `ci/circleci: unit tests` check:
+- `authorize-native-candidate` exact-head approval:
+  - Full commit SHA:
+  - Approving CircleCI actor:
+  - CircleCI workflow URL or ID:
 - Protected `ci/circleci: macOS` compatibility check:
 - Protected `ci/circleci: Windows` compatibility check:
 
 <!-- UNAVAILABLE is never PASS. A temporary required-check exception requires -->
 <!-- an explicit user decision and a linked Issue under docs/SDLC.md. -->
+<!-- A new pull-request head requires a fresh approval record. -->
 
 ## Impact review
 

@@ -128,9 +128,16 @@ workflows:
     jobs:
       - unit-tests:
           name: unit tests
+      - authorize-native-candidate:
+          type: approval
+          requires:
+            - unit tests
+          filters: pipeline.event.name == "pull_request"
       - macOS:
           requires:
             - unit tests
+            - authorize-native-candidate
       - Windows:
           requires:
             - unit tests
+            - authorize-native-candidate

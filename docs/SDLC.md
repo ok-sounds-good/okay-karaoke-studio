@@ -140,13 +140,14 @@ requirement avoids a solo maintainer deadlock.
 ## Protected hosted CI
 
 CircleCI is the active hosted provider. The repository-owned
-`.circleci/config.yml` defines a Linux `unit tests` gate followed by thin
-`macOS` and `Windows` compatibility jobs. CircleCI reports them to GitHub as
-`ci/circleci: unit tests`, `ci/circleci: macOS`, and
-`ci/circleci: Windows`. The protected contexts remain
-`ci/circleci: macOS` and `ci/circleci: Windows`; both require the Linux job to
-succeed first. The previous GitHub Actions definition remains available,
-unchanged, at
+`.circleci/config.yml` defines a Linux `unit tests` gate, a pull-request-only
+`authorize-native-candidate` approval job, and thin `macOS` and `Windows`
+compatibility jobs. CircleCI reports the executable jobs to GitHub as
+`ci/circleci: unit tests`, `ci/circleci: macOS`, and `ci/circleci: Windows`.
+The protected contexts remain `ci/circleci: macOS` and
+`ci/circleci: Windows`; the approval is a workflow-internal control rather than
+a new protected context. The previous GitHub Actions definition remains
+available, unchanged, at
 `.github/workflows/ci.yml.disabled`; its non-workflow extension keeps it from
 triggering or consuming GitHub-hosted capacity.
 
@@ -158,11 +159,50 @@ rejects tag pushes, ordinary non-`main` branch pushes, and pull requests targeti
 another branch. It also excludes manual and API pipelines; broadening that
 contract requires an explicit repository change.
 
-The protected macOS and Windows contexts are merge blockers. Both depend on the
-Linux gate, so portable validation is transitively required and duplicated
-platform work does not begin when it has already failed. This dependency does
-not claim that `ci/circleci: unit tests` is itself directly required by the
-GitHub ruleset. A provider outage, unreachable executor, account-capacity
+The protected macOS and Windows contexts are merge blockers. On a pull request,
+both require the Linux gate and `authorize-native-candidate`, so portable
+validation is transitively required and duplicated platform work does not begin
+before Linux succeeds and a candidate is deliberately authorized. The approval
+job has the expression filter `pipeline.event.name == "pull_request"`. On a push
+to current `main`, that filter omits the approval job; CircleCI ignores a
+filtered-out dependency, so macOS and Windows still run after Linux succeeds.
+The repository trigger, workflow guard, and protected contexts therefore remain
+unchanged. This dependency does not claim that `ci/circleci: unit tests`
+is itself directly required by the
+GitHub ruleset.
+
+A pull-request workflow has three named phases:
+
+1. **Portable phase (`unit tests`).** Run changed-range formatting, the portable
+   unit suite, and the renderer build once on Linux.
+2. **Authorization phase (`authorize-native-candidate`).** After Linux passes,
+   compare the CircleCI revision with the current pull-request head. Approve only
+   an exact-head candidate, then record the full commit SHA, the CircleCI actor
+   who approved it, and the CircleCI workflow URL or ID. The approval applies
+   only to that workflow and revision. A new pull-request head starts a new
+   workflow and always requires a fresh approval; approval evidence from an
+   older head never carries forward.
+3. **Native-candidate phase (`macOS` and `Windows`).** After both prerequisites
+   are satisfied, run the native-image decode and live Electron lifecycle smokes
+   on both native executors.
+
+The approval is a declarative CircleCI workflow job. Do not replace its event
+filter with shell inspection, dump environment variables or event payloads, or
+enable shell or PowerShell execution tracing to decide whether to authorize a
+candidate. If the pull-request head advances after approval, cancel any queued
+or running native work for the old head and wait for the new workflow's Linux
+gate and fresh approval.
+
+Hosted failures are not retried automatically. After diagnosing a failure and
+deciding that another attempt is warranted, use only CircleCI's **Rerun workflow
+from failed** action, and only while its revision still equals the current
+pull-request head. If the head advances before or while the rerun starts, cancel
+the old-head rerun; do not let it consume native executors or treat its result as
+current-head evidence. If CircleCI presents another approval hold during a
+same-head rerun, record that approval event under the same exact-SHA, actor, and
+workflow-evidence rule.
+
+A provider outage, unreachable executor, account-capacity
 failure, or job that never starts is recorded as **unavailable — not passed**
 and does not satisfy the applicable gate. Never infer a pass from another
 platform or from static inspection. A temporary exception requires a new
@@ -173,8 +213,11 @@ Routine hosted CI is a compatibility backstop, not the primary proof for a
 change. The Linux job runs changed-range `bun run format:check`, the portable
 unit suite, and the renderer build once. The macOS and Windows jobs run only the
 native-image decode smoke and live Electron lifecycle smoke on their respective
-platforms. Configure redundant-workflow auto-cancellation in the CircleCI
-project settings when available.
+platforms. Broader full-environment macOS and Windows suites belong to a future
+official-v1 deployment or release step, not routine pull-request CI, and do not
+replace the targeted final Windows MVP acceptance run. Configure
+redundant-workflow auto-cancellation in the CircleCI project settings when
+available.
 
 At the exact pull-request head, the Developer runs focused checks for the change
 plus the complete local regression gates required by the validation matrix and
