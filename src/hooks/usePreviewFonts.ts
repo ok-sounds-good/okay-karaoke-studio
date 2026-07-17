@@ -7,6 +7,7 @@ import {
   resolveVocalStyle,
   type FontSizeStyle,
   type StageStyle,
+  type VocalStyle,
 } from '../lib/video-style'
 
 export function previewFontKey(style: FontSizeStyle) {
@@ -41,6 +42,18 @@ export function designPreviewFonts(stageStyle: StageStyle) {
     if (stageFrame.footer.visible) values.push(stageFrame.footer)
   }
   values.push(stageStyle.lyrics)
+  return uniqueFonts(values)
+}
+
+export function vocalDesignPreviewFonts(stageStyle: StageStyle, vocalStyle: VocalStyle) {
+  const values: FontSizeStyle[] = []
+  const stageFrame = stageStyle.stageFrame
+  if (stageFrame.enabled) {
+    if (stageFrame.brand.visible) values.push(stageFrame.brand)
+    if (stageFrame.clock.visible) values.push(stageFrame.clock)
+    if (stageFrame.footer.visible) values.push(stageFrame.footer)
+  }
+  values.push(resolveVocalStyle(stageStyle.lyrics, vocalStyle))
   return uniqueFonts(values)
 }
 

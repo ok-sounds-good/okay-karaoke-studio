@@ -592,18 +592,31 @@ button[aria-disabled='true'] {
 
 .vocal-track-card__top {
   display: grid;
-  grid-template-columns: 25px minmax(0, 1fr) 19px;
+  grid-template-columns: 25px minmax(0, 1fr) auto;
   align-items: center;
   gap: 7px;
+}
+
+.track-sung-field {
+  display: inline-grid;
+  grid-template-columns: auto 18px;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 800;
 }
 
 .vocal-track-card__number {
   display: grid;
   width: 25px;
   height: 25px;
+  padding: 0;
   place-items: center;
+  border: 0;
   border-radius: 7px;
   color: #102020;
+  cursor: pointer;
 }
 
 .vocal-track-card__top input[type="text"],

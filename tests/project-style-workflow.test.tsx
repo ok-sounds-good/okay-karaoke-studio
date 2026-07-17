@@ -4,7 +4,12 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../src/App'
-import { createDemoProject, parseProject, serializeProject } from '../src/lib/model'
+import {
+  createDemoProject,
+  createVocalTrack,
+  parseProject,
+  serializeProject,
+} from '../src/lib/model'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -170,8 +175,8 @@ async function settle() {
   })
 }
 
-async function click(button: HTMLButtonElement) {
-  await act(async () => button.click())
+async function click(element: HTMLElement) {
+  await act(async () => element.click())
   await settle()
 }
 
@@ -352,7 +357,7 @@ describe('project Style App integration', () => {
     projectLyricsTab.focus()
     dispatchKey(projectLyricsTab, { code: 'ArrowRight', key: 'ArrowRight' })
     await settle()
-    expect(document.activeElement).toBe(buttonByText('Background'))
+    expect(document.activeElement).toBe(buttonByText('Lead Vocal'))
     expect(document.querySelector('.time-readout strong')?.textContent).toBe(timeBeforeTabs)
 
     await click(buttonByLabel('Play'))
@@ -401,20 +406,76 @@ describe('project Style App integration', () => {
 
     await click(style)
     await chooseSize('96')
+    await click(buttonByText('Lead Vocal'))
+    await act(async () =>
+      document.querySelector<HTMLInputElement>('[aria-label="Override Lead Vocal Sung"]')!.click(),
+    )
+    await chooseColor('Lead Vocal sung color', '#123456')
     await click(buttonByText('Apply & close'))
     expect(buttonByLabel('Undo').disabled).toBe(false)
     expect(document.querySelector('[title="Unsaved changes"]')).not.toBeNull()
 
     await click(buttonByLabel('Save project'))
-    expect(
-      parseProject(harness.saveProject.mock.calls.at(-1)?.[0].contents).stageStyle.lyrics.sizePx,
-    ).toBe(96)
+    const applied = parseProject(harness.saveProject.mock.calls.at(-1)?.[0].contents)
+    expect(applied.stageStyle.lyrics.sizePx).toBe(96)
+    expect(applied.tracks[0].vocalStyle.sungColor).toBe('#123456')
     await click(buttonByLabel('Undo'))
     await click(buttonByLabel('Save project'))
-    expect(
-      parseProject(harness.saveProject.mock.calls.at(-1)?.[0].contents).stageStyle.lyrics.sizePx,
-    ).toBe(82)
+    const undone = parseProject(harness.saveProject.mock.calls.at(-1)?.[0].contents)
+    expect(undone.stageStyle.lyrics.sizePx).toBe(82)
+    expect(undone.tracks[0].vocalStyle.sungColor).toBeNull()
     expect(buttonByLabel('Redo').disabled).toBe(false)
+    await click(buttonByLabel('Redo'))
+    await click(buttonByLabel('Save project'))
+    const redone = parseProject(harness.saveProject.mock.calls.at(-1)?.[0].contents)
+    expect(redone.stageStyle.lyrics.sizePx).toBe(96)
+    expect(redone.tracks[0].vocalStyle.sungColor).toBe('#123456')
+  })
+
+  it('targets the selected preserved vocal by stable ID through Apply and reopen', async () => {
+    const opened = createDemoProject()
+    const harmony = createVocalTrack({ id: 'harmony-track', name: 'Harmony' })
+    opened.tracks.push(harmony)
+    harness.openProject.mockResolvedValueOnce({
+      requestId: 'multi-vocal-open',
+      path: '/projects/multi-vocal.oks',
+      contents: serializeProject(opened),
+    })
+    await click(buttonByLabel('Open project'))
+
+    const selectHarmony = buttonByLabel('Select Harmony vocal track')
+    selectHarmony.focus()
+    expect(document.activeElement).toBe(selectHarmony)
+    await click(selectHarmony)
+    expect(selectHarmony.getAttribute('aria-pressed')).toBe('true')
+
+    await click(buttonByText('Style'))
+    await click(buttonByText('Lead Vocal'))
+    await act(async () =>
+      document.querySelector<HTMLInputElement>('[aria-label="Override Lead Vocal Sung"]')!.click(),
+    )
+    await chooseColor('Lead Vocal sung color', '#234567')
+    await click(buttonByText('Apply & close'))
+    await click(buttonByLabel('Save project'))
+
+    const savedContents = harness.saveProject.mock.calls.at(-1)?.[0].contents
+    const saved = parseProject(savedContents)
+    expect(saved.tracks[0]).toEqual(opened.tracks[0])
+    expect(saved.tracks[1]).toEqual({
+      ...harmony,
+      vocalStyle: { ...harmony.vocalStyle, sungColor: '#234567' },
+    })
+
+    harness.openProject.mockResolvedValueOnce({
+      requestId: 'multi-vocal-reopen',
+      path: '/projects/multi-vocal-reopened.oks',
+      contents: savedContents,
+    })
+    await click(buttonByLabel('Open project'))
+    await click(buttonByLabel('Save project'))
+    expect(parseProject(harness.saveProject.mock.calls.at(-1)?.[0].contents).tracks).toEqual(
+      saved.tracks,
+    )
   })
 
   it('applies, saves, reopens, undoes, and redoes accepted background and frame roles once', async () => {

@@ -103,43 +103,73 @@ export const InspectorPanel = memo(function InspectorPanel({
                   onClick={() => onSelectTrack(track.id)}
                 >
                   <div className="vocal-track-card__top">
-                    <span className="vocal-track-card__number" style={{ background: sungColor }}>
+                    <button
+                      type="button"
+                      className="vocal-track-card__number"
+                      style={{ background: sungColor }}
+                      aria-label={`Select ${track.name} vocal track`}
+                      aria-pressed={track.id === activeTrackId}
+                      title={`Select ${track.name} vocal track`}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        onSelectTrack(track.id)
+                      }}
+                    >
                       <Mic2 size={13} />
-                    </span>
+                    </button>
                     <input
                       aria-label={`Track ${index + 1} name`}
                       value={track.name}
                       onClick={(event) => event.stopPropagation()}
                       onChange={(event) => onUpdateTrack(track.id, { name: event.target.value })}
                     />
-                    <input
-                      className="track-color"
-                      aria-label={`Track ${index + 1} color`}
-                      title={`Choose color for ${track.name}`}
-                      type="color"
-                      value={sungColor}
+                    <label
+                      className="track-sung-field"
                       onClick={(event) => event.stopPropagation()}
-                      onChange={(event) => onUpdateTrack(track.id, {
-                        vocalStyle: { ...track.vocalStyle, sungColor: event.target.value },
-                      })}
-                    />
+                    >
+                      <span>Sung</span>
+                      <input
+                        className="track-color"
+                        aria-label={`Track ${index + 1} Sung color`}
+                        title={`Choose Sung color for ${track.name}`}
+                        type="color"
+                        value={sungColor}
+                        onChange={(event) =>
+                          onUpdateTrack(track.id, {
+                            vocalStyle: { ...track.vocalStyle, sungColor: event.target.value },
+                          })
+                        }
+                      />
+                    </label>
                   </div>
                   <div className="vocal-track-card__status">
-                    <span>{complete}/{total} timed</span>
+                    <span>
+                      {complete}/{total} timed
+                    </span>
                     {project.tracks.length > 1 && (
                       <div>
                         <button
                           className={track.muted ? 'is-on' : ''}
                           aria-label={`${track.muted ? 'Unmute' : 'Mute'} ${track.name}`}
                           title={`${track.muted ? 'Unmute' : 'Mute'} ${track.name}`}
-                          onClick={(event) => { event.stopPropagation(); onUpdateTrack(track.id, { muted: !track.muted }) }}
-                        >M</button>
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            onUpdateTrack(track.id, { muted: !track.muted })
+                          }}
+                        >
+                          M
+                        </button>
                         <button
                           className={track.solo ? 'is-on' : ''}
                           aria-label={`${track.solo ? 'Disable solo for' : 'Solo'} ${track.name}`}
                           title={`${track.solo ? 'Disable solo for' : 'Solo'} ${track.name}`}
-                          onClick={(event) => { event.stopPropagation(); onUpdateTrack(track.id, { solo: !track.solo }) }}
-                        >S</button>
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            onUpdateTrack(track.id, { solo: !track.solo })
+                          }}
+                        >
+                          S
+                        </button>
                       </div>
                     )}
                   </div>

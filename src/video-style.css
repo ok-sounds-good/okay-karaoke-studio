@@ -16,7 +16,7 @@
 
 .style-destination-tabs {
   display: grid;
-  grid-template-columns: repeat(var(--style-destination-count), minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 5px;
   padding: 7px;
   border-bottom: 1px solid var(--line-soft);
@@ -352,6 +352,115 @@
   font-family: ui-monospace, monospace;
   font-size: 9px;
   text-overflow: ellipsis;
+}
+
+.lead-vocal-style-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.style-override-field {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.style-override-field > fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.style-override-field > fieldset:disabled {
+  opacity: 0.58;
+}
+
+.style-override-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted-strong);
+  font-size: 10px;
+}
+
+.style-override-toggle > strong {
+  color: var(--muted-strong);
+  letter-spacing: 0.04em;
+}
+
+.style-override-toggle > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.lead-vocal-color-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.style-override-color-field .style-color-field > div {
+  min-height: 36px;
+}
+
+.lead-vocal-alignment {
+  min-width: 0;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 9px;
+}
+
+.lead-vocal-alignment legend {
+  padding: 0 4px;
+  color: var(--muted-strong);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.lead-vocal-alignment > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.lead-vocal-alignment label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 31px;
+  gap: 5px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text-soft);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.lead-vocal-alignment label:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--panel-strong);
+  color: var(--accent-soft);
+}
+
+.style-unavailable {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 9px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
 }
 
 .karaoke-stage.is-designing-title-card [data-title-card-design-role] {

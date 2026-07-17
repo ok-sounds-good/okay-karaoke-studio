@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   cloneStageStyle,
+  cloneVocalStyle,
   fontFaceKey,
   fontTypefaceKey,
   type FontSizeStyle,
@@ -8,28 +9,41 @@ import {
   type StageStyle,
   type TextStyle,
   type VisibleTextStyle,
+  type VocalStyle,
 } from '../lib/video-style'
 
 export interface ProjectStyleOwnerKey {
   readonly projectId: string
   /** Changes only when project authority is replaced, never for history edits. */
   readonly lifecycle: number
+  readonly trackId: string | null
 }
 
 export type ProjectStyleCommitResult = 'applied' | 'noop' | 'blocked' | 'stale'
 
-export type ProjectStyleDraftChange = StageStyle | ((draft: StageStyle) => StageStyle)
+export interface ProjectStyleDraft {
+  stageStyle: StageStyle
+  vocalStyle: VocalStyle
+}
+
+export type ProjectStyleDraftChange =
+  ProjectStyleDraft | ((draft: ProjectStyleDraft) => ProjectStyleDraft)
+
+export type StageStyleDraftChange = StageStyle | ((draft: StageStyle) => StageStyle)
 
 export interface ProjectStyleSessionOptions {
   ownerKey: ProjectStyleOwnerKey
-  source: StageStyle
+  source: ProjectStyleDraft
   canInteract: () => boolean
   requestFonts: () => void
-  commitDraft: (ownerKey: ProjectStyleOwnerKey, draft: StageStyle) => ProjectStyleCommitResult
+  commitDraft: (
+    ownerKey: ProjectStyleOwnerKey,
+    draft: ProjectStyleDraft,
+  ) => ProjectStyleCommitResult
 }
 
 export interface ProjectStyleSession {
-  readonly draft: StageStyle | null
+  readonly draft: ProjectStyleDraft | null
   readonly isOpen: boolean
   readonly blocksProjectActions: boolean
   readonly isDirty: boolean
@@ -41,8 +55,8 @@ export interface ProjectStyleSession {
 
 interface ActiveSession {
   ownerKey: ProjectStyleOwnerKey
-  baseline: StageStyle
-  draft: StageStyle
+  baseline: ProjectStyleDraft
+  draft: ProjectStyleDraft
   trigger: HTMLElement
 }
 
@@ -94,12 +108,66 @@ export function sameStageStyle(left: StageStyle, right: StageStyle): boolean {
   )
 }
 
+function sameNullableTypeface(
+  left: VocalStyle['typeface'],
+  right: VocalStyle['typeface'],
+): boolean {
+  return left === null || right === null
+    ? left === right
+    : fontTypefaceKey(left) === fontTypefaceKey(right)
+}
+
+function sameNullableFace(left: VocalStyle['fontStyle'], right: VocalStyle['fontStyle']): boolean {
+  return left === null || right === null ? left === right : fontFaceKey(left) === fontFaceKey(right)
+}
+
+function sameNullableColor(left: string | null, right: string | null): boolean {
+  return left === null || right === null ? left === right : sameColor(left, right)
+}
+
+export function sameVocalStyle(left: VocalStyle, right: VocalStyle): boolean {
+  return (
+    sameNullableTypeface(left.typeface, right.typeface) &&
+    sameNullableFace(left.fontStyle, right.fontStyle) &&
+    left.sizePx === right.sizePx &&
+    sameNullableColor(left.sungColor, right.sungColor) &&
+    sameNullableColor(left.unsungColor, right.unsungColor) &&
+    left.alignment === right.alignment &&
+    left.previewMs === right.previewMs &&
+    left.syncAid.enabled === right.syncAid.enabled &&
+    left.syncAid.minLeadMs === right.syncAid.minLeadMs &&
+    left.syncAid.maxLeadMs === right.syncAid.maxLeadMs
+  )
+}
+
+export function cloneProjectStyleDraft(draft: ProjectStyleDraft): ProjectStyleDraft {
+  return {
+    stageStyle: cloneStageStyle(draft.stageStyle),
+    vocalStyle: cloneVocalStyle(draft.vocalStyle),
+  }
+}
+
+export function sameProjectStyleDraft(left: ProjectStyleDraft, right: ProjectStyleDraft): boolean {
+  return (
+    sameStageStyle(left.stageStyle, right.stageStyle) &&
+    sameVocalStyle(left.vocalStyle, right.vocalStyle)
+  )
+}
+
 function cloneOwnerKey(ownerKey: ProjectStyleOwnerKey): ProjectStyleOwnerKey {
-  return { projectId: ownerKey.projectId, lifecycle: ownerKey.lifecycle }
+  return {
+    projectId: ownerKey.projectId,
+    lifecycle: ownerKey.lifecycle,
+    trackId: ownerKey.trackId,
+  }
 }
 
 function sameOwnerKey(left: ProjectStyleOwnerKey, right: ProjectStyleOwnerKey): boolean {
-  return left.projectId === right.projectId && left.lifecycle === right.lifecycle
+  return (
+    left.projectId === right.projectId &&
+    left.lifecycle === right.lifecycle &&
+    left.trackId === right.trackId
+  )
 }
 
 export function useProjectStyleSession({
@@ -109,7 +177,7 @@ export function useProjectStyleSession({
   requestFonts,
   commitDraft,
 }: ProjectStyleSessionOptions): ProjectStyleSession {
-  const sourceSnapshot = useMemo(() => cloneStageStyle(source), [source])
+  const sourceSnapshot = useMemo(() => cloneProjectStyleDraft(source), [source])
   const [storedSession, setStoredSession] = useState<ActiveSession | null>(null)
   const sessionRef = useRef<ActiveSession | null>(storedSession)
   const applyingRef = useRef<ActiveSession | null>(null)
@@ -155,7 +223,7 @@ export function useProjectStyleSession({
     if (active && !sameOwnerKey(active.ownerKey, ownerRef.current)) {
       abandon(active)
     }
-  }, [abandon, ownerKey.lifecycle, ownerKey.projectId])
+  }, [abandon, ownerKey.lifecycle, ownerKey.projectId, ownerKey.trackId])
 
   const start = useCallback(
     (trigger: HTMLElement) => {
@@ -167,7 +235,7 @@ export function useProjectStyleSession({
       if (!canInteractRef.current()) return
 
       const openingOwner = cloneOwnerKey(ownerRef.current)
-      const baseline = cloneStageStyle(sourceRef.current)
+      const baseline = cloneProjectStyleDraft(sourceRef.current)
       // Chromium requires this request to remain in the authorized user action.
       requestFontsRef.current()
       if (!sameOwnerKey(openingOwner, ownerRef.current)) return
@@ -175,7 +243,7 @@ export function useProjectStyleSession({
       const next: ActiveSession = {
         ownerKey: openingOwner,
         baseline,
-        draft: cloneStageStyle(baseline),
+        draft: cloneProjectStyleDraft(baseline),
         trigger,
       }
       sessionRef.current = next
@@ -190,10 +258,10 @@ export function useProjectStyleSession({
       if (!active || !canInteractRef.current()) return
 
       const candidate =
-        typeof update === 'function' ? update(cloneStageStyle(active.draft)) : update
+        typeof update === 'function' ? update(cloneProjectStyleDraft(active.draft)) : update
       const next: ActiveSession = {
         ...active,
-        draft: cloneStageStyle(candidate),
+        draft: cloneProjectStyleDraft(candidate),
       }
       sessionRef.current = next
       setStoredSession((current) => (current === active ? next : current))
@@ -210,7 +278,10 @@ export function useProjectStyleSession({
     applyingRef.current = active
     let result: ProjectStyleCommitResult
     try {
-      result = commitDraftRef.current(cloneOwnerKey(active.ownerKey), cloneStageStyle(active.draft))
+      result = commitDraftRef.current(
+        cloneOwnerKey(active.ownerKey),
+        cloneProjectStyleDraft(active.draft),
+      )
     } catch (error) {
       if (applyingRef.current === active) applyingRef.current = null
       throw error
@@ -241,10 +312,10 @@ export function useProjectStyleSession({
     storedSession && sameOwnerKey(storedSession.ownerKey, ownerKey) ? storedSession : null
 
   return {
-    draft: active ? cloneStageStyle(active.draft) : null,
+    draft: active ? cloneProjectStyleDraft(active.draft) : null,
     isOpen: active !== null,
     blocksProjectActions: active !== null,
-    isDirty: active ? !sameStageStyle(active.baseline, active.draft) : false,
+    isDirty: active ? !sameProjectStyleDraft(active.baseline, active.draft) : false,
     start,
     change,
     apply,

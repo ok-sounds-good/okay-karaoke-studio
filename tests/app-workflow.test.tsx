@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import App from '../src/App'
 import { createDemoProject, parseProject, serializeProject } from '../src/lib/model'
+import { DEFAULT_VOCAL_STYLE } from '../src/lib/video-style'
 
 interface StudioHarness {
   studio: StudioApi
@@ -362,7 +363,8 @@ describe('mounted first-time workflow', () => {
   })
 
   it('stores the inspector color shortcut as a vocal sung-color override', async () => {
-    const input = document.querySelector<HTMLInputElement>('[aria-label="Track 1 color"]')!
+    const input = document.querySelector<HTMLInputElement>('[aria-label="Track 1 Sung color"]')!
+    expect(input.closest('label')?.textContent).toContain('Sung')
     await act(async () => {
       const nativeValueSetter = Object.getOwnPropertyDescriptor(
         HTMLInputElement.prototype,
@@ -375,7 +377,7 @@ describe('mounted first-time workflow', () => {
     await act(async () => harness.sendMenuAction('save'))
 
     const saved = parseProject(harness.saveProject.mock.calls.at(-1)?.[0].contents)
-    expect(saved.tracks[0].vocalStyle.sungColor).toBe('#123456')
+    expect(saved.tracks[0].vocalStyle).toEqual({ ...DEFAULT_VOCAL_STYLE, sungColor: '#123456' })
     expect(saved.tracks[0]).not.toHaveProperty('color')
   })
 
@@ -442,7 +444,9 @@ describe('mounted first-time workflow', () => {
     expect(document.querySelector('.time-readout strong')?.textContent).toBe('0:00.000')
     expect(document.querySelector<HTMLSelectElement>('[aria-label="Playback speed"]')?.title).toBe('Set playback speed')
     expect(document.querySelector<HTMLInputElement>('[aria-label="Volume"]')?.title).toBe('Adjust playback volume')
-    expect(document.querySelector<HTMLInputElement>('[aria-label="Track 1 color"]')?.title).toBe('Choose color for Lead Vocal')
+    expect(
+      document.querySelector<HTMLInputElement>('[aria-label="Track 1 Sung color"]')?.title,
+    ).toBe('Choose Sung color for Lead Vocal')
   })
 
   it('keeps timing-block selection on bare Space while Shift+Space controls playback', async () => {

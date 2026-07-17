@@ -10,7 +10,7 @@ import {
   serializeProject,
   validateProject,
 } from './lib/model'
-import { cloneStageStyle, cloneVocalStyle, type StageStyle } from './lib/video-style'
+import { DEFAULT_VOCAL_STYLE, cloneStageStyle, cloneVocalStyle } from './lib/video-style'
 import { TopBar } from './components/TopBar'
 import { InspectorPanel } from './components/InspectorPanel'
 import { KaraokePreview } from './components/KaraokePreview'
@@ -26,8 +26,10 @@ import { useWaveform } from './hooks/useWaveform'
 import { useProjectActionArbiter } from './hooks/useProjectActionArbiter'
 import {
   sameStageStyle,
+  sameVocalStyle,
   useProjectStyleSession,
   type ProjectStyleCommitResult,
+  type ProjectStyleDraft,
   type ProjectStyleOwnerKey,
 } from './hooks/useProjectStyleSession'
 import type { ProjectActionKind, ProjectActionRequest } from './lib/project-action-arbiter'
@@ -409,41 +411,76 @@ export default function App() {
     [exportDialogOpen, lyricsDialogOpen, syncMode, validationDialogOpen, workflowGuideOpen],
   )
   const commitProjectStyle = useCallback(
-    (ownerKey: ProjectStyleOwnerKey, draft: StageStyle): ProjectStyleCommitResult => {
+    (ownerKey: ProjectStyleOwnerKey, draft: ProjectStyleDraft): ProjectStyleCommitResult => {
       const current = projectRef.current
+      const currentTrack =
+        ownerKey.trackId === null
+          ? null
+          : current.tracks.find((track) => track.id === ownerKey.trackId)
       if (
         ownerKey.projectId !== current.id ||
-        ownerKey.lifecycle !== projectLifecycleSequenceRef.current
+        ownerKey.lifecycle !== projectLifecycleSequenceRef.current ||
+        (ownerKey.trackId === null ? current.tracks.length > 0 : !currentTrack)
       ) {
         return 'stale'
       }
       if (projectMutationIsBlocked()) return 'blocked'
-      if (sameStageStyle(current.stageStyle, draft)) return 'noop'
+      if (
+        sameStageStyle(current.stageStyle, draft.stageStyle) &&
+        (!currentTrack || sameVocalStyle(currentTrack.vocalStyle, draft.vocalStyle))
+      ) {
+        return 'noop'
+      }
 
-      const acceptedStyle = cloneStageStyle(draft)
+      const acceptedStageStyle = cloneStageStyle(draft.stageStyle)
+      const acceptedVocalStyle = cloneVocalStyle(draft.vocalStyle)
       commitHistory((latest) => {
+        const targetIndex =
+          ownerKey.trackId === null
+            ? -1
+            : latest.tracks.findIndex((track) => track.id === ownerKey.trackId)
         if (
           ownerKey.projectId !== latest.id ||
           ownerKey.lifecycle !== projectLifecycleSequenceRef.current ||
-          sameStageStyle(latest.stageStyle, acceptedStyle)
+          (ownerKey.trackId === null ? latest.tracks.length > 0 : targetIndex < 0)
         ) {
           return latest
         }
+        const stageChanged = !sameStageStyle(latest.stageStyle, acceptedStageStyle)
+        const vocalChanged =
+          targetIndex >= 0 &&
+          !sameVocalStyle(latest.tracks[targetIndex]!.vocalStyle, acceptedVocalStyle)
+        if (!stageChanged && !vocalChanged) return latest
         return {
           ...latest,
-          stageStyle: cloneStageStyle(acceptedStyle),
+          stageStyle: stageChanged ? cloneStageStyle(acceptedStageStyle) : latest.stageStyle,
+          tracks: vocalChanged
+            ? latest.tracks.map((track, index) =>
+                index === targetIndex
+                  ? { ...track, vocalStyle: cloneVocalStyle(acceptedVocalStyle) }
+                  : track,
+              )
+            : latest.tracks,
         }
       })
       return 'applied'
     },
     [commitHistory, projectMutationIsBlocked],
   )
+  const projectStyleSource = useMemo<ProjectStyleDraft>(
+    () => ({
+      stageStyle: project.stageStyle,
+      vocalStyle: activeTrack?.vocalStyle ?? DEFAULT_VOCAL_STYLE,
+    }),
+    [activeTrack?.vocalStyle, project.stageStyle],
+  )
   const styleSession = useProjectStyleSession({
     ownerKey: {
       projectId: project.id,
       lifecycle: projectLifecycleSequenceRef.current,
+      trackId: activeTrack?.id ?? null,
     },
-    source: project.stageStyle,
+    source: projectStyleSource,
     canInteract: canInteractWithProjectStyle,
     requestFonts: installedFonts.request,
     commitDraft: commitProjectStyle,
@@ -1556,6 +1593,7 @@ export default function App() {
           project={project}
           playbackMs={playback.currentMs}
           draft={styleSession.draft}
+          leadVocalAvailable={Boolean(activeTrack)}
           fonts={installedFonts}
           onDraftChange={styleSession.change}
           onRetryFonts={installedFonts.request}

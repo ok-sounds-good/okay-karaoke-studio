@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ProjectStyleEditor } from '../src/components/ProjectStyleEditor'
 import type {
+  ProjectStyleDraft,
   ProjectStyleDraftChange,
   ProjectStyleSession,
 } from '../src/hooks/useProjectStyleSession'
@@ -12,6 +13,7 @@ import { createProject } from '../src/lib/model'
 import {
   FONT_SIZE_OPTIONS,
   SYSTEM_MONOSPACE_TYPEFACE,
+  cloneVocalStyle,
   resolveFontFace,
   type FontFaceDescriptor,
   type FontTypefaceDescriptor,
@@ -19,6 +21,9 @@ import {
 } from '../src/lib/video-style'
 
 type EditorProps = ComponentProps<typeof ProjectStyleEditor>
+type EditorOverrides = Omit<Partial<EditorProps>, 'draft'> & {
+  draft?: ProjectStyleDraft | StageStyle
+}
 
 const READY_FONTS: EditorProps['fonts'] = {
   typefaces: [],
@@ -27,6 +32,12 @@ const READY_FONTS: EditorProps['fonts'] = {
 }
 
 function applyChange(change: ProjectStyleDraftChange | undefined, current: StageStyle) {
+  expect(change).toBeTypeOf('function')
+  if (typeof change !== 'function') throw new Error('Expected a functional draft update')
+  return change({ stageStyle: current, vocalStyle: cloneVocalStyle() }).stageStyle
+}
+
+function applyDraftChange(change: ProjectStyleDraftChange | undefined, current: ProjectStyleDraft) {
   expect(change).toBeTypeOf('function')
   if (typeof change !== 'function') throw new Error('Expected a functional draft update')
   return change(current)
@@ -103,12 +114,21 @@ describe('ProjectStyleEditor', () => {
     vi.restoreAllMocks()
   })
 
-  const renderEditor = async (overrides: Partial<EditorProps> = {}) => {
+  const renderEditor = async (overrides: EditorOverrides = {}) => {
     const project = overrides.project ?? createProject({ id: 'style-project' })
+    const suppliedDraft = overrides.draft
+    const draft: ProjectStyleDraft =
+      suppliedDraft && 'stageStyle' in suppliedDraft
+        ? suppliedDraft
+        : {
+            stageStyle: suppliedDraft ?? project.stageStyle,
+            vocalStyle: cloneVocalStyle(project.tracks[0]?.vocalStyle),
+          }
     const props: EditorProps = {
       project,
       playbackMs: 1_250,
-      draft: project.stageStyle,
+      draft,
+      leadVocalAvailable: Boolean(project.tracks[0]),
       fonts: READY_FONTS,
       onDraftChange: vi.fn(),
       onRetryFonts: vi.fn(),
@@ -116,6 +136,7 @@ describe('ProjectStyleEditor', () => {
       onCancel: vi.fn(),
       onApply: vi.fn(),
       ...overrides,
+      draft,
     }
     await act(async () => {
       root.render(<ProjectStyleEditor {...props} />)
@@ -144,9 +165,9 @@ describe('ProjectStyleEditor', () => {
     expect(dialog.children[1]).toBe(preview)
     expect(designLine.textContent).toBe('Sing the first words and see the rest')
     expect(container.textContent).not.toContain('This is')
-    expect(container.textContent).not.toContain(draft.lyrics.typeface.family)
+    expect(container.textContent).not.toContain(draft.stageStyle.lyrics.typeface.family)
     expect(container.querySelector<HTMLInputElement>('[role="combobox"]')?.value).toBe(
-      draft.lyrics.typeface.family,
+      draft.stageStyle.lyrics.typeface.family,
     )
 
     await act(async () => {
@@ -158,12 +179,13 @@ describe('ProjectStyleEditor', () => {
   it('uses automatic accessible destination tabs with wrapping Arrow and Home/End navigation', async () => {
     await renderEditor()
     const tabs = [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')]
-    const [lyricsTab, backgroundTab, titleCardTab, stageFrameTab] = tabs
+    const [lyricsTab, leadVocalTab, backgroundTab, titleCardTab, stageFrameTab] = tabs
     const controlledPanel = (tab: HTMLButtonElement) =>
       container.querySelector<HTMLElement>(`#${CSS.escape(tab.getAttribute('aria-controls')!)}`)!
 
     expect(tabs.map((tab) => tab.textContent)).toEqual([
       'Project lyrics',
+      'Lead Vocal',
       'Background',
       'Title card',
       'Stage frame',
@@ -172,8 +194,10 @@ describe('ProjectStyleEditor', () => {
 
     lyricsTab.focus()
     await act(async () => keyDown(lyricsTab, { code: 'ArrowRight', key: 'ArrowRight' }))
-    expect(document.activeElement).toBe(backgroundTab)
+    expect(document.activeElement).toBe(leadVocalTab)
 
+    await act(async () => keyDown(leadVocalTab, { code: 'ArrowRight', key: 'ArrowRight' }))
+    expect(document.activeElement).toBe(backgroundTab)
     await act(async () => keyDown(backgroundTab, { code: 'ArrowRight', key: 'ArrowRight' }))
     expect(document.activeElement).toBe(titleCardTab)
     await act(async () => keyDown(titleCardTab, { code: 'ArrowRight', key: 'ArrowRight' }))
@@ -187,6 +211,129 @@ describe('ProjectStyleEditor', () => {
     const wrapped = keyDown(lyricsTab, { code: 'ArrowLeft', key: 'ArrowLeft' })
     expect(wrapped.defaultPrevented).toBe(true)
     expect(document.activeElement).toBe(stageFrameTab)
+  })
+
+  it('edits independent Lead Vocal overrides without exposing latent vocal timing fields', async () => {
+    const project = createProject({ id: 'lead-vocal-style' })
+    const face = project.stageStyle.lyrics.fontStyle
+    const vocalStyle = {
+      ...cloneVocalStyle(project.tracks[0]!.vocalStyle),
+      fontStyle: { ...face },
+      sizePx: 96 as const,
+      sungColor: '#123456',
+      unsungColor: '#654321',
+      previewMs: 7_000,
+      syncAid: { enabled: true, minLeadMs: 2_500, maxLeadMs: 6_000 },
+    }
+    let draft: ProjectStyleDraft = {
+      stageStyle: structuredClone(project.stageStyle),
+      vocalStyle,
+    }
+    const onDraftChange = vi.fn<ProjectStyleSession['change']>()
+    await renderEditor({ project, draft, onDraftChange })
+    await act(async () => findButton(container, 'Lead Vocal').click())
+
+    const panel = container.querySelector<HTMLElement>('[role="tabpanel"]:not([hidden])')!
+    expect(
+      [...panel.querySelectorAll('.style-override-toggle > strong')].map(
+        (label) => label.textContent,
+      ),
+    ).toEqual(['Typeface', 'Face', 'Size', 'Sung', 'Unsung'])
+    expect(
+      [...panel.querySelectorAll('.style-override-color-field output')].map(
+        (output) => output.textContent,
+      ),
+    ).toEqual(['#123456', '#654321'])
+    expect(container.textContent).not.toContain('Preview time')
+    expect(container.textContent).not.toContain('Sync aid')
+    expect(container.querySelector('[aria-label="Lead Vocal design preview"]')).not.toBeNull()
+    expect(container.querySelector('[data-design-preview="lead-vocal"] .sync-aid')).toBeNull()
+    expect(
+      [
+        ...panel.querySelectorAll<HTMLSelectElement>('[aria-label="Lead Vocal font size"] option'),
+      ].map((option) => Number(option.value)),
+    ).toEqual(FONT_SIZE_OPTIONS)
+
+    await act(async () =>
+      panel.querySelector<HTMLInputElement>('[aria-label="Override Lead Vocal Typeface"]')!.click(),
+    )
+    draft = applyDraftChange(onDraftChange.mock.calls.at(-1)?.[0], draft)
+    expect(draft.vocalStyle.typeface).toEqual(project.stageStyle.lyrics.typeface)
+    expect(draft.vocalStyle).toMatchObject({
+      fontStyle: face,
+      sizePx: 96,
+      sungColor: '#123456',
+      unsungColor: '#654321',
+      previewMs: 7_000,
+      syncAid: { enabled: true, minLeadMs: 2_500, maxLeadMs: 6_000 },
+    })
+
+    await renderEditor({ project, draft, onDraftChange })
+    const typeface = container.querySelector<HTMLInputElement>(
+      '[aria-label="Lead Vocal typeface"]',
+    )!
+    await act(async () => typeface.focus())
+    await act(async () =>
+      container
+        .querySelector<HTMLElement>('[data-font-family="System Monospace"]')!
+        .dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })),
+    )
+    draft = applyDraftChange(onDraftChange.mock.calls.at(-1)?.[0], draft)
+    expect(draft.vocalStyle.typeface).toEqual(SYSTEM_MONOSPACE_TYPEFACE)
+    expect(draft.vocalStyle.fontStyle).toEqual(face)
+    expect(draft.vocalStyle.sizePx).toBe(96)
+
+    for (const [label, field] of [
+      ['Face', 'fontStyle'],
+      ['Size', 'sizePx'],
+      ['Unsung', 'unsungColor'],
+    ] as const) {
+      await renderEditor({ project, draft, onDraftChange })
+      const before = structuredClone(draft.vocalStyle)
+      await act(async () =>
+        container
+          .querySelector<HTMLInputElement>(`[aria-label="Override Lead Vocal ${label}"]`)!
+          .click(),
+      )
+      draft = applyDraftChange(onDraftChange.mock.calls.at(-1)?.[0], draft)
+      expect(draft.vocalStyle).toEqual({ ...before, [field]: null })
+    }
+
+    await renderEditor({ project, draft, onDraftChange })
+    await act(async () =>
+      container.querySelector<HTMLInputElement>('[aria-label="Override Lead Vocal Sung"]')!.click(),
+    )
+    draft = applyDraftChange(onDraftChange.mock.calls.at(-1)?.[0], draft)
+    expect(draft.vocalStyle.sungColor).toBeNull()
+    await renderEditor({ project, draft, onDraftChange })
+    await act(async () =>
+      container.querySelector<HTMLInputElement>('[aria-label="Override Lead Vocal Sung"]')!.click(),
+    )
+    draft = applyDraftChange(onDraftChange.mock.calls.at(-1)?.[0], draft)
+    expect(draft.vocalStyle.sungColor).toBe(project.stageStyle.lyrics.sungColor)
+
+    await renderEditor({ project, draft, onDraftChange })
+    await act(async () =>
+      container.querySelector<HTMLInputElement>('input[value="right"]')!.click(),
+    )
+    draft = applyDraftChange(onDraftChange.mock.calls.at(-1)?.[0], draft)
+    expect(draft.vocalStyle.alignment).toBe('right')
+    expect(draft.vocalStyle.previewMs).toBe(7_000)
+    expect(draft.vocalStyle.syncAid).toEqual({
+      enabled: true,
+      minLeadMs: 2_500,
+      maxLeadMs: 6_000,
+    })
+  })
+
+  it('makes Lead Vocal unavailable when the project has no track', async () => {
+    const project = createProject({ id: 'no-vocal-track' })
+    project.tracks = []
+    await renderEditor({ project })
+    await act(async () => findButton(container, 'Lead Vocal').click())
+
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('no vocal track')
+    expect(container.querySelector('.style-override-toggle')).toBeNull()
   })
 
   it('edits independent Stage frame roles while preserving its unexposed frame line', async () => {
@@ -459,7 +606,8 @@ describe('ProjectStyleEditor', () => {
 
   it('replaces only the typeface through an immutable functional update', async () => {
     const onDraftChange = vi.fn<ProjectStyleSession['change']>()
-    const { draft } = await renderEditor({ onDraftChange })
+    const { draft: aggregateDraft } = await renderEditor({ onDraftChange })
+    const draft = aggregateDraft.stageStyle
     const snapshot = structuredClone(draft)
     const input = container.querySelector<HTMLInputElement>('[role="combobox"]')!
 
@@ -521,7 +669,8 @@ describe('ProjectStyleEditor', () => {
 
   it('uses the exact size options and rejects an injected unsupported value', async () => {
     const onDraftChange = vi.fn<ProjectStyleSession['change']>()
-    const { draft } = await renderEditor({ onDraftChange })
+    const { draft: aggregateDraft } = await renderEditor({ onDraftChange })
+    const draft = aggregateDraft.stageStyle
     const select = container.querySelector<HTMLSelectElement>(
       '[aria-label="Project lyric font size"]',
     )!

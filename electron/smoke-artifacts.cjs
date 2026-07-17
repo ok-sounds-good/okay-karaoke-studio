@@ -7,7 +7,7 @@ const path = require('node:path')
 const COMPLETION_MARKERS = new Set(['failure.json', 'result.json'])
 const ARTIFACT_LIMITS = Object.freeze({
   maxArtifactBytes: 8 * 1024 * 1024,
-  maxArtifacts: 15,
+  maxArtifacts: 16,
   maxNameLength: 100,
   maxTotalBytes: 32 * 1024 * 1024,
 })

@@ -1,6 +1,10 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
 import type { InstalledFontState } from '../hooks/useInstalledFonts'
-import type { ProjectStyleSession } from '../hooks/useProjectStyleSession'
+import type {
+  ProjectStyleDraft,
+  ProjectStyleSession,
+  StageStyleDraftChange,
+} from '../hooks/useProjectStyleSession'
 import type { KaraokeProject } from '../lib/model'
 import {
   FONT_SIZE_OPTIONS,
@@ -16,6 +20,7 @@ import {
 } from '../lib/video-style'
 import '../video-style.css'
 import { KaraokePreview } from './KaraokePreview'
+import { LeadVocalStylePanel } from './LeadVocalStylePanel'
 import { StageFrameStylePanel, type StageFrameRole } from './StageFrameStylePanel'
 import { StyleDestinationTabs } from './StyleDestinationTabs'
 import { TitleCardStylePanel, type TitleCardRole } from './TitleCardStylePanel'
@@ -25,7 +30,8 @@ import { Button } from './ui'
 export interface ProjectStyleEditorProps {
   project: KaraokeProject
   playbackMs: number
-  draft: StageStyle
+  draft: ProjectStyleDraft
+  leadVocalAvailable: boolean
   fonts: InstalledFontState
   onDraftChange: ProjectStyleSession['change']
   onRetryFonts: () => void
@@ -44,6 +50,7 @@ function isEditableTarget(target: EventTarget | null) {
 
 const STYLE_DESTINATIONS = [
   { id: 'project-lyrics', label: 'Project lyrics' },
+  { id: 'lead-vocal', label: 'Lead Vocal' },
   { id: 'background', label: 'Background' },
   { id: 'title-card', label: 'Title card' },
   { id: 'stage-frame', label: 'Stage frame' },
@@ -82,6 +89,7 @@ export function ProjectStyleEditor({
   project,
   playbackMs,
   draft,
+  leadVocalAvailable,
   fonts,
   onDraftChange,
   onRetryFonts,
@@ -94,21 +102,27 @@ export function ProjectStyleEditor({
   const [destination, setDestination] = useState<StyleDestination>('project-lyrics')
   const [titleCardPreviewRole, setTitleCardPreviewRole] = useState<TitleCardRole>('eyebrow')
   const [stageFramePreviewRole, setStageFramePreviewRole] = useState<StageFrameRole>('brand')
-  const lyrics = draft.lyrics
-  const background = draft.background
+  const stageStyle = draft.stageStyle
+  const lyrics = stageStyle.lyrics
+  const background = stageStyle.background
+  const changeStageStyle = (change: StageStyleDraftChange) =>
+    onDraftChange((current) => ({
+      ...current,
+      stageStyle: typeof change === 'function' ? change(current.stageStyle) : change,
+    }))
   const effectiveFaceKey = fontFaceKey(resolveFontFace(lyrics.typeface, lyrics.fontStyle))
   const update = (patch: Partial<LyricTextStyle>) =>
-    onDraftChange((current) => ({
+    changeStageStyle((current) => ({
       ...current,
       lyrics: { ...current.lyrics, ...patch },
     }))
   const chooseTypeface = (typeface: FontTypefaceDescriptor) =>
-    onDraftChange((current) => ({
+    changeStageStyle((current) => ({
       ...current,
       lyrics: { ...current.lyrics, typeface: cloneTypeface(typeface) },
     }))
   const updateBackground = (patch: Partial<StageStyle['background']>) =>
-    onDraftChange((current) => ({
+    changeStageStyle((current) => ({
       ...current,
       background: { ...current.background, ...patch },
     }))
@@ -199,7 +213,7 @@ export function ProjectStyleEditor({
                       fontSynthesis: 'none',
                     }}
                     onClick={() => {
-                      onDraftChange((current) => ({
+                      changeStageStyle((current) => ({
                         ...current,
                         lyrics: { ...current.lyrics, fontStyle: cloneFontFace(face) },
                       }))
@@ -246,6 +260,17 @@ export function ProjectStyleEditor({
               />
             </section>
           </section>
+
+          <LeadVocalStylePanel
+            active={destination === 'lead-vocal'}
+            available={leadVocalAvailable}
+            draft={draft}
+            fonts={fonts}
+            id={`${titleId}-lead-vocal-panel`}
+            labelledBy={`${titleId}-lead-vocal-tab`}
+            onDraftChange={onDraftChange}
+            onRetryFonts={onRetryFonts}
+          />
 
           <section
             id={`${titleId}-background-panel`}
@@ -308,22 +333,22 @@ export function ProjectStyleEditor({
 
           <TitleCardStylePanel
             active={destination === 'title-card'}
-            draft={draft}
+            draft={stageStyle}
             fonts={fonts}
             id={`${titleId}-title-card-panel`}
             labelledBy={`${titleId}-title-card-tab`}
-            onDraftChange={onDraftChange}
+            onDraftChange={changeStageStyle}
             onRetryFonts={onRetryFonts}
             onSelectedRoleChange={setTitleCardPreviewRole}
           />
 
           <StageFrameStylePanel
             active={destination === 'stage-frame'}
-            draft={draft}
+            draft={stageStyle}
             fonts={fonts}
             id={`${titleId}-stage-frame-panel`}
             labelledBy={`${titleId}-stage-frame-tab`}
-            onDraftChange={onDraftChange}
+            onDraftChange={changeStageStyle}
             onRetryFonts={onRetryFonts}
             onSelectedRoleChange={setStageFramePreviewRole}
           />
@@ -346,10 +371,12 @@ export function ProjectStyleEditor({
         selectedWordIds={new Set()}
         designMode={
           destination === 'title-card'
-            ? { target: 'title-card', role: titleCardPreviewRole, stageStyle: draft }
+            ? { target: 'title-card', role: titleCardPreviewRole, stageStyle }
             : destination === 'stage-frame'
-              ? { target: 'stage-frame', role: stageFramePreviewRole, stageStyle: draft }
-              : { target: destination, stageStyle: draft }
+              ? { target: 'stage-frame', role: stageFramePreviewRole, stageStyle }
+              : destination === 'lead-vocal'
+                ? { target: 'lead-vocal', stageStyle, vocalStyle: draft.vocalStyle }
+                : { target: destination, stageStyle }
         }
       />
     </main>

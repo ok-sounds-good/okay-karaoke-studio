@@ -1,6 +1,6 @@
 import { useId, useState } from 'react'
 import type { InstalledFontState } from '../hooks/useInstalledFonts'
-import type { ProjectStyleSession } from '../hooks/useProjectStyleSession'
+import type { StageStyleDraftChange } from '../hooks/useProjectStyleSession'
 import type { StageStyle, VisibleTextStyle } from '../lib/video-style'
 import { VisibleTextRoleEditor } from './VisibleTextRoleEditor'
 
@@ -18,7 +18,7 @@ interface StageFrameStylePanelProps {
   fonts: InstalledFontState
   id: string
   labelledBy: string
-  onDraftChange: ProjectStyleSession['change']
+  onDraftChange: (change: StageStyleDraftChange) => void
   onRetryFonts: () => void
   onSelectedRoleChange: (role: StageFrameRole) => void
 }

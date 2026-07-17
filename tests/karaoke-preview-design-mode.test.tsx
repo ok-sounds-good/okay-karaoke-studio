@@ -12,6 +12,7 @@ import { logicalStagePx } from '../src/lib/stage-layout'
 import {
   SYSTEM_MONOSPACE_TYPEFACE,
   cloneStageStyle,
+  cloneVocalStyle,
   fontFaceKey,
   fontTypefaceKey,
   genericFontFace,
@@ -151,6 +152,36 @@ describe('Karaoke Preview project-lyrics design mode', () => {
     expect(panel?.querySelector('[aria-label="Lyric line advance mode"]')).toBeNull()
     expect(panel?.textContent).not.toContain('Edit text')
     expect(panel?.querySelector('.title-card')).toBeNull()
+
+    const vocalStyle = cloneVocalStyle()
+    Object.assign(vocalStyle, {
+      typeface: SYSTEM_MONOSPACE_TYPEFACE,
+      fontStyle: genericFontFace(SYSTEM_MONOSPACE_TYPEFACE, 'Bold'),
+      sizePx: 96,
+      sungColor: '#102030',
+      unsungColor: '#405060',
+      alignment: 'right',
+      previewMs: 8_000,
+      syncAid: { enabled: true, minLeadMs: 2_000, maxLeadMs: 6_000 },
+    })
+    rendered.innerHTML = previewMarkup({
+      target: 'lead-vocal',
+      stageStyle: designMode.stageStyle,
+      vocalStyle,
+    })
+    const vocalPanel = rendered.querySelector<HTMLElement>(
+      '[aria-label="Lead Vocal design preview"]',
+    )!
+    const vocalLine = vocalPanel.querySelector<HTMLElement>(
+      '[data-design-preview="lead-vocal"] .stage-line',
+    )!
+    expect(vocalLine.classList.contains('stage-line--right')).toBe(true)
+    expect(vocalLine.dataset.stageFontSize).toBe('96')
+    expect(vocalLine.style.getPropertyValue('--track-color')).toBe('#102030')
+    expect(vocalLine.style.getPropertyValue('--unsung-color')).toBe('#405060')
+    expect(vocalPanel.querySelectorAll('.stage-line')).toHaveLength(1)
+    expect(vocalPanel.querySelector('.sync-aid')).toBeNull()
+    expect(vocalPanel.textContent).not.toContain('This is')
   })
 
   it('renders canonical content through the complete Background draft with exact CSS evidence', () => {

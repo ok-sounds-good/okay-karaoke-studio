@@ -5,8 +5,11 @@ import { describe, expect, it } from 'vitest'
 
 const ACTIVE_WORKFLOW = '.circleci/config.yml'
 const INACTIVE_GITHUB_WORKFLOW = '.github/workflows/ci.yml.disabled'
+const PULL_REQUEST_TEMPLATE = '.github/pull_request_template.md'
+const SDLC = 'docs/SDLC.md'
 const INACTIVE_GITHUB_WORKFLOW_SHA256 =
   '126817fa990d8c87fd8de8e8bae94165c91c3e219f37bfbd5121f50971874e86'
+const APPROVAL_JOB = 'authorize-native-candidate'
 const MAIN_PUSH_CLAUSE = '(pipeline.event.name == "push" and pipeline.git.branch == "main")'
 const MAIN_PULL_REQUEST_CLAUSE =
   '(pipeline.event.name == "pull_request" and ' +
@@ -31,6 +34,41 @@ function jobBlock(workflow: string, name: 'unit-tests' | 'macOS' | 'Windows') {
   expect(start).toBeGreaterThan(0)
   expect(end).toBeGreaterThan(start)
   return workflow.slice(start, end)
+}
+
+function workflowJobBlock(workflow: string, name: string) {
+  const workflowStart = workflow.indexOf('workflows:\n  ci:')
+  const jobsStart = workflow.indexOf('    jobs:', workflowStart)
+  const start = workflow.indexOf(`\n      - ${name}:`, jobsStart)
+  const next = workflow.indexOf('\n      - ', start + 1)
+  expect(workflowStart).toBeGreaterThan(0)
+  expect(jobsStart).toBeGreaterThan(workflowStart)
+  expect(start).toBeGreaterThan(jobsStart)
+  return workflow.slice(start, next === -1 ? workflow.length : next)
+}
+
+function workflowRequirements(job: string) {
+  const lines = job.split('\n')
+  const requires = lines.findIndex((line) => line.trim() === 'requires:')
+  if (requires === -1) return []
+
+  const dependencies: string[] = []
+  for (const line of lines.slice(requires + 1)) {
+    const match = line.match(/^\s+- ([^\n]+)$/u)
+    if (!match) break
+    dependencies.push(match[1])
+  }
+  return dependencies
+}
+
+function dependenciesPassed(
+  requirements: string[],
+  includedJobs: Set<string>,
+  passedJobs: Set<string>,
+) {
+  return requirements.every(
+    (requirement) => !includedJobs.has(requirement) || passedJobs.has(requirement),
+  )
 }
 
 function workflowWhenExpression(workflow: string) {
@@ -93,7 +131,7 @@ describe('hosted CI contract', () => {
     expect(archived).toMatch(/on:\n  push:\n  pull_request:/u)
   })
 
-  it('defines one portable gate followed by protected native compatibility jobs', async () => {
+  it('places a PR-only approval between the portable gate and native compatibility jobs', async () => {
     const workflow = await repositoryFile(ACTIVE_WORKFLOW)
     expect(workflow).toContain('  unit-tests:\n    docker:\n      - image: cimg/node:24.0.2')
     expect(workflow).toContain('  unit-tests:\n    docker:')
@@ -104,10 +142,16 @@ describe('hosted CI contract', () => {
     )
     expect(workflow).toContain('resource_class: windows.medium')
     expect(workflow).toContain('      - unit-tests:\n          name: unit tests')
+
+    const approval = workflowJobBlock(workflow, APPROVAL_JOB)
+    expect(approval).toContain(`      - ${APPROVAL_JOB}:\n          type: approval`)
+    expect(workflowRequirements(approval)).toEqual(['unit tests'])
+    expect(approval).toContain('filters: pipeline.event.name == "pull_request"')
+    expect(approval).not.toMatch(/\b(?:command|environment|run|steps):/u)
+
     for (const platform of ['macOS', 'Windows']) {
-      expect(workflow).toContain(
-        `      - ${platform}:\n          requires:\n            - unit tests`,
-      )
+      const native = workflowJobBlock(workflow, platform)
+      expect(workflowRequirements(native)).toEqual(['unit tests', APPROVAL_JOB])
     }
     expect(workflow).not.toContain('npm test')
   })
@@ -164,6 +208,40 @@ describe('hosted CI contract', () => {
     expect(expression).not.toMatch(/"(?:api|schedule|custom_webhook)"/u)
   })
 
+  it('preserves current-main native execution when the PR approval is filtered out', async () => {
+    const workflow = await repositoryFile(ACTIVE_WORKFLOW)
+    const approval = workflowJobBlock(workflow, APPROVAL_JOB)
+    expect(approval).toContain('filters: pipeline.event.name == "pull_request"')
+
+    const nativeRequirements = (['macOS', 'Windows'] as const).map((platform) =>
+      workflowRequirements(workflowJobBlock(workflow, platform)),
+    )
+    expect(nativeRequirements).toEqual([
+      ['unit tests', APPROVAL_JOB],
+      ['unit tests', APPROVAL_JOB],
+    ])
+
+    // CircleCI ignores a required job that its filter omitted from this pipeline.
+    const mainPushJobs = new Set(['unit tests', 'macOS', 'Windows'])
+    const linuxPassed = new Set(['unit tests'])
+    for (const requirements of nativeRequirements) {
+      expect(dependenciesPassed(requirements, mainPushJobs, linuxPassed)).toBe(true)
+    }
+
+    const pullRequestJobs = new Set(['unit tests', APPROVAL_JOB, 'macOS', 'Windows'])
+    for (const requirements of nativeRequirements) {
+      expect(dependenciesPassed(requirements, pullRequestJobs, linuxPassed)).toBe(false)
+      expect(
+        dependenciesPassed(requirements, pullRequestJobs, new Set(['unit tests', APPROVAL_JOB])),
+      ).toBe(true)
+    }
+
+    const sdlc = await repositoryFile(SDLC)
+    expect(sdlc).toMatch(
+      /CircleCI ignores a\s+filtered-out dependency, so macOS and Windows still run after Linux succeeds\./u,
+    )
+  })
+
   it('runs formatting, portable tests, and the renderer build once on Linux', async () => {
     const workflow = await repositoryFile(ACTIVE_WORKFLOW)
     const portable = jobBlock(workflow, 'unit-tests')
@@ -189,6 +267,53 @@ describe('hosted CI contract', () => {
       "describe('range-formatting algorithm'",
     )
     expect(await repositoryFile('vite.config.ts')).not.toContain('format-diff-core.test.ts')
+  })
+
+  it('documents the named phases and durable exact-head approval evidence', async () => {
+    const sdlc = await repositoryFile(SDLC)
+    expect(sdlc).toContain('**Portable phase (`unit tests`).**')
+    expect(sdlc).toContain('**Authorization phase (`authorize-native-candidate`).**')
+    expect(sdlc).toContain('**Native-candidate phase (`macOS` and `Windows`).**')
+    expect(sdlc).toContain('record the full commit SHA, the CircleCI actor')
+    expect(sdlc).toContain('and the CircleCI workflow URL or ID')
+    expect(sdlc).toMatch(/A new pull-request head[\s\S]+always requires a fresh approval/u)
+    expect(sdlc).toMatch(/cancel\s+the old-head rerun/u)
+    expect(sdlc).toMatch(
+      /Broader full-environment macOS and Windows suites belong to a future\s+official-v1 deployment or release step/u,
+    )
+    expect(sdlc).toContain('replace the targeted final Windows MVP acceptance run')
+
+    const pullRequestTemplate = await repositoryFile(PULL_REQUEST_TEMPLATE)
+    expect(pullRequestTemplate).toContain(`- \`${APPROVAL_JOB}\` exact-head approval:`)
+    expect(pullRequestTemplate).toContain('- Full commit SHA:')
+    expect(pullRequestTemplate).toContain('- Approving CircleCI actor:')
+    expect(pullRequestTemplate).toContain('- CircleCI workflow URL or ID:')
+    expect(pullRequestTemplate).toContain(
+      'A new pull-request head requires a fresh approval record.',
+    )
+  })
+
+  it('forbids automatic reruns and diagnostic environment or payload dumps', async () => {
+    const workflow = await repositoryFile(ACTIVE_WORKFLOW)
+    expect(workflow).not.toMatch(/\b(?:automatic_retry|auto_rerun_delay|max_auto_reruns)\s*:/u)
+
+    const prohibitedDiagnostics = [
+      /(?:^|\n)\s*(?:command:\s*)?printenv(?:\s|$)/iu,
+      /(?:^|\n)\s*(?:command:\s*)?env\s*(?:[|>]|$)/iu,
+      /\bGet-ChildItem\s+Env:/iu,
+      /\bSet-PSDebug\b[^\n]*-Trace\b/iu,
+      /\b(?:ba|z|k)?sh\s+-[a-z]*x[a-z]*\b/iu,
+      /\bset\s+-[^\n]*x\b/iu,
+      /\b(?:cat|type|Get-Content)\b[^\n]*(?:event|payload)/iu,
+      /\b(?:echo|printf|Write-Host|Write-Output)\b[^\n]*(?:CIRCLE_[A-Z0-9_]+|pipeline\.event|payload)/iu,
+    ]
+    for (const diagnostic of prohibitedDiagnostics) {
+      expect(workflow).not.toMatch(diagnostic)
+    }
+
+    const sdlc = await repositoryFile(SDLC)
+    expect(sdlc).toContain('Hosted failures are not retried automatically.')
+    expect(sdlc).toContain("use only CircleCI's **Rerun workflow\nfrom failed** action")
   })
 
   it('limits native jobs to image decoding and one live Electron lifecycle smoke', async () => {

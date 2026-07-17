@@ -6,6 +6,7 @@ import {
   projectPreviewFonts,
   titleCardDesignPreviewFonts,
   usePreviewFonts,
+  vocalDesignPreviewFonts,
 } from '../hooks/usePreviewFonts'
 import type { KaraokeProject, LyricDisplaySettings } from '../lib/model'
 import { formatTime } from '../lib/model'
@@ -21,11 +22,13 @@ import {
   type LyricTextStyle,
   type StageStyle,
   type TextStyle,
+  type VocalStyle,
 } from '../lib/video-style'
 import { Button } from './ui'
 
 export type KaraokePreviewDesignMode =
   | { target: 'project-lyrics' | 'background'; stageStyle: StageStyle }
+  | { target: 'lead-vocal'; stageStyle: StageStyle; vocalStyle: VocalStyle }
   | {
       target: 'title-card'
       role: keyof StageStyle['titleCard']
@@ -75,6 +78,20 @@ function projectLyricsDesignLine(style: LyricTextStyle): StageFrameLine {
     style: resolveVocalStyle(style, DEFAULT_VOCAL_STYLE),
     words: PROJECT_LYRICS_DESIGN_WORDS.map((text, index) => ({
       id: `project-lyrics-design-word-${index}`,
+      text,
+      progress: index === 0 ? 1 : index === 1 ? 0.5 : 0,
+    })),
+  }
+}
+
+function leadVocalDesignLine(stageStyle: StageStyle, vocalStyle: VocalStyle): StageFrameLine {
+  return {
+    id: 'lead-vocal-design-line',
+    trackId: 'lead-vocal-design-track',
+    text: PROJECT_LYRICS_DESIGN_WORDS.join(' '),
+    style: resolveVocalStyle(stageStyle.lyrics, vocalStyle),
+    words: PROJECT_LYRICS_DESIGN_WORDS.map((text, index) => ({
+      id: `lead-vocal-design-word-${index}`,
       text,
       progress: index === 0 ? 1 : index === 1 ? 0.5 : 0,
     })),
@@ -240,21 +257,25 @@ export function KaraokePreview({
     () => previewFrameStateAt(previewProject, playbackMs),
     [playbackMs, previewProject],
   )
-  const designLine = useMemo(
-    () =>
-      designMode?.target === 'project-lyrics'
-        ? projectLyricsDesignLine(designMode.stageStyle.lyrics)
-        : null,
-    [designMode],
-  )
+  const designLine = useMemo(() => {
+    if (designMode?.target === 'project-lyrics') {
+      return projectLyricsDesignLine(designMode.stageStyle.lyrics)
+    }
+    if (designMode?.target === 'lead-vocal') {
+      return leadVocalDesignLine(designMode.stageStyle, designMode.vocalStyle)
+    }
+    return null
+  }, [designMode])
   const isTitleCardDesign = designMode?.target === 'title-card'
   const stageFrameDesign = designMode?.target === 'stage-frame' ? designMode : null
   const selectedFonts =
     designMode?.target === 'project-lyrics'
       ? designPreviewFonts(designMode.stageStyle)
-      : isTitleCardDesign
-        ? titleCardDesignPreviewFonts(designMode.stageStyle, designMode.role)
-        : projectPreviewFonts(previewProject)
+      : designMode?.target === 'lead-vocal'
+        ? vocalDesignPreviewFonts(designMode.stageStyle, designMode.vocalStyle)
+        : isTitleCardDesign
+          ? titleCardDesignPreviewFonts(designMode.stageStyle, designMode.role)
+          : projectPreviewFonts(previewProject)
   const fontRuntime = usePreviewFonts(selectedFonts)
   const stageStyle = designStyle ?? frame.stageStyle
   const background = stageStyle.background
@@ -288,11 +309,13 @@ export function KaraokePreview({
   const designLabel =
     designMode?.target === 'background'
       ? 'Background'
-      : isTitleCardDesign
-        ? 'Title card'
-        : stageFrameDesign
-          ? 'Stage frame'
-          : 'Project lyrics'
+      : designMode?.target === 'lead-vocal'
+        ? 'Lead Vocal'
+        : isTitleCardDesign
+          ? 'Title card'
+          : stageFrameDesign
+            ? 'Stage frame'
+            : 'Project lyrics'
   const rolePresentation = (role: StageFrameTextRole) => {
     const selected = stageFrameDesign?.role === role
     const outputVisible = stageFrame.enabled && stageFrame[role].visible
@@ -476,7 +499,7 @@ export function KaraokePreview({
         )}
         <div className="karaoke-stage__content">
           {designLine ? (
-            <div className="active-lines" data-design-preview="project-lyrics">
+            <div className="active-lines" data-design-preview={designMode?.target}>
               <PreviewLine
                 line={designLine}
                 selectedWordIds={selectedWordIds}
