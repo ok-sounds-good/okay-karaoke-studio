@@ -103,9 +103,20 @@ export const InspectorPanel = memo(function InspectorPanel({
                   onClick={() => onSelectTrack(track.id)}
                 >
                   <div className="vocal-track-card__top">
-                    <span className="vocal-track-card__number" style={{ background: sungColor }}>
+                    <button
+                      type="button"
+                      className="vocal-track-card__number"
+                      style={{ background: sungColor }}
+                      aria-label={`Select ${track.name} vocal track`}
+                      aria-pressed={track.id === activeTrackId}
+                      title={`Select ${track.name} vocal track`}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        onSelectTrack(track.id)
+                      }}
+                    >
                       <Mic2 size={13} />
-                    </span>
+                    </button>
                     <input
                       aria-label={`Track ${index + 1} name`}
                       value={track.name}

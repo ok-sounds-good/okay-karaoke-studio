@@ -611,9 +611,12 @@ button[aria-disabled='true'] {
   display: grid;
   width: 25px;
   height: 25px;
+  padding: 0;
   place-items: center;
+  border: 0;
   border-radius: 7px;
   color: #102020;
+  cursor: pointer;
 }
 
 .vocal-track-card__top input[type="text"],

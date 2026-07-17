@@ -443,11 +443,11 @@ describe('project Style App integration', () => {
     })
     await click(buttonByLabel('Open project'))
 
-    const harmonyCard = document
-      .querySelector<HTMLInputElement>('[aria-label="Track 2 name"]')!
-      .closest<HTMLElement>('.vocal-track-card')!
-    await click(harmonyCard)
-    expect(harmonyCard.classList.contains('is-active')).toBe(true)
+    const selectHarmony = buttonByLabel('Select Harmony vocal track')
+    selectHarmony.focus()
+    expect(document.activeElement).toBe(selectHarmony)
+    await click(selectHarmony)
+    expect(selectHarmony.getAttribute('aria-pressed')).toBe('true')
 
     await click(buttonByText('Style'))
     await click(buttonByText('Lead Vocal'))
