@@ -313,12 +313,15 @@ Karaoke Studio identity.
 
 ### Platform and distribution
 
-- Windows x64 is an MVP distribution target. Windows CI produces both an
-  unsigned NSIS installer and the unpacked application, launch-smokes the
-  packaged application, and runs the applicable font, visual, project, and
-  H.264/AAC media gates. Windows signing and automatic updates remain deferred.
-- macOS and Windows must both pass their protected platform checks. Linux
-  packaging and Linux-specific media verification remain Roadmap work.
+- Windows x64 is an MVP distribution target. A separately initiated final
+  Windows acceptance run produces both an unsigned NSIS installer and the
+  unpacked application, launch-smokes the packaged application, and runs the
+  applicable font, visual, project, and H.264/AAC media gates. Routine
+  pull-request CI does not repeat this final-candidate package proof. Windows
+  signing and automatic updates remain deferred.
+- The portable Linux gate and thin macOS and Windows compatibility gates must
+  pass for the final candidate. Linux packaging and Linux-specific media
+  verification remain Roadmap work.
 - The Windows package continues to use the guided external-FFmpeg setup unless
   the user separately approves a redistributable FFmpeg build and its compliance
   plan. Bundling FFmpeg is not required for Windows MVP acceptance.
@@ -435,9 +438,10 @@ Karaoke Studio identity.
 - [x] Undo and redo cover lyric replacement, timing edits, and timing clears.
 - [ ] Required tests, builds, packages, and platform CI are green for the final
   acceptance candidate.
-- [ ] Windows x64 CI produces an unsigned NSIS installer and unpacked app,
-  launch-smokes the packaged app, and passes the applicable font, visual,
-  project, and H.264/AAC media gates without bundling FFmpeg by default.
+- [ ] A separately initiated Windows x64 acceptance run produces an unsigned
+      NSIS installer and unpacked app, launch-smokes the packaged app, and passes
+      the applicable font, visual, project, and H.264/AAC media gates without
+      bundling FFmpeg by default.
 - [ ] The inspector has no decorative **Document / Project** header row, and
   **Style** is available beside the Okay Karaoke Studio identity in the
   application header.
