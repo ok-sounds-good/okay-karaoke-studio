@@ -130,7 +130,7 @@ lead-owned lifecycle operations listed in `AGENTS.md`.
    merge blocker until it is fixed or the maintainer explicitly accepts it with
    a linked GitHub issue created before merge. Merge only after the review
    passes at the exact head, all review conversations are resolved, and the
-   required macOS and Windows CI checks pass.
+   required protected CI checks pass.
 7. Squash merge, delete the branch, and leave `main` green and releasable.
 
 One human approval becomes required when a second maintainer is reliably available.
@@ -140,9 +140,13 @@ requirement avoids a solo maintainer deadlock.
 ## Protected hosted CI
 
 CircleCI is the active hosted provider. The repository-owned
-`.circleci/config.yml` defines parallel `macOS` and `Windows` jobs, reported to
-GitHub as `ci/circleci: macOS` and `ci/circleci: Windows`. The previous GitHub
-Actions definition remains available, unchanged, at
+`.circleci/config.yml` defines a Linux `unit tests` gate followed by thin
+`macOS` and `Windows` compatibility jobs. CircleCI reports them to GitHub as
+`ci/circleci: unit tests`, `ci/circleci: macOS`, and
+`ci/circleci: Windows`. The protected contexts remain
+`ci/circleci: macOS` and `ci/circleci: Windows`; both require the Linux job to
+succeed first. The previous GitHub Actions definition remains available,
+unchanged, at
 `.github/workflows/ci.yml.disabled`; its non-workflow extension keeps it from
 triggering or consuming GitHub-hosted capacity.
 
@@ -154,28 +158,41 @@ rejects tag pushes, ordinary non-`main` branch pushes, and pull requests targeti
 another branch. It also excludes manual and API pipelines; broadening that
 contract requires an explicit repository change.
 
-Both CircleCI contexts are merge blockers. A provider outage, unreachable
-executor, account-capacity failure, or job that never starts is recorded as
-**unavailable — not passed** and does not satisfy the platform gate. All feasible
-local and environment-dependent checks remain mandatory, but never infer a pass
-from another platform or from static inspection. A temporary exception requires
-a new explicit user decision and a linked Issue; there is no standing outage
+The protected macOS and Windows contexts are merge blockers. Both depend on the
+Linux gate, so portable validation is transitively required and duplicated
+platform work does not begin when it has already failed. This dependency does
+not claim that `ci/circleci: unit tests` is itself directly required by the
+GitHub ruleset. A provider outage, unreachable executor, account-capacity
+failure, or job that never starts is recorded as **unavailable — not passed**
+and does not satisfy the applicable gate. Never infer a pass from another
+platform or from static inspection. A temporary exception requires a new
+explicit user decision and a linked Issue; there is no standing outage
 exception.
 
-CircleCI stores each platform's validated production-window evidence directory.
-Artifact retention is controlled by the CircleCI plan rather than
-`.circleci/config.yml`; retain the prior 14-day target in **Plan → Usage Controls**
-when the active plan exposes that setting. Configure redundant-workflow
-auto-cancellation in the CircleCI project settings when available.
+Routine hosted CI is a compatibility backstop, not the primary proof for a
+change. The Linux job runs changed-range `bun run format:check`, the portable
+unit suite, and the renderer build once. The macOS and Windows jobs run only the
+native-image decode smoke and live Electron lifecycle smoke on their respective
+platforms. Configure redundant-workflow auto-cancellation in the CircleCI
+project settings when available.
 
-Formatting cleanliness and process-heavy formatter and Codex-hook integration
-are repository-quality responsibilities, not Windows product acceptance gates.
-The macOS job runs changed-range `bun run format:check` and the complete
-`bun run test` suite once, including `tests/format-diff.test.ts`. The Windows job
-runs the ordinary unit suite with only that integration file excluded; it still
-runs the fast `tests/format-diff-core.test.ts` coverage and every Windows product
-and platform gate for native image decoding, renderer build, production-window
-visual evidence and artifact storage, and unpacked application packaging.
+At the exact pull-request head, the Developer runs focused checks for the change
+plus the complete local regression gates required by the validation matrix and
+records the commands, environment, and results. The independent Reviewer reruns
+the applicable commands from that exact head and inspects the evidence rather
+than accepting the report on trust. The Orchestrator verifies that the two
+records and protected statuses agree; it need not become a third full-suite
+executor unless a discrepancy or uncovered risk requires investigation.
+
+Routine CircleCI does not capture visual artifacts or build application
+packages. For a visual change, the Developer captures the required local
+before/after evidence and the Reviewer independently inspects it and exercises
+the affected workflow. Electron and packaging changes still run
+`bun run dist:dir` under the local validation matrix. The final Windows MVP
+candidate receives a separately initiated Windows acceptance run that produces
+the installer and unpacked application and exercises the package, font, visual,
+project, and media gates; that final-candidate proof is not charged to every
+pull request.
 
 Changing CI providers does not close Windows x64 MVP validation, the final
 user-held product-acceptance gate, or the FFmpeg redistribution decision in
@@ -190,16 +207,15 @@ A change is done when:
 - `bun run test` and `bun run build` pass.
 - `bun run dist:dir` passes when Electron, packaging, preload, or main-process code
   changes.
-- The final Windows MVP candidate produces an unsigned x64 NSIS installer and
-  unpacked app in Windows CI, launch-smokes the package, and runs the applicable
-  font, visual, project, and H.264/AAC media gates.
+- A separately initiated final Windows MVP acceptance run produces an unsigned
+  x64 NSIS installer and unpacked app, launch-smokes the package, and runs the
+  applicable font, visual, project, and H.264/AAC media gates.
 - `bun run test:video` passes when video rendering, audio muxing, frame planning,
   or media-process code changes.
 - User-visible behavior is checked manually; visual changes include before/after
-  evidence in the pull request. For Video Style Editor changes, the protected
-  macOS and Windows jobs also capture ordered 1280 x 720 production-window
-  evidence; inspect those short-lived artifacts rather than treating a passing
-  geometry assertion as a design review.
+  evidence in the pull request at the required desktop sizes. The Reviewer
+  inspects that evidence and the affected workflow rather than treating a
+  passing geometry assertion or hosted smoke check as a design review.
 - During the clean-slate pre-v1 MVP, project-schema changes include exhaustive
   current-format round-trip coverage and clear rejection of unsupported earlier
   artifacts. Migration coverage becomes required once the product promises
@@ -219,7 +235,9 @@ A change is done when:
 Create one repository branch ruleset named `protect-main` in **Settings → Rules →
 Rulesets**. Target the default branch and set enforcement to **Active**. The
 required check names are `ci/circleci: macOS` and `ci/circleci: Windows`; use a
-protected pull request to confirm enforcement.
+protected pull request to confirm enforcement. Both jobs require
+`ci/circleci: unit tests`, so that upstream gate must pass before either
+protected context can succeed.
 
 Configure:
 
@@ -248,10 +266,10 @@ repository](https://docs.github.com/en/repositories/configuring-branches-and-mer
 and each protection in [Available rules for
 rulesets](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets).
 
-This repository is currently private. GitHub currently makes repository rulesets
-for private repositories available on Pro, Team, and Enterprise Cloud plans. If
-the account plan does not expose rulesets, use the equivalent classic branch
-protection settings or revisit protection when the repository becomes public.
+This repository is public and protects `main` with a repository ruleset. When a
+protected context is renamed or added, update the ruleset as part of that CI
+change and confirm the exact context names on a protected pull request before
+merge.
 
 ## Releases
 

@@ -14,6 +14,13 @@ bun run test
 bun run build
 ```
 
+At the exact pull-request head, the Developer runs focused checks for the
+change plus the full applicable regression matrix. The independent Reviewer
+reruns that validation and inspects any manual or visual evidence. Routine
+hosted CI runs portable tests and the renderer build once on Linux, then only
+native-image and live-Electron compatibility smokes on macOS and Windows. It
+does not replace local visual, package, or media validation.
+
 Use a short-lived branch from current `main` and open a pull request. The pull
 request should explain the problem, intended scope, verification, risks, data or
 export-format impact, and what was deliberately left out. For MVP work, identify

@@ -1,14 +1,8 @@
 import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
-import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-const require = createRequire(import.meta.url)
-const visualResults = require('../scripts/visual-result-validation.cjs') as {
-  STYLE_SESSION_SCENARIO: string
-  expectedFilesForScenario: (scenario: string) => readonly string[]
-}
 const ACTIVE_WORKFLOW = '.circleci/config.yml'
 const INACTIVE_GITHUB_WORKFLOW = '.github/workflows/ci.yml.disabled'
 const INACTIVE_GITHUB_WORKFLOW_SHA256 =
@@ -17,29 +11,7 @@ const MAIN_PUSH_CLAUSE = '(pipeline.event.name == "push" and pipeline.git.branch
 const MAIN_PULL_REQUEST_CLAUSE =
   '(pipeline.event.name == "pull_request" and ' +
   'pipeline.event.github.pull_request.base.ref == "main")'
-const BASELINE_EVIDENCE_PATH = '.ci-artifacts/video-style-visual'
-const STYLE_SESSION_EVIDENCE_PATH = '.ci-artifacts/style-session-visual'
-const STYLE_SESSION_EVIDENCE_LEAVES = [
-  '01-project-lyrics-1280x720.png',
-  '02-project-lyrics-1440x900.png',
-  '03-background-gradient-draft-1280x720.png',
-  '04-background-solid-draft-1280x720.png',
-  '05-background-solid-applied-1280x720.png',
-  '06-title-card-destination-1280x720.png',
-  '07-title-card-eyebrow-draft-1280x720.png',
-  '08-title-card-artist-draft-1280x720.png',
-  '09-title-card-applied-1280x720.png',
-  '10-stage-frame-destination-1280x720.png',
-  '11-stage-frame-master-off-draft-1280x720.png',
-  '12-stage-frame-clock-draft-1280x720.png',
-  '13-stage-frame-footer-hidden-draft-1280x720.png',
-  '14-stage-frame-applied-1280x720.png',
-  'result.json',
-]
-const VISUAL_TEST_INVOCATIONS = [
-  'bun run test:visual',
-  'bun run test:visual -- --scenario=style-session',
-]
+const LIVE_ELECTRON_TEST = 'tests/visual-smoke-renderer-fatal-live.test.ts'
 
 interface PipelineEvent {
   branch?: string
@@ -51,9 +23,10 @@ async function repositoryFile(name: string) {
   return readFile(join(process.cwd(), name), 'utf8')
 }
 
-function jobBlock(workflow: string, name: 'macOS' | 'Windows') {
+function jobBlock(workflow: string, name: 'unit-tests' | 'macOS' | 'Windows') {
   const start = workflow.indexOf(`  ${name}:`)
-  const endMarker = name === 'macOS' ? '  Windows:' : '\nworkflows:'
+  const endMarker =
+    name === 'unit-tests' ? '  macOS:' : name === 'macOS' ? '  Windows:' : '\nworkflows:'
   const end = workflow.indexOf(endMarker, start + 1)
   expect(start).toBeGreaterThan(0)
   expect(end).toBeGreaterThan(start)
@@ -74,13 +47,6 @@ function workflowWhenExpression(workflow: string) {
     .trim()
     .replace(/^(?:>|\|)[+-]?\s*/u, '')
     .replace(/\s+/gu, ' ')
-}
-
-function trimmedLines(value: string, predicate: (line: string) => boolean) {
-  return value
-    .split(/\r?\n/gu)
-    .map((line) => line.trim())
-    .filter(predicate)
 }
 
 function pipelineValue(event: PipelineEvent, name: string) {
@@ -116,7 +82,7 @@ function evaluateWorkflowWhen(expression: string, event: PipelineEvent) {
   })
 }
 
-describe('CI visual evidence contract', () => {
+describe('hosted CI contract', () => {
   it('keeps GitHub Actions inactive while preserving its exact workflow', async () => {
     await expect(repositoryFile('.github/workflows/ci.yml')).rejects.toMatchObject({
       code: 'ENOENT',
@@ -127,16 +93,22 @@ describe('CI visual evidence contract', () => {
     expect(archived).toMatch(/on:\n  push:\n  pull_request:/u)
   })
 
-  it('defines parallel protected macOS and Windows CircleCI jobs', async () => {
+  it('defines one portable gate followed by protected native compatibility jobs', async () => {
     const workflow = await repositoryFile(ACTIVE_WORKFLOW)
+    expect(workflow).toContain('  unit-tests:\n    docker:\n      - image: cimg/node:24.0.2')
+    expect(workflow).toContain('  unit-tests:\n    docker:')
     expect(workflow).toContain("  macOS:\n    macos:\n      xcode: '16.4.0'")
     expect(workflow).toContain('resource_class: m4pro.medium')
     expect(workflow).toContain(
       '  Windows:\n    machine:\n      image: windows-server-2022-gui:current',
     )
     expect(workflow).toContain('resource_class: windows.medium')
-    expect(workflow).toContain('    jobs:\n      - macOS\n      - Windows')
-    expect(workflow).not.toContain('test-node')
+    expect(workflow).toContain('      - unit-tests:\n          name: unit tests')
+    for (const platform of ['macOS', 'Windows']) {
+      expect(workflow).toContain(
+        `      - ${platform}:\n          requires:\n            - unit tests`,
+      )
+    }
     expect(workflow).not.toContain('npm test')
   })
 
@@ -192,51 +164,24 @@ describe('CI visual evidence contract', () => {
     expect(expression).not.toMatch(/"(?:api|schedule|custom_webhook)"/u)
   })
 
-  it('runs repository formatting once while preserving every platform product gate', async () => {
+  it('runs formatting, portable tests, and the renderer build once on Linux', async () => {
     const workflow = await repositoryFile(ACTIVE_WORKFLOW)
-    const sharedSteps = [
-      'Install locked dependencies',
-      'Smoke Electron native image decoding',
-      'Build renderer',
-      'Capture production-window visual evidence',
-      'Package unpacked desktop app',
-    ]
-
-    for (const platform of ['macOS', 'Windows'] as const) {
-      const job = jobBlock(workflow, platform)
-      expect(job).toContain("CSC_IDENTITY_AUTO_DISCOVERY: 'false'")
-      expect(job).toContain('24.0.2')
-      expect(job).toContain('bun@1.3.14')
-      expect(job).toContain('bun install --frozen-lockfile')
-      expect(job).toContain('bun run test:image')
-      expect(job).toContain('bun run build')
-      expect(job).toContain('bun run test:visual')
-      expect(job).toContain('bunx electron-builder --dir --publish never')
-      for (const step of sharedSteps) expect(job).toContain(`name: ${step}`)
-    }
-
-    const macOS = jobBlock(workflow, 'macOS')
-    expect(macOS).toContain('FORMAT_DEFAULT_BRANCH: main')
-    expect(macOS).toContain('name: Check formatting in changed lines')
-    expect(macOS).toContain('FORMAT_BASE_SHA')
-    expect(macOS).toContain('git merge-base origin/main HEAD')
-    expect(macOS).toContain('bun run format:check')
-    expect(macOS).toContain('name: Run unit tests\n          command: bun run test')
-    expect(macOS).not.toContain('--exclude')
-
-    const windows = jobBlock(workflow, 'Windows')
-    expect(windows).toContain('name: Run unit tests except formatter integration')
-    expect(windows).toContain('bun run test -- --exclude tests/format-diff.test.ts')
-    expect(windows.match(/--exclude\s+\S+/gu) ?? []).toEqual([
-      '--exclude tests/format-diff.test.ts',
-    ])
-    expect(windows).not.toContain('FORMAT_DEFAULT_BRANCH')
-    expect(windows).not.toContain('FORMAT_BASE_SHA')
-    expect(windows).not.toContain('FORMAT_BRANCH')
-    expect(windows).not.toContain('git fetch --no-tags')
-    expect(windows).not.toContain('git merge-base')
-    expect(windows).not.toContain('name: Check formatting in changed lines')
-    expect(windows).not.toContain('bun run format:check')
+    const portable = jobBlock(workflow, 'unit-tests')
+    expect(portable).toContain('resource_class: medium')
+    expect(portable).toContain('npm install --global --prefix "$HOME/.local" bun@1.3.14')
+    expect(portable).toContain('export PATH="$HOME/.local/bin:$PATH"')
+    expect(portable).not.toContain('sudo npm')
+    expect(portable).toContain('FORMAT_DEFAULT_BRANCH: main')
+    expect(portable).toContain('name: Check formatting in changed lines')
+    expect(portable).toContain('FORMAT_BASE_SHA')
+    expect(portable).toContain('git merge-base origin/main HEAD')
+    expect(portable).toContain('bun run format:check')
+    expect(portable).toContain('name: Run portable test suite')
+    expect(portable).toContain(`--exclude ${LIVE_ELECTRON_TEST}`)
+    expect(portable.match(/--exclude\s+\S+/gu) ?? []).toEqual([`--exclude ${LIVE_ELECTRON_TEST}`])
+    expect(portable).toContain('name: Build renderer\n          command: bun run build')
+    expect(portable).not.toContain('bun run test:image')
+    expect(portable).not.toContain("CSC_IDENTITY_AUTO_DISCOVERY: 'false'")
 
     const packageJson = JSON.parse(await repositoryFile('package.json'))
     expect(packageJson.scripts.test).toBe('vitest run')
@@ -246,51 +191,33 @@ describe('CI visual evidence contract', () => {
     expect(await repositoryFile('vite.config.ts')).not.toContain('format-diff-core.test.ts')
   })
 
-  it('captures and separately stores baseline and Style-session evidence', async () => {
+  it('limits native jobs to image decoding and one live Electron lifecycle smoke', async () => {
     const workflow = await repositoryFile(ACTIVE_WORKFLOW)
     for (const platform of ['macOS', 'Windows'] as const) {
       const job = jobBlock(workflow, platform)
-      const build = job.indexOf('name: Build renderer')
-      const baselineCapture = job.indexOf('name: Capture production-window visual evidence')
-      const baselineStore = job.indexOf(`path: ${BASELINE_EVIDENCE_PATH}`)
-      const styleSessionCapture = job.indexOf('name: Capture style-session visual evidence')
-      const styleSessionStore = job.indexOf(`path: ${STYLE_SESSION_EVIDENCE_PATH}`)
-      const packageStep = job.indexOf('name: Package unpacked desktop app')
-      expect(build).toBeGreaterThan(-1)
-      expect(build).toBeLessThan(baselineCapture)
-      expect(baselineCapture).toBeLessThan(baselineStore)
-      expect(baselineStore).toBeLessThan(styleSessionCapture)
-      expect(styleSessionCapture).toBeLessThan(styleSessionStore)
-      expect(styleSessionStore).toBeLessThan(packageStep)
-
-      expect(trimmedLines(job, (line) => line.startsWith('bun run test:visual'))).toEqual(
-        VISUAL_TEST_INVOCATIONS,
-      )
-      expect(trimmedLines(job, (line) => line.includes('OKS_VISUAL_EVIDENCE_DIR'))).toEqual(
-        platform === 'macOS'
-          ? [
-              'export OKS_VISUAL_EVIDENCE_DIR="$evidence_root/video-style-visual"',
-              'export OKS_VISUAL_EVIDENCE_DIR="$evidence_root/style-session-visual"',
-            ]
-          : [
-              '$env:OKS_VISUAL_EVIDENCE_DIR = Join-Path $evidenceRoot "video-style-visual"',
-              '$env:OKS_VISUAL_EVIDENCE_DIR = Join-Path $evidenceRoot "style-session-visual"',
-            ],
-      )
-      expect(trimmedLines(job, (line) => line.startsWith('path: .ci-artifacts/'))).toEqual([
-        `path: ${BASELINE_EVIDENCE_PATH}`,
-        `path: ${STYLE_SESSION_EVIDENCE_PATH}`,
-      ])
-      expect(trimmedLines(job, (line) => line.startsWith('destination:'))).toEqual([
-        `destination: video-style-visual-${platform}`,
-        `destination: style-session-visual-${platform}`,
-      ])
+      expect(job).toContain("CSC_IDENTITY_AUTO_DISCOVERY: 'false'")
+      expect(job).toContain('24.0.2')
+      expect(job).toContain('bun@1.3.14')
+      expect(job).toContain('bun install --frozen-lockfile')
+      expect(job).toContain('name: Smoke Electron native image decoding')
+      expect(job).toContain('bun run test:image')
+      expect(job).toContain('name: Smoke native Electron lifecycle')
+      expect(job).toContain(`bun run test -- ${LIVE_ELECTRON_TEST}`)
+      expect(job).not.toContain('FORMAT_DEFAULT_BRANCH')
+      expect(job).not.toContain('bun run format:check')
+      expect(job).not.toContain('bun run build')
+      expect(job).not.toContain('bun run test:visual')
+      expect(job).not.toContain('electron-builder')
+      expect(job).not.toContain('store_artifacts')
     }
 
     const packageJson = JSON.parse(await repositoryFile('package.json'))
     expect(packageJson.scripts['test:visual']).toBe('node scripts/video-style-visual-smoke.cjs')
-    expect(visualResults.expectedFilesForScenario(visualResults.STYLE_SESSION_SCENARIO)).toEqual(
-      STYLE_SESSION_EVIDENCE_LEAVES,
-    )
+    expect(packageJson.scripts['dist:dir']).toBe('bun run build && electron-builder --dir')
+    expect(workflow).not.toContain('OKS_VISUAL_EVIDENCE_DIR')
+    expect(workflow).not.toContain('.ci-artifacts')
+    expect(workflow).not.toContain('store_artifacts')
+    expect(workflow).not.toContain('bun run test:visual')
+    expect(workflow).not.toContain('electron-builder')
   })
 })

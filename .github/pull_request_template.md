@@ -33,8 +33,9 @@ Closes #
 | Visual evidence      |                           |        |
 
 - Environment-dependent or manual gaps:
-- Protected `ci/circleci: macOS` check and evidence:
-- Protected `ci/circleci: Windows` check and evidence:
+- Upstream `ci/circleci: unit tests` check:
+- Protected `ci/circleci: macOS` compatibility check:
+- Protected `ci/circleci: Windows` compatibility check:
 
 <!-- UNAVAILABLE is never PASS. A temporary required-check exception requires -->
 <!-- an explicit user decision and a linked Issue under docs/SDLC.md. -->
