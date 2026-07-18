@@ -22,6 +22,7 @@ interface StudioHarness {
   importAudio: ReturnType<typeof vi.fn>
   importLrc: ReturnType<typeof vi.fn>
   openProject: ReturnType<typeof vi.fn>
+  releaseBackgroundSnapshot: ReturnType<typeof vi.fn>
   resetProjectScope: ReturnType<typeof vi.fn>
   resolveProjectBackground: ReturnType<typeof vi.fn>
   resolveWindowClose: ReturnType<typeof vi.fn>
@@ -86,6 +87,17 @@ function createStudioHarness(): StudioHarness {
     pendingClose = null
     return true
   })
+  const releaseBackgroundSnapshot = vi.fn<StudioApi['releaseBackgroundSnapshot']>(
+    async (expected, url) => {
+      if (
+        expected.revision !== backgroundState.revision ||
+        expected.activeUrl !== backgroundState.activeUrl ||
+        url === backgroundState.activeUrl
+      )
+        return null
+      return nextBackgroundState(backgroundState.activeUrl)
+    },
+  )
   const studio = {
     openProject,
     settleProjectOpen: vi.fn(async () => true),
@@ -102,7 +114,7 @@ function createStudioHarness(): StudioHarness {
     ),
     retainBackground: vi.fn(async (_expected, url) => nextBackgroundState(url)),
     releaseBackground: vi.fn(async () => nextBackgroundState(null)),
-    releaseBackgroundSnapshot: vi.fn(async () => nextBackgroundState(backgroundState.activeUrl)),
+    releaseBackgroundSnapshot,
     importLrc,
     exportText: vi.fn(async () => ({ path: '/exports/project.oks' })),
     exportVideo: vi.fn(async () => null),
@@ -129,6 +141,7 @@ function createStudioHarness(): StudioHarness {
     importAudio,
     importLrc,
     openProject,
+    releaseBackgroundSnapshot,
     resetProjectScope,
     resolveProjectBackground,
     resolveWindowClose,
@@ -551,6 +564,65 @@ describe('project Style App integration', () => {
     expect(
       parseProject(harness.saveProject.mock.calls.at(-1)![0].contents).stageStyle.background,
     ).toEqual(acceptedJson.stageStyle.background)
+  })
+
+  it('releases an Image snapshot when an unrelated edit prunes its redo entry', async () => {
+    ControlledImage.instances = []
+    vi.stubGlobal('Image', ControlledImage)
+    const pathA = '/media/history-a.png'
+    const pathB = '/media/pruned-redo-b.png'
+    const urlA = 'studio-media://asset/history-a'
+    const urlB = 'studio-media://asset/pruned-redo-b'
+    harness.chooseBackgroundImage
+      .mockResolvedValueOnce({ path: pathA, name: 'history-a.png', url: urlA })
+      .mockResolvedValueOnce({ path: pathB, name: 'pruned-redo-b.png', url: urlB })
+
+    const applyNextImage = async (firstImage: boolean) => {
+      await click(buttonByText('Style'))
+      await click(buttonByText('Background'))
+      const previousImageCount = ControlledImage.instances.length
+      await click(buttonByText(firstImage ? 'Choose image' : 'Replace image'))
+      expect(ControlledImage.instances.length).toBeGreaterThan(previousImageCount)
+      await act(async () => ControlledImage.instances.at(-1)!.onload?.(new Event('load')))
+      await settle()
+      await click(buttonByText('Apply & close'))
+    }
+
+    await applyNextImage(true)
+    await applyNextImage(false)
+    await click(buttonByLabel('Undo'))
+    expect(buttonByLabel('Redo').disabled).toBe(false)
+    expect(document.querySelector('.karaoke-stage')?.getAttribute('data-background-mode')).toBe(
+      'image',
+    )
+
+    const title = document.querySelector<HTMLInputElement>('.inspector-section .field input')
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+    if (!title || !setter) throw new Error('Project title input was not mounted')
+    await act(async () => {
+      setter.call(title, 'Unrelated title edit')
+      title.dispatchEvent(new InputEvent('input', { bubbles: true, data: 'Unrelated title edit' }))
+    })
+    await settle()
+
+    expect(buttonByLabel('Redo').disabled).toBe(true)
+    expect(harness.releaseBackgroundSnapshot).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ activeUrl: urlA }),
+      urlB,
+    )
+    expect(harness.releaseBackgroundSnapshot.mock.calls.map(([, url]) => url)).toEqual([urlB])
+
+    await click(buttonByLabel('Undo'))
+    await click(buttonByLabel('Undo'))
+    expect(document.querySelector('.karaoke-stage')?.getAttribute('data-background-mode')).toBe(
+      'gradient',
+    )
+    await click(buttonByLabel('Redo'))
+    expect(document.querySelector('.karaoke-stage')?.getAttribute('data-background-mode')).toBe(
+      'image',
+    )
+    expect(vi.mocked(harness.studio.retainBackground).mock.calls.at(-1)?.[1]).toBe(urlA)
+    expect(harness.releaseBackgroundSnapshot.mock.calls.map(([, url]) => url)).toEqual([urlB])
   })
 
   it('rejects an uncommitted Image before New resets project and capability scope', async () => {

@@ -32,6 +32,7 @@ interface ProbeProps {
   acceptedProjectPath: string | null
   background: BackgroundStyle
   lifecycle: number
+  reachableImagePaths: readonly string[]
 }
 
 let latest: ProjectBackgroundImagePreview
@@ -49,14 +50,21 @@ const probeProps = (
   imagePath: string,
   lifecycle: number,
   acceptedProjectPath: string | null,
-): ProbeProps => ({ acceptedProjectPath, background: imageBackground(imagePath), lifecycle })
+): ProbeProps => ({
+  acceptedProjectPath,
+  background: imageBackground(imagePath),
+  lifecycle,
+  reachableImagePaths: [imagePath],
+})
 
 function installStudio({
   getBackgroundState = vi.fn(async () => ({ activeUrl: null, revision: 'empty' })),
+  releaseBackgroundSnapshot,
   resolveProjectBackground,
   retainBackground = vi.fn(async () => null),
 }: {
   getBackgroundState?: StudioApi['getBackgroundState']
+  releaseBackgroundSnapshot?: StudioApi['releaseBackgroundSnapshot']
   resolveProjectBackground: StudioApi['resolveProjectBackground']
   retainBackground?: StudioApi['retainBackground']
 }) {
@@ -64,6 +72,7 @@ function installStudio({
     configurable: true,
     value: {
       getBackgroundState,
+      ...(releaseBackgroundSnapshot ? { releaseBackgroundSnapshot } : {}),
       resolveProjectBackground,
       retainBackground,
     } as unknown as StudioApi,
@@ -200,6 +209,49 @@ describe('project background image Preview capability', () => {
     expect(retainBackground).toHaveBeenNthCalledWith(2, inactive, active.activeUrl)
     expectPreview('available', active.activeUrl)
     expect(resolveProjectBackground).toHaveBeenCalledOnce()
+  })
+
+  it('retries a stale CAS while pruning only snapshots excluded from reachable history', async () => {
+    const pathA = '/media/reachable-a.png'
+    const pathB = '/media/pruned-b.png'
+    const urlA = 'studio-media://asset/reachable-a'
+    const urlB = 'studio-media://asset/pruned-b'
+    const retained = { activeUrl: urlA, revision: 'retained-b-1' }
+    const refreshed = { activeUrl: urlA, revision: 'newer-active-a-2' }
+    const released = { activeUrl: urlA, revision: 'released-b-3' }
+    const getBackgroundState = vi.fn(async () => refreshed)
+    const releaseBackgroundSnapshot = vi
+      .fn<StudioApi['releaseBackgroundSnapshot']>()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(released)
+    installStudio({
+      getBackgroundState,
+      releaseBackgroundSnapshot,
+      resolveProjectBackground: vi.fn(async () => restored(pathA, urlA, retained.revision)),
+    })
+    const props = {
+      ...probeProps(pathA, 6, '/projects/history.oks'),
+      reachableImagePaths: [pathA, pathB],
+    }
+
+    await render(props)
+    await act(async () => {
+      expect(latest.rememberSnapshot(pathB, urlB, retained)).toBe(true)
+    })
+    await render({ ...props, reachableImagePaths: [pathA] })
+
+    expect(releaseBackgroundSnapshot).toHaveBeenNthCalledWith(1, retained, urlB)
+    expect(getBackgroundState).toHaveBeenCalledOnce()
+    expect(releaseBackgroundSnapshot).toHaveBeenNthCalledWith(2, refreshed, urlB)
+    expect(latest.getCapability()).toEqual(released)
+    expect(latest.sourceFor(imageBackground(pathA))).toMatchObject({
+      resolutionStatus: 'available',
+      url: urlA,
+    })
+    expect(latest.sourceFor(imageBackground(pathB))).toMatchObject({
+      resolutionStatus: 'missing',
+      url: null,
+    })
   })
 
   it('does not expose an inactive retained URL while history reconciliation is pending', async () => {

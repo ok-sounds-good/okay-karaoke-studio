@@ -133,6 +133,14 @@ function useProjectHistory(initialProject: KaraokeProject | (() => KaraokeProjec
   }, [])
 
   const markSaved = useCallback((revision: number) => setSavedRevision(revision), [])
+  const reachableBackgroundImagePaths = useMemo(() => {
+    const paths = new Set<string>()
+    for (const candidate of [...pastRef.current, entry, ...futureRef.current]) {
+      const imagePath = candidate.project.stageStyle.background.imagePath
+      if (imagePath) paths.add(imagePath)
+    }
+    return [...paths]
+  }, [entry, historyVersion])
 
   return {
     project: entry.project,
@@ -141,6 +149,7 @@ function useProjectHistory(initialProject: KaraokeProject | (() => KaraokeProjec
     canUndo: pastRef.current.length > 0,
     canRedo: futureRef.current.length > 0,
     historyVersion,
+    reachableBackgroundImagePaths,
     commit,
     replaceCurrent,
     reset,
@@ -396,6 +405,7 @@ export default function App() {
     acceptedProjectPath: acceptedProjectBackgroundPathRef.current,
     background: project.stageStyle.background,
     lifecycle: projectLifecycleSequenceRef.current,
+    reachableImagePaths: history.reachableBackgroundImagePaths,
   })
 
   const updateTimingDraft = useCallback((timings: ProjectTimingDraft | null) => {

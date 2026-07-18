@@ -373,6 +373,7 @@ describe('owner-and-kind media capabilities', () => {
     let active = retainedBackground(capabilities, 11, '/media/first.png', image(121))
     for (let byte = 122; byte < 126; byte += 1) {
       const previous = active
+      const stale = capabilities.backgroundState(11)
       const candidate = capabilities.registerBackgroundCandidate(
         11,
         `/media/${byte}.png`,
@@ -382,6 +383,11 @@ describe('owner-and-kind media capabilities', () => {
       expect(pruneCurrent(capabilities, 11, candidate)).toBe(false)
       expect(capabilities.settleBackgroundCandidate(11, candidate, true)).toBe(true)
       active = candidate
+      expect(
+        capabilities.releaseBackgroundSnapshot(11, stale.revision, stale.activeToken, previous),
+      ).toBe(false)
+      expect(capabilities.activeToken(11, 'background')).toBe(active)
+      expect(capabilities.get(audio)).not.toBeNull()
       expect(retainCurrent(capabilities, 11, active, null)).toBe(true)
       expect(capabilities.activeToken(11, 'background')).toBeNull()
       expect(retainCurrent(capabilities, 11, null, active)).toBe(true)

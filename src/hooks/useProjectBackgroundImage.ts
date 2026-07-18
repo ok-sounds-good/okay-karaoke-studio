@@ -80,10 +80,12 @@ export function useProjectBackgroundImage({
   acceptedProjectPath,
   background,
   lifecycle,
+  reachableImagePaths,
 }: {
   acceptedProjectPath: string | null
   background: BackgroundStyle
   lifecycle: number
+  reachableImagePaths: readonly string[]
 }): ProjectBackgroundImageController {
   const studio = window.studio
   const initialReady = !studio?.getBackgroundState
@@ -100,10 +102,14 @@ export function useProjectBackgroundImage({
   const requestGenerationRef = useRef(0)
   const reconciliationGenerationRef = useRef(0)
   const reconciliationInFlightRef = useRef<number | null>(null)
+  const snapshotReleaseRef = useRef<{ lifecycle: number; path: string; url: string } | null>(null)
+  const snapshotReleaseFailuresRef = useRef(new Map<string, string>())
   const settlementRef = useRef<{ id: number; lifecycle: number } | null>(null)
   const settlementSequenceRef = useRef(0)
   const currentRef = useRef({ acceptedProjectPath, background, lifecycle })
   currentRef.current = { acceptedProjectPath, background, lifecycle }
+  const reachableImagePathsRef = useRef<ReadonlySet<string>>(new Set())
+  reachableImagePathsRef.current = new Set(reachableImagePaths)
 
   const publish = useCallback((next: ProjectBackgroundResource) => {
     resourceRef.current = next
@@ -206,6 +212,8 @@ export function useProjectBackgroundImage({
       requestGenerationRef.current += 1
       reconciliationGenerationRef.current += 1
       reconciliationInFlightRef.current = null
+      snapshotReleaseRef.current = null
+      snapshotReleaseFailuresRef.current.clear()
       settlementRef.current = null
     }
   }, [acceptedProjectPath, lifecycle, resolveCurrentProjectBackground])
@@ -293,6 +301,7 @@ export function useProjectBackgroundImage({
       resource.lifecycle !== lifecycle ||
       !resource.capability ||
       reconciliationInFlightRef.current !== null ||
+      snapshotReleaseRef.current !== null ||
       settlementRef.current !== null ||
       !studio?.retainBackground
     )
@@ -432,6 +441,86 @@ export function useProjectBackgroundImage({
     }
   }, [isOwnedLifecycle, publish, studio])
 
+  useEffect(() => {
+    if (
+      !resource.ready ||
+      resource.lifecycle !== lifecycle ||
+      !resource.capability ||
+      reconciliationInFlightRef.current !== null ||
+      snapshotReleaseRef.current !== null ||
+      settlementRef.current !== null ||
+      !studio?.releaseBackgroundSnapshot
+    )
+      return
+
+    const snapshot = resource.retained.find(
+      ({ path, url }) =>
+        !reachableImagePathsRef.current.has(path) &&
+        resource.capability?.activeUrl !== url &&
+        snapshotReleaseFailuresRef.current.get(url) !== resource.capability?.revision,
+    )
+    if (!snapshot) return
+
+    snapshotReleaseRef.current = { lifecycle, path: snapshot.path, url: snapshot.url }
+    const release = async () => {
+      let capability: StudioBackgroundCapabilityState | null = resource.capability
+      for (let attempt = 0; attempt < 2 && capability; attempt += 1) {
+        if (
+          !isOwnedLifecycle() ||
+          reachableImagePathsRef.current.has(snapshot.path) ||
+          resourceRef.current.retained.find(
+            ({ path, url }) => path === snapshot.path && url === snapshot.url,
+          ) === undefined ||
+          capability.activeUrl === snapshot.url
+        )
+          return
+        try {
+          const next = await studio.releaseBackgroundSnapshot(capability, snapshot.url)
+          if (!isOwnedLifecycle()) return
+          if (next) {
+            const current = resourceRef.current
+            snapshotReleaseFailuresRef.current.delete(snapshot.url)
+            publish({
+              ...current,
+              capability: next,
+              retained: current.retained.filter(
+                ({ path, url }) => path !== snapshot.path || url !== snapshot.url,
+              ),
+            })
+            return
+          }
+        } catch {
+          // Refresh the capability before one bounded compare-and-swap retry.
+        }
+        capability = await reconcileCapability()
+      }
+      const currentCapability = resourceRef.current.capability
+      if (currentCapability) {
+        snapshotReleaseFailuresRef.current.set(snapshot.url, currentCapability.revision)
+      }
+    }
+
+    void release().finally(() => {
+      const pending = snapshotReleaseRef.current
+      if (
+        pending?.lifecycle !== lifecycle ||
+        pending.path !== snapshot.path ||
+        pending.url !== snapshot.url
+      )
+        return
+      snapshotReleaseRef.current = null
+      if (isOwnedLifecycle()) publish({ ...resourceRef.current })
+    })
+  }, [
+    isOwnedLifecycle,
+    lifecycle,
+    publish,
+    reachableImagePaths,
+    reconcileCapability,
+    resource,
+    studio,
+  ])
+
   const rememberSnapshot = useCallback(
     (path: string, snapshotUrl: string, capability?: StudioBackgroundCapabilityState) => {
       if (!isOwnedLifecycle()) return false
@@ -491,7 +580,7 @@ export function useProjectBackgroundImage({
   )
 
   const beginSettlement = useCallback(() => {
-    if (!isOwnedLifecycle() || settlementRef.current) return null
+    if (!isOwnedLifecycle() || snapshotReleaseRef.current || settlementRef.current) return null
     const id = settlementSequenceRef.current + 1
     settlementSequenceRef.current = id
     settlementRef.current = { id, lifecycle }
