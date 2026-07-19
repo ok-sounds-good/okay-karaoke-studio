@@ -316,7 +316,7 @@ describe('hosted CI contract', () => {
     expect(sdlc).toContain("use only CircleCI's **Rerun workflow\nfrom failed** action")
   })
 
-  it('limits native jobs to image decoding and one live Electron lifecycle smoke', async () => {
+  it('limits native jobs to the required native image, lifecycle, and atomic-write evidence', async () => {
     const workflow = await repositoryFile(ACTIVE_WORKFLOW)
     for (const platform of ['macOS', 'Windows'] as const) {
       const job = jobBlock(workflow, platform)
@@ -328,6 +328,8 @@ describe('hosted CI contract', () => {
       expect(job).toContain('bun run test:image')
       expect(job).toContain('name: Smoke native Electron lifecycle')
       expect(job).toContain(`bun run test -- ${LIVE_ELECTRON_TEST}`)
+      expect(job).toContain('name: Verify style template atomic replacement')
+      expect(job).toContain('bun run test -- tests/style-template-store.test.ts')
       expect(job).not.toContain('FORMAT_DEFAULT_BRANCH')
       expect(job).not.toContain('bun run format:check')
       expect(job).not.toContain('bun run build')

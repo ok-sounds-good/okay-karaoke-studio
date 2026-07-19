@@ -52,6 +52,7 @@ const {
   linkedImageExportFailure,
 } = require('./video-export-authorization.cjs')
 const { createProjectOpenCoordinator } = require('./project-open.cjs')
+const { createStyleTemplateStore } = require('./style-template-store.cjs')
 const {
   createNativeCloseArbiter,
   createNativeCloseOwnershipCleanup,
@@ -101,6 +102,10 @@ const CHANNELS = Object.freeze({
   windowCloseRequest: 'studio:window-close-request',
   getPendingWindowClose: 'studio:get-pending-window-close',
   resolveWindowClose: 'studio:resolve-window-close',
+  listStyleTemplates: 'studio:list-style-templates',
+  createStyleTemplate: 'studio:create-style-template',
+  renameStyleTemplate: 'studio:rename-style-template',
+  deleteStyleTemplate: 'studio:delete-style-template',
 })
 
 const MENU_ACTIONS = new Set([
@@ -209,6 +214,10 @@ const projectOpens = createProjectOpenCoordinator({
 let mainWindow = null
 
 app.setName(APP_NAME)
+
+const styleTemplateStore = createStyleTemplateStore({
+  filePath: path.join(app.getPath('userData'), 'style-templates.json'),
+})
 
 let visualSmokeConfig = null
 let visualSmokeFatalObserver = null
@@ -800,6 +809,26 @@ async function saveValidatedProject(owner, ownerId, request) {
 }
 
 function registerIpcHandlers() {
+  ipcMain.handle(CHANNELS.listStyleTemplates, async (event) => {
+    assertTrustedSender(event)
+    return styleTemplateStore.list()
+  })
+
+  ipcMain.handle(CHANNELS.createStyleTemplate, async (event, value) => {
+    assertTrustedSender(event)
+    return styleTemplateStore.create(value)
+  })
+
+  ipcMain.handle(CHANNELS.renameStyleTemplate, async (event, value) => {
+    assertTrustedSender(event)
+    return styleTemplateStore.rename(value)
+  })
+
+  ipcMain.handle(CHANNELS.deleteStyleTemplate, async (event, value) => {
+    assertTrustedSender(event)
+    return styleTemplateStore.delete(value)
+  })
+
   ipcMain.handle(CHANNELS.getPendingWindowClose, async (event) => {
     assertTrustedSender(event)
     nativeCloseRendererReadiness.markReady(event.sender.id)

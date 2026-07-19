@@ -1,4 +1,5 @@
 import type { VideoFps, VideoResolution } from './lib/video-export-settings'
+import type { StyleTemplate, StyleTemplatePreferences } from './lib/style-template-codec'
 
 export {}
 
@@ -119,6 +120,13 @@ declare global {
   }
 
   interface StudioApi {
+    listStyleTemplates(): Promise<StyleTemplate[]>
+    createStyleTemplate(options: {
+      name: string
+      preferences: StyleTemplatePreferences
+    }): Promise<StyleTemplate>
+    renameStyleTemplate(id: string, name: string): Promise<StyleTemplate>
+    deleteStyleTemplate(id: string): Promise<true>
     openProject(): Promise<StudioOpenProjectResult | null>
     settleProjectOpen(requestId: string, accepted: boolean): Promise<boolean>
     resetProjectScope(): Promise<boolean>

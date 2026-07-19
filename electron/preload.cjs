@@ -26,6 +26,10 @@ const CHANNELS = Object.freeze({
   windowCloseRequest: 'studio:window-close-request',
   getPendingWindowClose: 'studio:get-pending-window-close',
   resolveWindowClose: 'studio:resolve-window-close',
+  listStyleTemplates: 'studio:list-style-templates',
+  createStyleTemplate: 'studio:create-style-template',
+  renameStyleTemplate: 'studio:rename-style-template',
+  deleteStyleTemplate: 'studio:delete-style-template',
 })
 
 const MENU_ACTIONS = new Set([
@@ -62,7 +66,277 @@ function normalizeWindowCloseRequest(value) {
   return Object.freeze({ requestId: value.requestId, action: value.action })
 }
 
+function exactRecord(value, keys) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  for (const key in value) if (!Object.hasOwn(value, key)) return false
+  const actual = Object.keys(value)
+  return actual.length === keys.length && keys.every((key) => Object.hasOwn(value, key))
+}
+
+const FONT_SIZES = new Set([
+  8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 24, 25, 27, 28, 32, 36, 40, 42, 48, 56, 64, 72, 82, 96, 104,
+  120, 144, 180, 240, 320, 400,
+])
+const VIDEO_RESOLUTIONS = new Set(['240p', '360p', '480p', '720p', '1080p', '1440p', '2160p'])
+
+const validColor = (value) => typeof value === 'string' && /^#[0-9a-f]{6}$/iu.test(value)
+
+function validFace(value) {
+  if (!exactRecord(value, ['fullName', 'style', 'postscriptName', 'weight', 'slant'])) return false
+  if (
+    typeof value.fullName !== 'string' ||
+    !value.fullName.trim() ||
+    value.fullName.length > 300 ||
+    typeof value.style !== 'string' ||
+    !value.style.trim() ||
+    value.style.length > 120 ||
+    !Number.isSafeInteger(value.weight) ||
+    value.weight < 100 ||
+    value.weight > 900 ||
+    !['normal', 'italic', 'oblique'].includes(value.slant)
+  ) {
+    return false
+  }
+  return (
+    value.postscriptName === null ||
+    (typeof value.postscriptName === 'string' &&
+      /^[\x21-\x7e]{1,63}$/u.test(value.postscriptName) &&
+      !/[\[\](){}<>/%]/u.test(value.postscriptName))
+  )
+}
+
+function validTypeface(value) {
+  if (!exactRecord(value, ['kind', 'family', 'faces'])) return false
+  if (
+    !['system-ui', 'system-monospace', 'local'].includes(value.kind) ||
+    typeof value.family !== 'string' ||
+    !value.family.trim() ||
+    value.family.length > 300 ||
+    !Array.isArray(value.faces) ||
+    value.faces.length < 1 ||
+    value.faces.length > 100
+  ) {
+    return false
+  }
+  for (let index = 0; index < value.faces.length; index += 1) {
+    if (!Object.hasOwn(value.faces, index) || !validFace(value.faces[index])) return false
+  }
+  if (value.kind === 'local') {
+    const names = value.faces.map((face) => face.postscriptName)
+    return names.every((name) => name !== null) && new Set(names).size === names.length
+  }
+  const family = value.kind === 'system-ui' ? 'System UI' : 'System Monospace'
+  const expected = [
+    ['Regular', 400, 'normal'],
+    ['Italic', 400, 'italic'],
+    ['Semi Bold', 600, 'normal'],
+    ['Bold', 700, 'normal'],
+    ['Extra Bold', 800, 'normal'],
+  ]
+  return (
+    value.family === family &&
+    value.faces.length === expected.length &&
+    value.faces.every(
+      (face, index) =>
+        face.fullName === `${family} ${expected[index][0]}` &&
+        face.style === expected[index][0] &&
+        face.postscriptName === null &&
+        face.weight === expected[index][1] &&
+        face.slant === expected[index][2],
+    )
+  )
+}
+
+function validTextStyle(value, visibility = false) {
+  const keys = visibility
+    ? ['typeface', 'fontStyle', 'sizePx', 'color', 'visible']
+    : ['typeface', 'fontStyle', 'sizePx', 'color']
+  return (
+    exactRecord(value, keys) &&
+    validTypeface(value.typeface) &&
+    validFace(value.fontStyle) &&
+    FONT_SIZES.has(value.sizePx) &&
+    validColor(value.color) &&
+    (!visibility || typeof value.visible === 'boolean')
+  )
+}
+
+function validStageStyle(value) {
+  if (!exactRecord(value, ['background', 'lyrics', 'titleCard', 'stageFrame'])) return false
+  const { background, lyrics, titleCard, stageFrame } = value
+  const validPath =
+    background?.imagePath === null ||
+    (typeof background?.imagePath === 'string' &&
+      background.imagePath.length <= 8_192 &&
+      !background.imagePath.includes('\0') &&
+      (background.imagePath.startsWith('/') ||
+        /^[A-Za-z]:[\\/]/u.test(background.imagePath) ||
+        background.imagePath.startsWith('\\\\')))
+  return (
+    exactRecord(background, [
+      'mode',
+      'solidColor',
+      'gradientStartColor',
+      'gradientEndColor',
+      'imagePath',
+    ]) &&
+    ['solid', 'gradient', 'image'].includes(background.mode) &&
+    validColor(background.solidColor) &&
+    validColor(background.gradientStartColor) &&
+    validColor(background.gradientEndColor) &&
+    validPath &&
+    (background.mode !== 'image' || background.imagePath !== null) &&
+    exactRecord(lyrics, ['typeface', 'fontStyle', 'sizePx', 'unsungColor', 'sungColor']) &&
+    validTypeface(lyrics.typeface) &&
+    validFace(lyrics.fontStyle) &&
+    FONT_SIZES.has(lyrics.sizePx) &&
+    validColor(lyrics.unsungColor) &&
+    validColor(lyrics.sungColor) &&
+    exactRecord(titleCard, ['eyebrow', 'title', 'artist']) &&
+    ['eyebrow', 'title', 'artist'].every((key) => validTextStyle(titleCard[key], true)) &&
+    exactRecord(stageFrame, ['enabled', 'lineColor', 'lineWidthPx', 'brand', 'clock', 'footer']) &&
+    typeof stageFrame.enabled === 'boolean' &&
+    validColor(stageFrame.lineColor) &&
+    Number.isSafeInteger(stageFrame.lineWidthPx) &&
+    stageFrame.lineWidthPx >= 0 &&
+    stageFrame.lineWidthPx <= 32 &&
+    ['brand', 'clock', 'footer'].every((key) => validTextStyle(stageFrame[key], true))
+  )
+}
+
+function validVocalStyle(value) {
+  if (
+    !exactRecord(value, [
+      'typeface',
+      'fontStyle',
+      'sizePx',
+      'unsungColor',
+      'sungColor',
+      'alignment',
+      'previewMs',
+      'syncAid',
+    ])
+  ) {
+    return false
+  }
+  const nullableColor = (candidate) => candidate === null || validColor(candidate)
+  return (
+    (value.typeface === null || validTypeface(value.typeface)) &&
+    (value.fontStyle === null || validFace(value.fontStyle)) &&
+    (value.sizePx === null || FONT_SIZES.has(value.sizePx)) &&
+    nullableColor(value.unsungColor) &&
+    nullableColor(value.sungColor) &&
+    ['left', 'center', 'right'].includes(value.alignment) &&
+    Number.isSafeInteger(value.previewMs) &&
+    value.previewMs >= 0 &&
+    value.previewMs <= 60_000 &&
+    exactRecord(value.syncAid, ['enabled', 'minLeadMs', 'maxLeadMs']) &&
+    typeof value.syncAid.enabled === 'boolean' &&
+    Number.isSafeInteger(value.syncAid.minLeadMs) &&
+    Number.isSafeInteger(value.syncAid.maxLeadMs) &&
+    value.syncAid.minLeadMs >= 0 &&
+    value.syncAid.minLeadMs <= value.syncAid.maxLeadMs &&
+    value.syncAid.maxLeadMs <= value.previewMs
+  )
+}
+
+function validPreferences(value) {
+  if (!exactRecord(value, ['stageStyle', 'lyricDisplay', 'vocalStyle', 'videoExportDefaults'])) {
+    return false
+  }
+  return (
+    validStageStyle(value.stageStyle) &&
+    exactRecord(value.lyricDisplay, ['lineCount', 'advanceMode']) &&
+    Number.isSafeInteger(value.lyricDisplay.lineCount) &&
+    value.lyricDisplay.lineCount >= 1 &&
+    value.lyricDisplay.lineCount <= 5 &&
+    ['clear', 'scroll'].includes(value.lyricDisplay.advanceMode) &&
+    validVocalStyle(value.vocalStyle) &&
+    exactRecord(value.videoExportDefaults, ['resolution', 'fps']) &&
+    VIDEO_RESOLUTIONS.has(value.videoExportDefaults.resolution) &&
+    (value.videoExportDefaults.fps === 30 || value.videoExportDefaults.fps === 60)
+  )
+}
+
+function normalizeStyleTemplate(value) {
+  if (!exactRecord(value, ['id', 'name', 'preferences'])) return null
+  if (typeof value.id !== 'string' || !/^[\x21-\x7e]{1,128}$/u.test(value.id)) return null
+  if (
+    typeof value.name !== 'string' ||
+    value.name.length < 1 ||
+    value.name.length > 80 ||
+    value.name !== value.name.trim().replace(/\s+/gu, ' ')
+  ) {
+    return null
+  }
+  if (!validPreferences(value.preferences)) return null
+  return value
+}
+
+function requireStyleTemplate(value, operation) {
+  const template = normalizeStyleTemplate(value)
+  if (!template) throw new TypeError(`${operation} returned an invalid style template.`)
+  return template
+}
+
+function requireStyleTemplateList(value) {
+  if (!Array.isArray(value) || value.length > 100) {
+    throw new TypeError('listStyleTemplates returned an invalid style template list.')
+  }
+  return value.map((template) => requireStyleTemplate(template, 'listStyleTemplates'))
+}
+
+function requireStyleTemplateCreateRequest(value) {
+  if (
+    !exactRecord(value, ['name', 'preferences']) ||
+    typeof value.name !== 'string' ||
+    !validPreferences(value.preferences)
+  ) {
+    throw new TypeError('createStyleTemplate requires valid name and preferences values.')
+  }
+  return { name: value.name, preferences: value.preferences }
+}
+
+function requireStyleTemplateId(value, operation) {
+  if (typeof value !== 'string' || !/^[\x21-\x7e]{1,128}$/u.test(value)) {
+    throw new TypeError(`${operation} requires a valid style template id.`)
+  }
+  return value
+}
+
+function requireStyleTemplateName(value, operation) {
+  if (typeof value !== 'string') {
+    throw new TypeError(`${operation} requires a style template name.`)
+  }
+  return value
+}
+
 const studio = Object.freeze({
+  listStyleTemplates: async () =>
+    requireStyleTemplateList(await ipcRenderer.invoke(CHANNELS.listStyleTemplates)),
+  createStyleTemplate: async (options) =>
+    requireStyleTemplate(
+      await ipcRenderer.invoke(
+        CHANNELS.createStyleTemplate,
+        requireStyleTemplateCreateRequest(options),
+      ),
+      'createStyleTemplate',
+    ),
+  renameStyleTemplate: async (id, name) =>
+    requireStyleTemplate(
+      await ipcRenderer.invoke(CHANNELS.renameStyleTemplate, {
+        id: requireStyleTemplateId(id, 'renameStyleTemplate'),
+        name: requireStyleTemplateName(name, 'renameStyleTemplate'),
+      }),
+      'renameStyleTemplate',
+    ),
+  deleteStyleTemplate: async (id) => {
+    const deleted = await ipcRenderer.invoke(CHANNELS.deleteStyleTemplate, {
+      id: requireStyleTemplateId(id, 'deleteStyleTemplate'),
+    })
+    if (deleted !== true) throw new TypeError('deleteStyleTemplate returned an invalid result.')
+    return true
+  },
   openProject: () => ipcRenderer.invoke(CHANNELS.openProject),
   settleProjectOpen: async (requestId, accepted) =>
     (await ipcRenderer.invoke(CHANNELS.settleProjectOpen, { requestId, accepted })) === true,
