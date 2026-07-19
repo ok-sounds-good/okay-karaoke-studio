@@ -20,6 +20,11 @@ import {
   Zap,
 } from 'lucide-react'
 import type { ValidationIssue, VocalTrack } from '../lib/model'
+import {
+  DEFAULT_VIDEO_EXPORT_SETTINGS,
+  VIDEO_FRAME_RATES,
+  VIDEO_RESOLUTION_OPTIONS,
+} from '../lib/video-export-settings'
 import { Button, Modal } from './ui'
 
 interface WorkflowGuideDialogProps {
@@ -287,20 +292,6 @@ interface ExportDialogProps {
   videoProgress: StudioVideoExportProgress | null
 }
 
-const VIDEO_RESOLUTION_OPTIONS: Array<{
-  value: StudioVideoResolution
-  label: string
-  dimensions: string
-}> = [
-  { value: '240p', label: '240p', dimensions: '426 × 240' },
-  { value: '360p', label: '360p', dimensions: '640 × 360' },
-  { value: '480p', label: '480p', dimensions: '854 × 480' },
-  { value: '720p', label: '720p', dimensions: '1280 × 720' },
-  { value: '1080p', label: '1080p', dimensions: '1920 × 1080' },
-  { value: '1440p', label: '1440p', dimensions: '2560 × 1440' },
-  { value: '2160p', label: '2160p', dimensions: '3840 × 2160' },
-]
-
 export function ExportDialog({
   projectTitle,
   activeTrackName,
@@ -316,8 +307,10 @@ export function ExportDialog({
   videoAvailable,
   videoProgress,
 }: ExportDialogProps) {
-  const [resolution, setResolution] = useState<StudioVideoResolution>('720p')
-  const [fps, setFps] = useState<StudioVideoFps>(30)
+  const [resolution, setResolution] = useState<StudioVideoResolution>(
+    DEFAULT_VIDEO_EXPORT_SETTINGS.resolution,
+  )
+  const [fps, setFps] = useState<StudioVideoFps>(DEFAULT_VIDEO_EXPORT_SETTINGS.fps)
   const [cancelConfirmationOpen, setCancelConfirmationOpen] = useState(false)
   const [cancellationPending, setCancellationPending] = useState(false)
   const [cancelError, setCancelError] = useState<string | null>(null)
@@ -333,7 +326,7 @@ export function ExportDialog({
           : !hasLyrics
             ? 'Add lyrics to enable karaoke video export'
             : videoAvailable
-              ? `${resolutionOption?.dimensions} · ${fps} fps MP4 · linked audio`
+              ? `${resolutionOption?.width} × ${resolutionOption?.height} · ${fps} fps MP4 · linked audio`
               : 'Attach audio in the desktop app to enable'
 
   const handleClose = () => {
@@ -459,7 +452,7 @@ export function ExportDialog({
               >
                 {VIDEO_RESOLUTION_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
-                    {option.label} · {option.dimensions}
+                    {option.label} · {option.width} × {option.height}
                   </option>
                 ))}
               </select>
@@ -471,8 +464,11 @@ export function ExportDialog({
                 value={fps}
                 onChange={(event) => setFps(Number(event.target.value) as StudioVideoFps)}
               >
-                <option value={30}>30 fps</option>
-                <option value={60}>60 fps</option>
+                {VIDEO_FRAME_RATES.map((frameRate) => (
+                  <option key={frameRate} value={frameRate}>
+                    {frameRate} fps
+                  </option>
+                ))}
               </select>
             </label>
           </fieldset>

@@ -19,19 +19,19 @@ const {
 } = require('./video-style-document.cjs')
 const STAGE_LAYOUT = require('./stage-layout.json')
 const SYNC_AID_GEOMETRY = require('./sync-aid-geometry.json')
+const VIDEO_EXPORT_PRESETS = require('./video-export-presets.json')
 
-const VIDEO_RESOLUTION_PRESETS = Object.freeze({
-  '240p': Object.freeze({ width: 426, height: 240 }),
-  '360p': Object.freeze({ width: 640, height: 360 }),
-  '480p': Object.freeze({ width: 854, height: 480 }),
-  '720p': Object.freeze({ width: 1280, height: 720 }),
-  '1080p': Object.freeze({ width: 1920, height: 1080 }),
-  '1440p': Object.freeze({ width: 2560, height: 1440 }),
-  '2160p': Object.freeze({ width: 3840, height: 2160 }),
-})
-const VIDEO_FRAME_RATES = Object.freeze([30, 60])
-const DEFAULT_VIDEO_RESOLUTION = '720p'
-const DEFAULT_VIDEO_FPS = 30
+const VIDEO_RESOLUTION_PRESETS = Object.freeze(
+  Object.fromEntries(
+    VIDEO_EXPORT_PRESETS.resolutions.map(({ value, width, height }) => [
+      value,
+      Object.freeze({ width, height }),
+    ]),
+  ),
+)
+const VIDEO_FRAME_RATES = Object.freeze([...VIDEO_EXPORT_PRESETS.frameRates])
+const DEFAULT_VIDEO_RESOLUTION = VIDEO_EXPORT_PRESETS.defaults.resolution
+const DEFAULT_VIDEO_FPS = VIDEO_EXPORT_PRESETS.defaults.fps
 // This controls only the hidden export compositor. Project and FFmpeg rates
 // remain the authored 30 or 60 fps selected above.
 const OFFSCREEN_CAPTURE_FPS = 240

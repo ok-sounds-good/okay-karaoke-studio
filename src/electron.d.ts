@@ -1,3 +1,5 @@
+import type { VideoFps, VideoResolution } from './lib/video-export-settings'
+
 export {}
 
 declare global {
@@ -78,8 +80,8 @@ declare global {
   }
 
   type StudioVideoExportPhase = 'preparing' | 'frames' | 'encoding' | 'complete'
-  type StudioVideoResolution = '240p' | '360p' | '480p' | '720p' | '1080p' | '1440p' | '2160p'
-  type StudioVideoFps = 30 | 60
+  type StudioVideoResolution = VideoResolution
+  type StudioVideoFps = VideoFps
 
   interface StudioVideoExportProgress {
     phase: StudioVideoExportPhase
