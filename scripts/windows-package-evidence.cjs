@@ -80,10 +80,13 @@ function authenticodeStatus(file) {
       '-NoProfile',
       '-NonInteractive',
       '-Command',
-      '(Get-AuthenticodeSignature -LiteralPath $args[0]).Status.ToString()',
-      file,
+      '(Get-AuthenticodeSignature -LiteralPath $env:OKS_SIGNATURE_PATH).Status.ToString()',
     ],
-    { encoding: 'utf8', windowsHide: true },
+    {
+      encoding: 'utf8',
+      env: { ...process.env, OKS_SIGNATURE_PATH: file },
+      windowsHide: true,
+    },
   )
   if (result.error)
     throw new Error(`Could not inspect Authenticode status: ${result.error.message}`)
