@@ -589,7 +589,9 @@ async function prepareStyleRuntime(project, backgroundImage) {
 
 async function writeJpegFrame(stream, frame, signal) {
   throwIfAborted(signal)
-  if (stream.destroyed) throw new Error('FFmpeg stopped accepting video frames')
+  if (stream.destroyed) {
+    throw Object.assign(new Error('FFmpeg stopped accepting video frames'), { code: 'EPIPE' })
+  }
   if (!stream.write(frame)) {
     await once(stream, 'drain', signal ? { signal } : undefined)
   }
@@ -832,4 +834,5 @@ module.exports = {
   renderVideoFrames,
   renderDocument,
   runProcess,
+  writeJpegFrame,
 }

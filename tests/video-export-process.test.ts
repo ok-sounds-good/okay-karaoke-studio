@@ -4,7 +4,7 @@ import { PassThrough } from 'node:stream'
 import { describe, expect, it, vi } from 'vitest'
 
 const require = createRequire(import.meta.url)
-const { runProcess } = require('../electron/video-export.cjs') as {
+const { runProcess, writeJpegFrame } = require('../electron/video-export.cjs') as {
   runProcess(
     executable: string,
     args: string[],
@@ -14,6 +14,7 @@ const { runProcess } = require('../electron/video-export.cjs') as {
       spawnImpl: () => FakeChild
     },
   ): Promise<void>
+  writeJpegFrame(stream: PassThrough, frame: Buffer, signal?: AbortSignal): Promise<void>
 }
 
 type FakeChild = EventEmitter & {
@@ -98,6 +99,20 @@ describe('video export FFmpeg process boundary', () => {
     queueMicrotask(() => child.emit('close', 1, null))
 
     await expect(result).rejects.toThrow('FFmpeg failed: encoder root cause')
+  })
+
+  it('classifies the production destroyed-stream frame error as child input termination', async () => {
+    const child = fakeChild()
+    const result = runProcess('ffmpeg', [], {
+      spawnImpl: () => child,
+      inputWriter: async (stream) => {
+        stream.destroy()
+        await writeJpegFrame(stream, Buffer.from('frame'))
+      },
+    })
+    child.stderr.write('encoder root cause')
+
+    await expect(result).rejects.toThrow('FFmpeg failed (SIGINT): encoder root cause')
   })
 
   it('preserves abort precedence during writer teardown', async () => {
