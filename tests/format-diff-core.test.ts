@@ -178,6 +178,37 @@ describe('range-formatting algorithm', () => {
     expect(result.formatted).toBe('const changed = { alpha: 1 }\nconst untouched = true')
   })
 
+  it.each([
+    {
+      name: 'LF TypeScript',
+      source: 'const untouched = true\nconst changed={alpha:1}',
+      parser: 'typescript',
+      endOfLine: 'lf',
+      expected: 'const untouched = true\nconst changed = { alpha: 1 }\n',
+    },
+    {
+      name: 'CRLF Babel',
+      source: 'const untouched = true\r\nconst changed={alpha:1}',
+      parser: 'babel',
+      endOfLine: 'crlf',
+      expected: 'const untouched = true\r\nconst changed = { alpha: 1 }\r\n',
+    },
+  ])('restores the canonical final newline for an EOF-touching $name range', async (sample) => {
+    const result = await formatChangedRanges({
+      source: sample.source,
+      filePath: 'example.js',
+      ranges: [{ startLine: 2, lineCount: 1 }],
+      options: {
+        parser: sample.parser,
+        semi: false,
+        singleQuote: true,
+        endOfLine: sample.endOfLine,
+      },
+    })
+
+    expect(result.formatted).toBe(sample.expected)
+  })
+
   it('rejects mixed line endings instead of normalizing untouched lines', async () => {
     await expect(
       formatChangedRanges({
