@@ -220,8 +220,8 @@ A pull-request workflow has three named phases:
    workflow and always requires a fresh approval; approval evidence from an
    older head never carries forward.
 3. **Native-candidate phase (`macOS` and `Windows`).** After both prerequisites
-   are satisfied, run the native-image decode and live Electron lifecycle smokes
-   on both native executors.
+   are satisfied, run the native-image decode, live Electron lifecycle, and
+   focused style-template atomic-replacement checks on both native executors.
 
 The approval is a declarative CircleCI workflow job. Do not replace its event
 filter with shell inspection, dump environment variables or event payloads, or
@@ -249,8 +249,9 @@ exception.
 Routine hosted CI is a compatibility backstop, not the primary proof for a
 change. The Linux job runs changed-range `bun run format:check`, the portable
 unit suite, and the renderer build once. The macOS and Windows jobs run only the
-native-image decode smoke and live Electron lifecycle smoke on their respective
-platforms. Broader full-environment macOS and Windows suites belong to a future
+native-image decode smoke, live Electron lifecycle smoke, and focused
+style-template atomic-replacement check on their respective platforms.
+Broader full-environment macOS and Windows suites belong to a future
 official-v1 deployment or release step, not routine pull-request CI, and do not
 replace the targeted final Windows MVP acceptance run. Configure
 redundant-workflow auto-cancellation in the CircleCI project settings when

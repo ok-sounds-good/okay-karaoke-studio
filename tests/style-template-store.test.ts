@@ -161,6 +161,28 @@ describe('main-process style template store', () => {
     await expect(store.list()).rejects.toBe(denied)
   })
 
+  it('rejects invalid UTF-8 for every operation without changing the original bytes', async () => {
+    const { filePath } = await storePath()
+    const seed = createStyleTemplateStore({ filePath, createId: () => 'stable-id' })
+    await seed.create({ name: 'Warm', preferences: preferences() })
+    const bytes = await readFile(filePath)
+    const nameOffset = bytes.indexOf(Buffer.from('Warm'))
+    expect(nameOffset).toBeGreaterThan(0)
+    bytes[nameOffset] = 0xff
+    await writeFile(filePath, bytes)
+
+    const store = createStyleTemplateStore({ filePath, createId: () => 'new-id' })
+    for (const operation of [
+      () => store.list(),
+      () => store.create({ name: 'New', preferences: preferences() }),
+      () => store.rename({ id: 'stable-id', name: 'Renamed' }),
+      () => store.delete({ id: 'stable-id' }),
+    ]) {
+      await expect(operation()).rejects.toThrow('valid UTF-8')
+      expect(await readFile(filePath)).toEqual(bytes)
+    }
+  })
+
   it.each(['open', 'write', 'flush', 'close', 'rename'])(
     'preserves the destination and cleans its temporary file after %s failure',
     async (failure) => {

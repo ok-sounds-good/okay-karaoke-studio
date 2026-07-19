@@ -37,7 +37,11 @@ async function readUtf8FileWithinLimit(filePath, maxBytes, label) {
     if (totalBytes > maxBytes) {
       throw new RangeError(`${label} exceeds the ${Math.floor(maxBytes / (1024 * 1024))} MB limit`)
     }
-    return Buffer.concat(chunks, totalBytes).toString('utf8')
+    try {
+      return new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks, totalBytes))
+    } catch {
+      throw new TypeError(`${label} must contain valid UTF-8 text`)
+    }
   } finally {
     await handle.close()
   }

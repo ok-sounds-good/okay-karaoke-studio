@@ -79,6 +79,10 @@ jobs:
           name: Smoke native Electron lifecycle
           command: bun run test -- tests/visual-smoke-renderer-fatal-live.test.ts
 
+      - run:
+          name: Verify style template atomic replacement
+          command: bun run test -- tests/style-template-store.test.ts
+
   Windows:
     machine:
       image: windows-server-2022-gui:current
@@ -117,6 +121,12 @@ jobs:
           name: Smoke native Electron lifecycle
           command: |
             bun run test -- tests/visual-smoke-renderer-fatal-live.test.ts
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - run:
+          name: Verify style template atomic replacement
+          command: |
+            bun run test -- tests/style-template-store.test.ts
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 workflows:
