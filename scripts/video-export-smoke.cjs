@@ -148,11 +148,11 @@ function lyricDifference(before, after) {
   return { changedPixels, totalDifference }
 }
 
-function lyricEvidence({ ffmpegPath, videoPath, width, height, fps, startMs, root }) {
+function lyricEvidence({ ffmpegPath, videoPath, fps, startMs, root }) {
   const boundaryFrame = (startMs * fps) / 1_000
   if (!Number.isInteger(boundaryFrame)) throw new Error('transition is not frame-aligned')
-  const before = decodeLyricCrop(ffmpegPath, videoPath, boundaryFrame, width, height, root)
-  const after = decodeLyricCrop(ffmpegPath, videoPath, boundaryFrame + 1, width, height, root)
+  const before = decodeLyricCrop(ffmpegPath, videoPath, boundaryFrame, 960, 540, root)
+  const after = decodeLyricCrop(ffmpegPath, videoPath, boundaryFrame + 1, 960, 540, root)
   const minimumChangedPixels = Math.max(8, Math.round(before.length / 30_000))
   const difference = lyricDifference(before, after)
   if (difference.changedPixels < minimumChangedPixels) throw new Error('transition absent')
