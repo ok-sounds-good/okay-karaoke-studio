@@ -1,0 +1,13 @@
+{
+  "resolutions": [
+    { "value": "240p", "label": "240p", "width": 426, "height": 240 },
+    { "value": "360p", "label": "360p", "width": 640, "height": 360 },
+    { "value": "480p", "label": "480p", "width": 854, "height": 480 },
+    { "value": "720p", "label": "720p", "width": 1280, "height": 720 },
+    { "value": "1080p", "label": "1080p", "width": 1920, "height": 1080 },
+    { "value": "1440p", "label": "1440p", "width": 2560, "height": 1440 },
+    { "value": "2160p", "label": "2160p", "width": 3840, "height": 2160 }
+  ],
+  "frameRates": [30, 60],
+  "defaults": { "resolution": "720p", "fps": 30 }
+}
