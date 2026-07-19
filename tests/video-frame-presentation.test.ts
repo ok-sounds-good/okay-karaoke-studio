@@ -32,6 +32,7 @@ type FakeWindow = {
 }
 
 type VideoExportModule = {
+  MAX_VIDEO_FRAMES: number
   normalizeVideoSettings(value?: unknown): VideoSettings
   renderVideoFrames(
     BrowserWindow: new (options: BrowserWindowOptions) => FakeWindow,
@@ -42,11 +43,15 @@ type VideoExportModule = {
     runtime: Record<string, unknown>,
     onProgress?: (progress: unknown) => void,
     signal?: AbortSignal,
+    platform?: NodeJS.Platform,
   ): Promise<void>
 }
 
 const require = createRequire(import.meta.url)
 const videoExport = require('../electron/video-export.cjs') as VideoExportModule
+const { FRAME_MARKER_BITS } = require('../electron/video-style-document.cjs') as {
+  FRAME_MARKER_BITS: number
+}
 const project = JSON.parse(
   readFileSync(new URL('./fixtures/current-project-v0.json', import.meta.url), 'utf8'),
 ) as unknown
@@ -222,6 +227,77 @@ describe('offscreen video frame presentation', () => {
     ).rejects.toThrow('JPEG encoding failed')
 
     expect(contents.stopPainting).toHaveBeenCalledTimes(2)
+    expect(contents.listenerCount('paint')).toBe(0)
+    expect(destroyed).toBe(true)
+  })
+
+  it('waits for the requested Windows paint token and crops it from the JPEG', async () => {
+    expect(videoExport.MAX_VIDEO_FRAMES).toBeLessThan(2 ** FRAME_MARKER_BITS)
+    const frames: Buffer[] = []
+    let destroyed = false
+    const contents = new EventEmitter() as FakeWebContents
+    const image = (sequence: number, label: string) => {
+      const width = 426 + 18
+      const height = 240
+      const bitmap = Buffer.alloc(width * height * 4)
+      for (let bit = 0; bit < 18; bit += 1) {
+        if (!(sequence & (2 ** bit))) continue
+        for (let y = 0; y < height; y += 1) {
+          bitmap.fill(255, (y * width + 426 + bit) * 4, (y * width + 427 + bit) * 4)
+        }
+      }
+      return {
+        crop: vi.fn((rect: unknown) => {
+          expect(rect).toEqual({ x: 0, y: 0, width: 426, height: 240 })
+          return {
+            getSize: () => ({ width: 426, height: 240 }),
+            toJPEG: () => Buffer.from(label),
+          }
+        }),
+        getSize: () => ({ width, height }),
+        isEmpty: () => false,
+        toBitmap: () => bitmap,
+      }
+    }
+    contents.executeJavaScript = vi.fn(async () => true)
+    contents.setFrameRate = vi.fn()
+    contents.startPainting = vi.fn(() => {
+      contents.emit('paint', {}, {}, image(0, 'cached'))
+      queueMicrotask(() => contents.emit('paint', {}, {}, image(1, 'current')))
+    })
+    contents.stopPainting = vi.fn()
+
+    class FakeBrowserWindow implements FakeWindow {
+      webContents = contents
+      constructor(options: BrowserWindowOptions & { width?: number }) {
+        expect(options.width).toBe(444)
+      }
+      loadURL = async () => {}
+      isDestroyed = () => destroyed
+      destroy = vi.fn(() => {
+        destroyed = true
+      })
+    }
+
+    await videoExport.renderVideoFrames(
+      FakeBrowserWindow,
+      project,
+      { times: [0] },
+      {
+        destroyed: false,
+        write: (frame) => {
+          frames.push(frame)
+          return true
+        },
+      },
+      videoExport.normalizeVideoSettings({ resolution: '240p', fps: 30 }),
+      runtime,
+      undefined,
+      undefined,
+      'win32',
+    )
+
+    expect(frames.map((frame) => frame.toString())).toEqual(['current'])
     expect(contents.listenerCount('paint')).toBe(0)
     expect(destroyed).toBe(true)
   })

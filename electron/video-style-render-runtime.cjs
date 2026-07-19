@@ -392,6 +392,13 @@ function installKaraokeRuntime() {
 
   window.renderKaraokeFrame = (state, sequence) => {
     document.body.dataset.frame = String(sequence)
+    const marker = byId('frame-marker')
+    if (marker) {
+      const encodedSequence = sequence + 1
+      Array.from(marker.children).forEach((cell, bit) => {
+        cell.style.backgroundColor = encodedSequence & (2 ** bit) ? '#fff' : '#000'
+      })
+    }
     applyBackground(byId('scene'), state.stageStyle.background)
     applyFrame(state)
     const key = nextLayoutKey(state)

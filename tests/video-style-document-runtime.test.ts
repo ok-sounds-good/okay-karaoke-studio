@@ -13,6 +13,7 @@ import { SYNC_AID_GEOMETRY } from '../src/lib/sync-aid-geometry'
 
 const require = createRequire(import.meta.url)
 const documentApi = require('../electron/video-style-document.cjs') as {
+  FRAME_MARKER_BITS: number
   assetInvocation(runtime: object): string
   frameInvocation(state: object, sequence: number): string
   renderDocument(options: object): string
@@ -45,6 +46,10 @@ describe('isolated video-style document boundary', () => {
     expect(html).toContain('transform: scale(0.6666666666666666, 0.6666666666666666)')
     expect(html.match(/<\/script/giu)).toHaveLength(1)
     expect(html).toContain('window.prepareKaraokeAssets')
+    expect(documentApi.FRAME_MARKER_BITS).toBe(18)
+    expect(html).toContain('id="frame-marker" class="frame-marker" style="left: 1280px"')
+    expect(html.match(/<i><\/i>/gu)).toHaveLength(18)
+    expect(html).toContain('const encodedSequence = sequence + 1')
     for (const options of [null, [], {}, { width: 0, height: 720 }, { width: 1.5, height: 1 }]) {
       expect(() => documentApi.renderDocument(options as object)).toThrow()
     }

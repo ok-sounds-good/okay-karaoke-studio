@@ -13,6 +13,7 @@ const {
   resolveVocalStyle,
 } = require('./stage-frame-state.cjs')
 const {
+  FRAME_MARKER_BITS,
   assetInvocation,
   frameInvocation,
   renderDocument: renderStyleDocument,
@@ -329,16 +330,47 @@ async function promoteVideoOutput(
   onPromotionComplete?.()
 }
 
-function encodeJpegFrame(image, settings) {
+function paintedFrameSequence(image, settings) {
   const size = image.getSize()
+  const scaleX = size.width / (settings.width + FRAME_MARKER_BITS)
+  const y = Math.floor(size.height / 2)
+  const bitmap = image.toBitmap()
+  const rowBytes = bitmap.length / size.height
+  if (!Number.isSafeInteger(rowBytes) || rowBytes < size.width * 4) return null
+  let sequence = 0
+  for (let bit = 0; bit < FRAME_MARKER_BITS; bit += 1) {
+    const x = Math.floor((settings.width + bit + 0.5) * scaleX)
+    const offset = y * rowBytes + x * 4
+    let brightChannels = 0
+    for (let channel = 0; channel < 4; channel += 1) {
+      if (bitmap[offset + channel] >= 128) brightChannels += 1
+    }
+    if (brightChannels >= 3) sequence += 2 ** bit
+  }
+  return sequence
+}
+
+function encodeJpegFrame(image, settings, cropMarker = false) {
+  const imageSize = image.getSize()
+  const source = cropMarker
+    ? image.crop({
+        x: 0,
+        y: 0,
+        width: Math.round(
+          (settings.width * imageSize.width) / (settings.width + FRAME_MARKER_BITS),
+        ),
+        height: imageSize.height,
+      })
+    : image
+  const size = source.getSize()
   const frame =
     size.width === settings.width && size.height === settings.height
-      ? image
-      : image.resize({ width: settings.width, height: settings.height, quality: 'best' })
+      ? source
+      : source.resize({ width: settings.width, height: settings.height, quality: 'best' })
   return frame.toJPEG(95)
 }
 
-function presentRequestedFrame(contents, update, settings, signal) {
+function presentRequestedFrame(contents, update, settings, signal, expectedSequence = null) {
   return new Promise((resolve, reject) => {
     let paintingStarted = false
     let settled = false
@@ -370,7 +402,9 @@ function presentRequestedFrame(contents, update, settings, signal) {
     const onPaint = (_event, _dirtyRect, image) => {
       if (settled || image.isEmpty()) return
       try {
-        const frame = encodeJpegFrame(image, settings)
+        if (expectedSequence !== null && paintedFrameSequence(image, settings) !== expectedSequence)
+          return
+        const frame = encodeJpegFrame(image, settings, expectedSequence !== null)
         settled = true
         const stopError = stopPainting()
         cleanup()
@@ -564,11 +598,12 @@ async function renderVideoFrames(
   runtime,
   onProgress,
   signal,
+  platform = process.platform,
 ) {
   throwIfAborted(signal)
   const window = new BrowserWindow({
     show: false,
-    width: settings.width,
+    width: settings.width + (platform === 'win32' ? FRAME_MARKER_BITS : 0),
     height: settings.height,
     useContentSize: true,
     webPreferences: {
@@ -605,6 +640,7 @@ async function renderVideoFrames(
         () => window.webContents.executeJavaScript(frameInvocation(state, frameIndex)),
         settings,
         signal,
+        platform === 'win32' ? frameIndex + 1 : null,
       )
       await writeJpegFrame(stream, frame, signal)
       if (

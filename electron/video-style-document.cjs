@@ -12,6 +12,7 @@ function deepFreeze(value) {
 
 const STAGE_LAYOUT = deepFreeze(require('./stage-layout.json'))
 const SYNC_AID_GEOMETRY = deepFreeze(require('./sync-aid-geometry.json'))
+const FRAME_MARKER_BITS = 18
 
 const DOCUMENT_STYLES = `
 * {
@@ -34,6 +35,18 @@ body {
   overflow: hidden;
   transform-origin: 0 0;
   background: transparent;
+}
+
+.frame-marker {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  display: flex;
+}
+
+.frame-marker > i {
+  width: 1px;
+  height: 100%;
 }
 
 .grain {
@@ -220,6 +233,7 @@ function renderDocument(options) {
     /<\/script/giu,
     '<\\/script',
   )
+  const markerCells = '<i></i>'.repeat(FRAME_MARKER_BITS)
   return `<!doctype html>
 <html>
   <head>
@@ -236,6 +250,7 @@ function renderDocument(options) {
       <div id="syncs" class="sync-layer"></div>
       <footer id="footer" class="footer"></footer>
     </div>
+    <div id="frame-marker" class="frame-marker" style="left: ${width}px">${markerCells}</div>
     <script>${runtimeSource}</script>
   </body>
 </html>`
@@ -280,4 +295,4 @@ function assetInvocation(runtime) {
   return `window.prepareKaraokeAssets(${decodedValueExpression(payload)})`
 }
 
-module.exports = { assetInvocation, frameInvocation, renderDocument }
+module.exports = { FRAME_MARKER_BITS, assetInvocation, frameInvocation, renderDocument }
