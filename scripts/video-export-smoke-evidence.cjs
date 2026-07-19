@@ -8,5 +8,4 @@ function countSungPixels(decoded) {
   }
   return lyricPixels
 }
-
 module.exports = { countSungPixels }

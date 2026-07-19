@@ -64,7 +64,7 @@ function validateManifest(value) {
         ? item.decodedLyricEvidence.every(validTransition)
         : item.decodedLyricEvidence.every(
             (evidence) =>
-              evidence?.observedFrame === (400 * item.fps) / 1_000 &&
+              evidence?.observedFrame === (600 * item.fps) / 1_000 &&
               Number.isSafeInteger(evidence.lyricPixels) &&
               evidence.lyricPixels > 0,
           ))
@@ -74,7 +74,6 @@ function validateManifest(value) {
   })
   return value
 }
-
 function validFailure(value) {
   const expected = value?.case?.ordinal > 0 ? EXPECTED_MATRIX[value.case.ordinal - 1] : null
   return (
@@ -90,11 +89,9 @@ function validFailure(value) {
     (!expected || (value.case.preset === expected.value && value.case.fps === expected.fps))
   )
 }
-
 async function readJson(root, name) {
   return JSON.parse(await fs.readFile(path.join(root, name), 'utf8'))
 }
-
 async function runLauncher(options = {}, supplied = {}) {
   const fsApi = options.fsApi || fs
   const createRoot =
@@ -138,14 +135,12 @@ async function runLauncher(options = {}, supplied = {}) {
   }
   return result
 }
-
 async function main() {
   const result = await runLauncher()
   const line = JSON.stringify(result)
   ;(result.ok ? process.stdout : process.stderr).write(`${line}\n`)
   return result.ok ? 0 : 1
 }
-
 if (require.main === module) {
   main().then(
     (code) => {
@@ -157,5 +152,4 @@ if (require.main === module) {
     },
   )
 }
-
 module.exports = { DEFAULT_TIMEOUT_MS, EXPECTED_MATRIX, runLauncher, validateManifest }

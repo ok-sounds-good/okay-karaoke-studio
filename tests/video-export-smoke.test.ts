@@ -34,19 +34,17 @@ function manifest() {
               changedPixels: 12,
               totalDifference: 400,
             }))
-          : [{ observedFrame: entry.fps === 30 ? 12 : 24, lyricPixels: 12 }],
+          : [{ observedFrame: entry.fps === 30 ? 18 : 36, lyricPixels: 12 }],
       bytes: 1_024,
       sha256: 'a'.repeat(64),
     })),
   }
 }
-
 describe('video export smoke launcher', () => {
   it('distinguishes decoded sung magenta from blank grayscale samples', () => {
     expect(countSungPixels(Buffer.alloc(30, 110))).toBe(0)
     expect(countSungPixels(Buffer.from([130, 80, 140, 99, 0, 140]))).toBe(1)
   })
-
   it('derives the exact resolution-major, fps-minor 14-case matrix', () => {
     expect(launcher.EXPECTED_MATRIX.map(({ value, fps }) => `${value}/${fps}`)).toEqual([
       '240p/30',
@@ -66,7 +64,6 @@ describe('video export smoke launcher', () => {
     ])
     expect(launcher.validateManifest(manifest())).toEqual(manifest())
   })
-
   it('rejects a partial or reordered manifest', () => {
     const partial = manifest()
     partial.cases.pop()
@@ -84,7 +81,6 @@ describe('video export smoke launcher', () => {
     delayedStarts.cases[0].streamStarts = { audioSeconds: 0.25, videoSeconds: 0.25 }
     expect(() => launcher.validateManifest(delayedStarts)).toThrow('invalid case 1')
   })
-
   it('cleans its owned root after a child timeout without publishing a manifest', async () => {
     const root = await mkdtemp(join(tmpdir(), 'oks-video-launcher-test-'))
     const runChild = vi.fn(async () => ({ timedOut: true }))
@@ -96,7 +92,6 @@ describe('video export smoke launcher', () => {
       code: 'ENOENT',
     })
   })
-
   it('returns bounded case identity and diagnostics from a failed child, then cleans', async () => {
     const root = await mkdtemp(join(tmpdir(), 'oks-video-launcher-failure-'))
     const failure = {
