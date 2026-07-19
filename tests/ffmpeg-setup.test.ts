@@ -24,6 +24,16 @@ const ENCODER_OUTPUT = [
   ' V....D libx264              libx264 H.264 encoder',
   ' A....D aac                  AAC encoder',
 ].join('\n')
+const OPTION_OUTPUT = [
+  '-enc_time_base[:<stream_spec>] <ratio>  set the desired time base for the encoder',
+  '-fps_mode[:<stream_spec>] <string>  set framerate mode for matching video streams',
+].join('\n')
+
+function probeOutput(args: string[], encoders = ENCODER_OUTPUT, options = OPTION_OUTPUT) {
+  if (args.includes('-encoders')) return encoders
+  if (args.includes('long')) return options
+  return VERSION_OUTPUT
+}
 
 function missingExecutable(): NodeJS.ErrnoException {
   const error = new Error('not found') as NodeJS.ErrnoException
@@ -59,9 +69,7 @@ describe('guided FFmpeg setup', () => {
     const run = vi.fn(async (_executable: string, args: string[]) => ({
       code: 0,
       stderr: '',
-      stdout: args.includes('-encoders')
-        ? ' V....D libx264 libx264 H.264 encoder\n'
-        : VERSION_OUTPUT,
+      stdout: probeOutput(args, ' V....D libx264 libx264 H.264 encoder\n'),
     }))
 
     await expect(
@@ -73,6 +81,31 @@ describe('guided FFmpeg setup', () => {
       path: 'ffmpeg',
     })
     expect(ffmpegSetup.parseEncoderNames(ENCODER_OUTPUT)).toEqual(new Set(['libx264', 'aac']))
+  })
+
+  it('rejects an encoder-capable executable without required frame-timing options', async () => {
+    const run = vi.fn(async (_executable: string, args: string[]) => ({
+      code: 0,
+      stderr: '',
+      stdout: probeOutput(
+        args,
+        ENCODER_OUTPUT,
+        '-enc_time_base[:<stream_spec>] <ratio>  set encoder time base',
+      ),
+    }))
+
+    await expect(
+      ffmpegSetup.detectFfmpeg({ platform: 'linux', env: {}, run }),
+    ).resolves.toMatchObject({
+      available: true,
+      exportCapable: false,
+      missingEncoders: [],
+      missingOptions: ['fps_mode'],
+      path: 'ffmpeg',
+    })
+    expect(run).toHaveBeenCalledWith('ffmpeg', ['-hide_banner', '-h', 'long'], {
+      signal: undefined,
+    })
   })
 
   it('builds fixed package-manager commands with no renderer-controlled arguments', async () => {
@@ -108,7 +141,7 @@ describe('guided FFmpeg setup', () => {
     const run = vi.fn(async (_executable: string, args: string[]) => ({
       code: 0,
       stderr: '',
-      stdout: args.includes('-encoders') ? ENCODER_OUTPUT : VERSION_OUTPUT,
+      stdout: probeOutput(args),
     }))
     const showMessageBox = vi.fn()
     const openExternal = vi.fn()
@@ -161,7 +194,7 @@ describe('guided FFmpeg setup', () => {
         return {
           code: 0,
           stderr: '',
-          stdout: args.includes('-encoders') ? ENCODER_OUTPUT : VERSION_OUTPUT,
+          stdout: probeOutput(args),
         }
       }
       throw missingExecutable()

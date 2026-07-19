@@ -12,10 +12,11 @@ work.
 
 You need Node.js 24 LTS or newer and Bun 1.3.14 or newer.
 
-MP4 export also requires FFmpeg with both the `libx264` and AAC encoders. When
-available, the Studio can install FFmpeg through WinGet on Windows or Homebrew
-on macOS after you confirm. You can also install FFmpeg manually or set
-`OKAY_KARAOKE_FFMPEG` to use a specific executable.
+MP4 export also requires FFmpeg with both the `libx264` and AAC encoders and the
+modern per-stream `fps_mode` and `enc_time_base` options. When available, the
+Studio can install FFmpeg through WinGet on Windows or Homebrew on macOS after
+you confirm. You can also install FFmpeg manually or set `OKAY_KARAOKE_FFMPEG`
+to use a specific executable; unsupported builds are rejected before export.
 
 ## Launch from source
 

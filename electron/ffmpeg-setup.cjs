@@ -5,6 +5,7 @@ const path = require('node:path')
 
 const MAX_PROCESS_OUTPUT = 128 * 1024
 const REQUIRED_ENCODERS = Object.freeze(['libx264', 'aac'])
+const REQUIRED_OPTIONS = Object.freeze(['enc_time_base', 'fps_mode'])
 const WINGET_PACKAGE_ID = 'Gyan.FFmpeg'
 const HELP_URLS = Object.freeze({
   darwin: 'https://brew.sh/',
@@ -154,6 +155,15 @@ function ffmpegVersion(output) {
   return match?.[1] || null
 }
 
+function parseOptionNames(output) {
+  const names = new Set()
+  for (const line of String(output || '').split(/\r?\n/)) {
+    const match = line.match(/^\s*-(\w+)(?:\[:<stream_spec>\])?\s/)
+    if (match) names.add(match[1])
+  }
+  return names
+}
+
 async function probeFfmpeg(executable, { run = runCommand, signal } = {}) {
   const versionResult = await run(executable, ['-hide_banner', '-version'], { signal })
   if (versionResult.code !== 0) return null
@@ -163,10 +173,21 @@ async function probeFfmpeg(executable, { run = runCommand, signal } = {}) {
       ? parseEncoderNames(`${encoderResult.stdout}\n${encoderResult.stderr}`)
       : new Set()
   const missingEncoders = REQUIRED_ENCODERS.filter((encoder) => !names.has(encoder))
+  const optionResult = await run(executable, ['-hide_banner', '-h', 'long'], { signal })
+  const options =
+    optionResult.code === 0
+      ? parseOptionNames(`${optionResult.stdout}\n${optionResult.stderr}`)
+      : new Set()
+  const missingOptions = REQUIRED_OPTIONS.filter((option) => !options.has(option))
   return {
     available: true,
-    exportCapable: encoderResult.code === 0 && missingEncoders.length === 0,
+    exportCapable:
+      encoderResult.code === 0 &&
+      missingEncoders.length === 0 &&
+      optionResult.code === 0 &&
+      missingOptions.length === 0,
     missingEncoders,
+    missingOptions,
     path: executable,
     version: ffmpegVersion(`${versionResult.stdout}\n${versionResult.stderr}`),
   }
@@ -190,6 +211,7 @@ async function detectFfmpeg(options = {}) {
       available: false,
       exportCapable: false,
       missingEncoders: [...REQUIRED_ENCODERS],
+      missingOptions: [...REQUIRED_OPTIONS],
       path: null,
       version: null,
     }
@@ -221,8 +243,12 @@ async function discoverInstallPlan(options = {}) {
 }
 
 function setupPrompt(status, plan, platform) {
+  const missing = [
+    ...status.missingEncoders,
+    ...status.missingOptions.map((option) => `-${option}`),
+  ]
   const missingDetail = status.available
-    ? `The detected FFmpeg executable is missing: ${status.missingEncoders.join(', ')}.`
+    ? `The detected FFmpeg executable is missing: ${missing.join(', ')}.`
     : 'FFmpeg was not found on this computer.'
   if (!plan) {
     return {
@@ -256,7 +282,7 @@ function installFailureMessage(plan, result) {
   const detail = String(result?.stderr || result?.stdout || '').trim()
   const shortDetail = detail.length > 1_200 ? detail.slice(-1_200) : detail
   return [
-    `${plan.label} did not produce an FFmpeg installation that supports libx264 and AAC.`,
+    `${plan.label} did not produce an FFmpeg installation that supports libx264, AAC, and the required frame-timing options.`,
     shortDetail,
     'Open the setup instructions or install FFmpeg manually, then try again.',
   ]
@@ -327,6 +353,7 @@ async function ensureFfmpegForExport({ openExternal, showMessageBox, ...options 
 
 module.exports = {
   REQUIRED_ENCODERS,
+  REQUIRED_OPTIONS,
   WINGET_PACKAGE_ID,
   detectFfmpeg,
   discoverInstallPlan,
@@ -338,6 +365,7 @@ module.exports = {
   installArguments,
   packageManagerCandidates,
   parseEncoderNames,
+  parseOptionNames,
   probeFfmpeg,
   runCommand,
   setupPrompt,

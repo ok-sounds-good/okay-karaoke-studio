@@ -621,35 +621,48 @@ describe('karaoke video frame planning', () => {
     ])
   })
 
-  it('streams JPEG frames at the selected output rate without a duplicate-frame filter', () => {
-    const args = videoExport.buildFfmpegArguments(
-      '/music/source.wav',
-      '/exports/video.mp4',
-      5_000,
-      { resolution: '1440p', fps: 60 },
-    )
+  it.each([30, 60] as const)(
+    'preserves one output frame per JPEG with index-derived timestamps at %i fps',
+    (fps) => {
+      const args = videoExport.buildFfmpegArguments(
+        '/music/source.wav',
+        '/exports/video.mp4',
+        5_000,
+        { resolution: '1440p', fps },
+      )
 
-    expect(args).toEqual(
-      expect.arrayContaining([
-        '-f',
-        'image2pipe',
-        '-framerate',
-        '60',
-        '-vcodec',
-        'mjpeg',
-        '-i',
-        'pipe:0',
-        '-af',
-        'apad',
-        '-t',
-        '5.000',
-      ]),
-    )
-    expect(args.some((argument) => /(?:^|,)fps=/u.test(argument))).toBe(false)
-    expect(args).not.toContain('concat')
-    expect(args).not.toContain('-shortest')
-    expect(args.at(-1)).toBe('/exports/video.mp4')
-  })
+      expect(args).toEqual(
+        expect.arrayContaining([
+          '-f',
+          'image2pipe',
+          '-framerate',
+          String(fps),
+          '-vcodec',
+          'mjpeg',
+          '-i',
+          'pipe:0',
+          '-vf',
+          `setpts=N/(${fps}*TB),format=yuv420p`,
+          '-fps_mode:v',
+          'passthrough',
+          '-enc_time_base:v',
+          `1:${fps}`,
+          '-af',
+          'apad',
+          '-t',
+          '5.000',
+        ]),
+      )
+      expect(args.indexOf('-framerate')).toBeLessThan(args.indexOf('pipe:0'))
+      expect(args.indexOf('-fps_mode:v')).toBeGreaterThan(args.lastIndexOf('-i'))
+      expect(args.some((argument) => /(?:^|,)fps=/u.test(argument))).toBe(false)
+      expect(args).not.toContain('-r')
+      expect(args).not.toContain('cfr')
+      expect(args).not.toContain('concat')
+      expect(args).not.toContain('-shortest')
+      expect(args.at(-1)).toBe('/exports/video.mp4')
+    },
+  )
 
   it('shares title, Clear/Scroll, section, resolved style, Preview, and sync-aid state', () => {
     const project = videoProject()
