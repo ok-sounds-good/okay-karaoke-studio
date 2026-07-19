@@ -56,10 +56,7 @@ function normalizeExportPath(filePath, format) {
   if (typeof filePath !== 'string' || !filePath) {
     throw new TypeError('filePath must be a non-empty string')
   }
-  return path.join(
-    path.dirname(filePath),
-    ensureExportExtension(path.basename(filePath), format),
-  )
+  return path.join(path.dirname(filePath), ensureExportExtension(path.basename(filePath), format))
 }
 
 module.exports = {

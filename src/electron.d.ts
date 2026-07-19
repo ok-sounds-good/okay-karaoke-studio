@@ -170,8 +170,6 @@ declare global {
     /** Undefined in the regular browser/Vite preview. */
     readonly studio?: StudioApi
     /** Chromium Local Font Access; available only in a secure, permissioned renderer. */
-    queryLocalFonts?: (
-      options?: StudioLocalFontQueryOptions
-    ) => Promise<StudioLocalFontRecord[]>
+    queryLocalFonts?: (options?: StudioLocalFontQueryOptions) => Promise<StudioLocalFontRecord[]>
   }
 }

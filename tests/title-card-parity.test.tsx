@@ -74,12 +74,7 @@ describe('Live Preview and MP4 title-card parity', () => {
       tracks: [createVocalTrack({ id: 'untimed-lead', lines: [createLyricLine('Still untimed')] })],
     })
     const markup = renderToStaticMarkup(
-      <KaraokePreview
-        project={project}
-        playbackMs={0}
-        lyricMs={0}
-        selectedWordIds={new Set()}
-      />,
+      <KaraokePreview project={project} playbackMs={0} lyricMs={0} selectedWordIds={new Set()} />,
     )
 
     expect(markup).toContain('class="title-card"')

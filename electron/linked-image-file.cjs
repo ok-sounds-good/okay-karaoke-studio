@@ -52,12 +52,8 @@ function validBigIntStat(stat) {
 
 function validateRegularBoundedFile(stat) {
   const maximum = BigInt(LINKED_IMAGE_FILE_LIMITS.maxBytes)
-  if (
-    !validBigIntStat(stat) ||
-    !stat.isFile() ||
-    stat.size < 1n ||
-    stat.size > maximum
-  ) throw fileInvalid()
+  if (!validBigIntStat(stat) || !stat.isFile() || stat.size < 1n || stat.size > maximum)
+    throw fileInvalid()
 }
 
 function sameSnapshotState(left, right) {
@@ -68,10 +64,8 @@ function validatePathBindings(handleStat, selectedStat, canonicalStat) {
   for (const stat of [handleStat, selectedStat, canonicalStat]) {
     validateRegularBoundedFile(stat)
   }
-  if (
-    !sameSnapshotState(handleStat, selectedStat) ||
-    !sameSnapshotState(handleStat, canonicalStat)
-  ) throw fileInvalid()
+  if (!sameSnapshotState(handleStat, selectedStat) || !sameSnapshotState(handleStat, canonicalStat))
+    throw fileInvalid()
 }
 
 async function checkedRead(handle, buffer, offset, length, position) {
@@ -86,7 +80,8 @@ async function checkedRead(handle, buffer, offset, length, position) {
     !Number.isInteger(result.bytesRead) ||
     result.bytesRead < 0 ||
     result.bytesRead > length
-  ) throw linkedImageError('LINKED_IMAGE_READ_FAILED')
+  )
+    throw linkedImageError('LINKED_IMAGE_READ_FAILED')
   return result.bytesRead
 }
 
@@ -95,23 +90,14 @@ async function readBoundedSnapshot(handle, expectedSize) {
   let position = 0
 
   while (position < expectedSize) {
-    const length = Math.min(
-      LINKED_IMAGE_FILE_LIMITS.readChunkBytes,
-      expectedSize - position,
-    )
+    const length = Math.min(LINKED_IMAGE_FILE_LIMITS.readChunkBytes, expectedSize - position)
     const bytesRead = await checkedRead(handle, working, position, length, position)
     if (bytesRead === 0) throw fileInvalid()
     position += bytesRead
   }
 
   const eofProbe = Buffer.alloc(1)
-  const bytesPastExpectedEnd = await checkedRead(
-    handle,
-    eofProbe,
-    0,
-    eofProbe.length,
-    expectedSize,
-  )
+  const bytesPastExpectedEnd = await checkedRead(handle, eofProbe, 0, eofProbe.length, expectedSize)
   if (bytesPastExpectedEnd !== 0) throw fileInvalid()
 
   // Keep the FileHandle's read target private even when an injected reader retains it.
@@ -181,7 +167,8 @@ async function snapshotLinkedImageFile(selectedPath, options = {}) {
       if (
         canonicalPathAfter !== canonicalPath ||
         !sameSnapshotState(handleStatBefore, handleStatAfter)
-      ) throw fileInvalid()
+      )
+        throw fileInvalid()
 
       return bytes
     })

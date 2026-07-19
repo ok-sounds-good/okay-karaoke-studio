@@ -43,8 +43,9 @@ describe('installed font access', () => {
   let root: Root
 
   beforeEach(() => {
-    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
-      .IS_REACT_ACT_ENVIRONMENT = true
+    ;(
+      globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }
+    ).IS_REACT_ACT_ENVIRONMENT = true
     container = document.createElement('div')
     document.body.append(container)
     root = createRoot(container)
@@ -80,9 +81,7 @@ describe('installed font access', () => {
     await act(async () => Promise.resolve())
     expect(container.querySelector('output')?.textContent).toBe('ready:Studio Sans')
 
-    query.mockRejectedValueOnce(
-      new DOMException('Permission denied', 'NotAllowedError'),
-    )
+    query.mockRejectedValueOnce(new DOMException('Permission denied', 'NotAllowedError'))
     await act(async () => button.click())
     expect(container.querySelector('output')?.textContent).toBe('denied:')
 
@@ -125,7 +124,8 @@ describe('installed font access', () => {
 
     const readySuccess = deferred<StudioLocalFontRecord[]>()
     const readyFailure = deferred<StudioLocalFontRecord[]>()
-    let query = vi.fn()
+    let query = vi
+      .fn()
       .mockImplementationOnce(() => readySuccess.promise)
       .mockImplementationOnce(() => readyFailure.promise)
       .mockResolvedValueOnce(fontRecord('Latest Ready'))
@@ -144,7 +144,8 @@ describe('installed font access', () => {
 
     const errorSuccess = deferred<StudioLocalFontRecord[]>()
     const errorFailure = deferred<StudioLocalFontRecord[]>()
-    query = vi.fn()
+    query = vi
+      .fn()
       .mockImplementationOnce(() => errorSuccess.promise)
       .mockImplementationOnce(() => errorFailure.promise)
       .mockRejectedValueOnce(new Error('latest failure'))
@@ -163,7 +164,8 @@ describe('installed font access', () => {
 
     const unavailableSuccess = deferred<StudioLocalFontRecord[]>()
     const unavailableFailure = deferred<StudioLocalFontRecord[]>()
-    query = vi.fn()
+    query = vi
+      .fn()
       .mockImplementationOnce(() => unavailableSuccess.promise)
       .mockImplementationOnce(() => unavailableFailure.promise)
     Object.defineProperty(window, 'queryLocalFonts', {

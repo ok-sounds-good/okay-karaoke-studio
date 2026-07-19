@@ -37,10 +37,7 @@ export function pngContainer(width: number, height: number, middle: Buffer[] = [
 }
 
 export function pngFromChunks(chunks: Buffer[]) {
-  return Buffer.concat([
-    PNG_SIGNATURE,
-    ...chunks,
-  ])
+  return Buffer.concat([PNG_SIGNATURE, ...chunks])
 }
 
 export function validPng(width: number, height: number, pixelValue = 0) {

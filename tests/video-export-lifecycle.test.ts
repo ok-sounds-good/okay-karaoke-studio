@@ -3,28 +3,26 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
 
 const require = createRequire(import.meta.url)
-const {
-  VIDEO_EXPORT_CANCEL_DIALOG_OPTIONS,
-  createVideoExportLifecycleGuard,
-} = require('../electron/video-export-lifecycle.cjs') as {
-  VIDEO_EXPORT_CANCEL_DIALOG_OPTIONS: {
-    buttons: string[]
-    defaultId: number
-    cancelId: number
-    message: string
-    detail: string
+const { VIDEO_EXPORT_CANCEL_DIALOG_OPTIONS, createVideoExportLifecycleGuard } =
+  require('../electron/video-export-lifecycle.cjs') as {
+    VIDEO_EXPORT_CANCEL_DIALOG_OPTIONS: {
+      buttons: string[]
+      defaultId: number
+      cancelId: number
+      message: string
+      detail: string
+    }
+    createVideoExportLifecycleGuard(options: {
+      confirmCancellation: () => Promise<boolean>
+      abortActiveExport: () => Promise<void>
+      closeWindow: () => void
+      quitApp: () => void
+      onError?: (error: unknown) => void
+    }): {
+      requestAppQuit(): Promise<boolean>
+      requestWindowClose(): Promise<boolean>
+    }
   }
-  createVideoExportLifecycleGuard(options: {
-    confirmCancellation: () => Promise<boolean>
-    abortActiveExport: () => Promise<void>
-    closeWindow: () => void
-    quitApp: () => void
-    onError?: (error: unknown) => void
-  }): {
-    requestAppQuit(): Promise<boolean>
-    requestWindowClose(): Promise<boolean>
-  }
-}
 const { createNativeCloseArbiter } = require('../electron/native-close-arbiter.cjs') as {
   createNativeCloseArbiter(options: Record<string, unknown>): {
     requestWindowClose(): unknown
@@ -35,9 +33,15 @@ const { createNativeCloseArbiter } = require('../electron/native-close-arbiter.c
 
 function lifecycleGuard(confirmed: boolean) {
   const actions: string[] = []
-  const abortActiveExport = vi.fn(async () => { actions.push('abort') })
-  const closeWindow = vi.fn(() => { actions.push('close') })
-  const quitApp = vi.fn(() => { actions.push('quit') })
+  const abortActiveExport = vi.fn(async () => {
+    actions.push('abort')
+  })
+  const closeWindow = vi.fn(() => {
+    actions.push('close')
+  })
+  const quitApp = vi.fn(() => {
+    actions.push('quit')
+  })
   const guard = createVideoExportLifecycleGuard({
     confirmCancellation: vi.fn(async () => confirmed),
     abortActiveExport,
@@ -143,13 +147,17 @@ describe('video export lifecycle cancellation guard', () => {
 
   it('does not close when promotion starts while cancellation confirmation is open', async () => {
     let resolveConfirmation = (_confirmed: boolean) => {}
-    const confirmation = new Promise<boolean>((resolve) => { resolveConfirmation = resolve })
+    const confirmation = new Promise<boolean>((resolve) => {
+      resolveConfirmation = resolve
+    })
     const error = Object.assign(
       new Error('Video export promotion has already begun and cannot be canceled'),
       { code: 'VIDEO_EXPORT_NOT_CANCELLABLE' },
     )
     const closeWindow = vi.fn()
-    const abortActiveExport = vi.fn(async () => { throw error })
+    const abortActiveExport = vi.fn(async () => {
+      throw error
+    })
     const onError = vi.fn()
     const guard = createVideoExportLifecycleGuard({
       confirmCancellation: () => confirmation,

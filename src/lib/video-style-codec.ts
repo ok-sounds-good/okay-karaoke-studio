@@ -95,30 +95,41 @@ export function validFontFaceDescriptor(value: unknown): value is FontFaceDescri
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
   const face = value as RecordValue
   if (!hasExactKeys(face, FACE_KEYS)) return false
-  return typeof face.fullName === 'string' && Boolean(face.fullName.trim()) &&
+  return (
+    typeof face.fullName === 'string' &&
+    Boolean(face.fullName.trim()) &&
     face.fullName.length <= 300 &&
-    typeof face.style === 'string' && Boolean(face.style.trim()) && face.style.length <= 120 &&
+    typeof face.style === 'string' &&
+    Boolean(face.style.trim()) &&
+    face.style.length <= 120 &&
     (face.postscriptName === null || isValidPostScriptName(face.postscriptName)) &&
-    Number.isSafeInteger(face.weight) && Number(face.weight) >= 100 && Number(face.weight) <= 900 &&
+    Number.isSafeInteger(face.weight) &&
+    Number(face.weight) >= 100 &&
+    Number(face.weight) <= 900 &&
     ['normal', 'italic', 'oblique'].includes(String(face.slant))
+  )
 }
 
 function sameFace(left: FontFaceDescriptor, right: FontFaceDescriptor): boolean {
-  return left.fullName === right.fullName &&
+  return (
+    left.fullName === right.fullName &&
     left.style === right.style &&
     left.postscriptName === right.postscriptName &&
     left.weight === right.weight &&
     left.slant === right.slant
+  )
 }
 
 function sameTypeface(
   candidate: FontTypefaceDescriptor,
   canonical: FontTypefaceDescriptor,
 ): boolean {
-  return candidate.kind === canonical.kind &&
+  return (
+    candidate.kind === canonical.kind &&
     candidate.family === canonical.family &&
     candidate.faces.length === canonical.faces.length &&
     candidate.faces.every((face, index) => sameFace(face, canonical.faces[index]))
+  )
 }
 
 export function validTypefaceDescriptor(value: unknown): value is FontTypefaceDescriptor {
@@ -147,8 +158,10 @@ export function validTypefaceDescriptor(value: unknown): value is FontTypefaceDe
     return sameTypeface(typeface, SYSTEM_MONOSPACE_TYPEFACE)
   }
   const postscriptNames = typeface.faces.map((face) => face.postscriptName)
-  return postscriptNames.every((name) => name !== null) &&
+  return (
+    postscriptNames.every((name) => name !== null) &&
     new Set(postscriptNames).size === postscriptNames.length
+  )
 }
 
 function validTextStyle(value: unknown, withVisibility = false): value is TextStyle {
@@ -157,12 +170,15 @@ function validTextStyle(value: unknown, withVisibility = false): value is TextSt
   const keys = withVisibility
     ? ['typeface', 'fontStyle', 'sizePx', 'color', 'visible']
     : ['typeface', 'fontStyle', 'sizePx', 'color']
-  return hasExactKeys(style, keys) &&
+  return (
+    hasExactKeys(style, keys) &&
     validTypefaceDescriptor(style.typeface) &&
     validFontFaceDescriptor(style.fontStyle) &&
     isFontSizePx(style.sizePx) &&
-    typeof style.color === 'string' && isHexColor(style.color) &&
+    typeof style.color === 'string' &&
+    isHexColor(style.color) &&
     (!withVisibility || typeof style.visible === 'boolean')
+  )
 }
 
 export function decodeFontFace(value: unknown, path: string): FontFaceDescriptor {
@@ -351,12 +367,9 @@ export function decodeVocalStyle(value: unknown, path: string): VocalStyle {
   const syncAid = record(source.syncAid, `${path}.syncAid`)
   exactKeys(syncAid, ['enabled', 'minLeadMs', 'maxLeadMs'], `${path}.syncAid`)
   const style: VocalStyle = {
-    typeface: source.typeface === null
-      ? null
-      : decodeTypeface(source.typeface, `${path}.typeface`),
-    fontStyle: source.fontStyle === null
-      ? null
-      : decodeFontFace(source.fontStyle, `${path}.fontStyle`),
+    typeface: source.typeface === null ? null : decodeTypeface(source.typeface, `${path}.typeface`),
+    fontStyle:
+      source.fontStyle === null ? null : decodeFontFace(source.fontStyle, `${path}.fontStyle`),
     sizePx: source.sizePx as FontSizePx | null,
     unsungColor: nullableColor('unsungColor'),
     sungColor: nullableColor('sungColor'),

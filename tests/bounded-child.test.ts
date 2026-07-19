@@ -81,7 +81,9 @@ describe('bounded child lifecycle', () => {
     await vi.advanceTimersByTimeAsync(2_000)
     await expect(pending).resolves.toMatchObject({
       signal: 'SIGKILL',
-      terminationConfirmed: true, terminationUnconfirmed: false, timedOut: true,
+      terminationConfirmed: true,
+      terminationUnconfirmed: false,
+      timedOut: true,
     })
     expect(child.kills).toEqual(['SIGTERM', 'SIGKILL'])
     expect(child.unrefs).toBe(0)
@@ -99,7 +101,9 @@ describe('bounded child lifecycle', () => {
     await vi.advanceTimersByTimeAsync(3_250)
     await expect(pending).resolves.toMatchObject({
       signal: null,
-      terminationConfirmed: false, terminationUnconfirmed: true, timedOut: true,
+      terminationConfirmed: false,
+      terminationUnconfirmed: true,
+      timedOut: true,
     })
     expect(child.kills).toEqual(['SIGTERM', 'SIGKILL'])
     expect(child.unrefs).toBe(1)
@@ -118,7 +122,9 @@ describe('bounded child lifecycle', () => {
 
       await vi.advanceTimersByTimeAsync(3_250)
       await expect(pending).resolves.toMatchObject({
-        killFailed: true, signal: null, terminationUnconfirmed: true,
+        killFailed: true,
+        signal: null,
+        terminationUnconfirmed: true,
       })
       expect(child.kills).toEqual(['SIGTERM', 'SIGKILL'])
       expect(child.unrefs).toBe(1)
@@ -204,7 +210,9 @@ describe('bounded child lifecycle', () => {
         },
       })
       expect(outcome).toMatchObject({
-        terminationConfirmed: false, terminationUnconfirmed: true, timedOut: true,
+        terminationConfirmed: false,
+        terminationUnconfirmed: true,
+        timedOut: true,
       })
       expect(unrefSpy).toHaveBeenCalledOnce()
     } finally {
@@ -219,7 +227,8 @@ describe('bounded child lifecycle', () => {
   })
 
   it.each(['inherit', ['ignore', 'ignore', 'ipc']])(
-    'rejects inherited or IPC stdio %# before spawning', async (stdio) => {
+    'rejects inherited or IPC stdio %# before spawning',
+    async (stdio) => {
       const spawnImpl = vi.fn()
       const outcome = await bounded.runBoundedChild({
         executable: 'electron',
@@ -359,7 +368,9 @@ describe('bounded child lifecycle', () => {
       const secret = 'CodexSecretPath-DoNotLeak'
       const outcome = await bounded.runBoundedChild({
         executable: secret,
-        spawnImpl: () => { throw new Error(`cannot launch ${secret}`) },
+        spawnImpl: () => {
+          throw new Error(`cannot launch ${secret}`)
+        },
         processLike: parent,
         timeoutMs: 1_000,
       })
@@ -386,7 +397,8 @@ describe('bounded child lifecycle', () => {
     child.emit('error', new Error('private start error'))
 
     await expect(pending).resolves.toMatchObject({
-      startFailed: true, terminationConfirmed: true,
+      startFailed: true,
+      terminationConfirmed: true,
     })
   })
 

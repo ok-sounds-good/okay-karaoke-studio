@@ -10,22 +10,29 @@ function resolveFontFace(typeface, requested) {
     ? typeface.faces.find((face) => face.postscriptName === requested.postscriptName)
     : null
   if (exactPostscript) return { ...exactPostscript }
-  const exactStyle = typeface.faces.filter((face) => (
-    face.style.toLowerCase() === requested.style.toLowerCase() &&
-    face.weight === requested.weight &&
-    face.slant === requested.slant
-  )).sort(compareFontFaces)[0]
+  const exactStyle = typeface.faces
+    .filter(
+      (face) =>
+        face.style.toLowerCase() === requested.style.toLowerCase() &&
+        face.weight === requested.weight &&
+        face.slant === requested.slant,
+    )
+    .sort(compareFontFaces)[0]
   if (exactStyle) return { ...exactStyle }
-  return { ...[...typeface.faces].sort((left, right) => {
-    const score = (face) => Math.abs(face.weight - requested.weight) +
-      (face.slant === requested.slant ? 0 : 1_000)
-    return score(left) - score(right) || compareFontFaces(left, right)
-  })[0] }
+  return {
+    ...[...typeface.faces].sort((left, right) => {
+      const score = (face) =>
+        Math.abs(face.weight - requested.weight) + (face.slant === requested.slant ? 0 : 1_000)
+      return score(left) - score(right) || compareFontFaces(left, right)
+    })[0],
+  }
 }
 function compareFontFaces(left, right) {
-  return compareOrdinal(left.style, right.style) ||
+  return (
+    compareOrdinal(left.style, right.style) ||
     compareOrdinal(left.fullName, right.fullName) ||
     compareOrdinal(String(left.postscriptName), String(right.postscriptName))
+  )
 }
 function resolveVocalStyle(projectLyrics, vocal) {
   const typeface = vocal.typeface ?? projectLyrics.typeface
@@ -147,9 +154,13 @@ function syncAidFor(track, firstSectionLineIds, active, lyricMs) {
   const entry = active.entries.find(({ line }) => firstSectionLineIds.has(line.id))
   const firstWord = entry?.line.words[0]
   if (
-    !entry || !firstWord || firstWord.startMs === null || firstWord.endMs === null ||
+    !entry ||
+    !firstWord ||
+    firstWord.startMs === null ||
+    firstWord.endMs === null ||
     firstWord.endMs <= firstWord.startMs
-  ) return null
+  )
+    return null
   const availableMs = Math.max(0, firstWord.startMs - active.activationMs)
   const durationMs = Math.min(availableMs, config.maxLeadMs, track.vocalStyle.previewMs)
   if (durationMs < config.minLeadMs) return null
@@ -179,7 +190,10 @@ function createStageFramePlanner(project) {
 
   return (playbackMs) => {
     const lyricMs = playbackMs - project.offsetMs
-    const planned = tracks.map((entry) => ({ ...entry, active: activeWindow(entry.windows, lyricMs) }))
+    const planned = tracks.map((entry) => ({
+      ...entry,
+      active: activeWindow(entry.windows, lyricMs),
+    }))
     const lines = []
     for (
       let lineIndex = 0;
@@ -194,11 +208,13 @@ function createStageFramePlanner(project) {
           trackId: track.id,
           text: line.text.replaceAll('/', '·'),
           style,
-          words: line.words.filter((word) => word.text).map((word) => ({
-            id: word.id,
-            text: word.text.replaceAll('/', '·'),
-            progress: wordProgress(word, lyricMs),
-          })),
+          words: line.words
+            .filter((word) => word.text)
+            .map((word) => ({
+              id: word.id,
+              text: word.text.replaceAll('/', '·'),
+              progress: wordProgress(word, lyricMs),
+            })),
         })
       }
     }

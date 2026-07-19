@@ -3,16 +3,8 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import {
-  baselineJpeg,
-  jpegSegment,
-} from './support/jpeg-fixture'
-import {
-  ihdr,
-  pngChunk,
-  pngFromChunks,
-  validPng,
-} from './support/png-fixture'
+import { baselineJpeg, jpegSegment } from './support/jpeg-fixture'
+import { ihdr, pngChunk, pngFromChunks, validPng } from './support/png-fixture'
 
 const require = createRequire(import.meta.url)
 const linked = require('../electron/linked-image-decoder.cjs') as {
@@ -21,22 +13,19 @@ const linked = require('../electron/linked-image-decoder.cjs') as {
     options: { decode: Decoder; fileSystem?: unknown },
   ): Promise<LinkedResult>
   sniffLinkedImageFormat(bytes: Buffer): 'jpeg' | 'png'
-  validateLinkedImageSnapshot(
-    bytes: Buffer,
-    options: { decode: Decoder },
-  ): LinkedResult
+  validateLinkedImageSnapshot(bytes: Buffer, options: { decode: Decoder }): LinkedResult
 }
 const adapter = require('../electron/native-image-adapter.cjs') as {
-  createNativeImageDecoder(nativeImage: {
-    createFromBuffer(bytes: Buffer): unknown
-  }): Decoder
+  createNativeImageDecoder(nativeImage: { createFromBuffer(bytes: Buffer): unknown }): Decoder
 }
 
-type DecodeResult = false | {
-  empty: boolean
-  height: number
-  width: number
-}
+type DecodeResult =
+  | false
+  | {
+      empty: boolean
+      height: number
+      width: number
+    }
 type Decoder = (bytes: Buffer, format: 'jpeg' | 'png') => DecodeResult
 type LinkedResult = {
   bytes: Buffer
@@ -48,9 +37,11 @@ type LinkedResult = {
 const temporaryDirectories: string[] = []
 
 afterEach(async () => {
-  await Promise.all(temporaryDirectories.splice(0).map((directory) => (
-    rm(directory, { force: true, recursive: true })
-  )))
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { force: true, recursive: true })),
+  )
 })
 
 function dimensions(width: number, height: number): DecodeResult {
@@ -101,13 +92,17 @@ function injectedSnapshot(bytes: Buffer) {
     size: BigInt(bytes.length),
   }
   const handle = {
-    async close() { calls.close += 1 },
+    async close() {
+      calls.close += 1
+    },
     async read(target: Buffer, offset: number, length: number, position: number) {
       const bytesRead = Math.min(length, Math.max(0, bytes.length - position))
       bytes.copy(target, offset, position, position + bytesRead)
       return { buffer: target, bytesRead }
     },
-    async stat() { return stat },
+    async stat() {
+      return stat
+    },
   }
   return {
     calls,
@@ -116,8 +111,12 @@ function injectedSnapshot(bytes: Buffer) {
         calls.open += 1
         return handle
       },
-      async realpath() { return '/canonical/background' },
-      async stat() { return stat },
+      async realpath() {
+        return '/canonical/background'
+      },
+      async stat() {
+        return stat
+      },
     },
   }
 }
@@ -126,8 +125,12 @@ describe('linked image container and native decoder validation', () => {
   it('sniffs PNG and JPEG from captured bytes and returns isolated ownership', () => {
     const cases = [
       { bytes: validPng(2, 3), format: 'png' as const, height: 3, width: 2 },
-      { bytes: baselineJpeg({ height: 5, width: 4 }), format: 'jpeg' as const,
-        height: 5, width: 4 },
+      {
+        bytes: baselineJpeg({ height: 5, width: 4 }),
+        format: 'jpeg' as const,
+        height: 5,
+        width: 4,
+      },
     ]
 
     for (const item of cases) {
@@ -160,10 +163,20 @@ describe('linked image container and native decoder validation', () => {
     const directory = await mkdtemp(join(tmpdir(), 'oks-linked-image-'))
     temporaryDirectories.push(directory)
     const cases = [
-      { bytes: validPng(2, 3), file: 'actually-png.jpg', format: 'png' as const,
-        height: 3, width: 2 },
-      { bytes: baselineJpeg({ height: 5, width: 4 }), file: 'actually-jpeg.png',
-        format: 'jpeg' as const, height: 5, width: 4 },
+      {
+        bytes: validPng(2, 3),
+        file: 'actually-png.jpg',
+        format: 'png' as const,
+        height: 3,
+        width: 2,
+      },
+      {
+        bytes: baselineJpeg({ height: 5, width: 4 }),
+        file: 'actually-jpeg.png',
+        format: 'jpeg' as const,
+        height: 5,
+        width: 4,
+      },
     ]
 
     for (const item of cases) {
@@ -198,25 +211,29 @@ describe('linked image container and native decoder validation', () => {
   it('closes the sole snapshot handle before parser and decoder failures escape', async () => {
     const parserFailure = injectedSnapshot(Buffer.from('not an image'))
     let parserDecoderCalls = 0
-    await expect(linked.readLinkedImage('/selected/image', {
-      decode: () => {
-        parserDecoderCalls += 1
-        return dimensions(1, 1)
-      },
-      fileSystem: parserFailure.fileSystem,
-    })).rejects.toMatchObject({ code: 'LINKED_IMAGE_INVALID' })
+    await expect(
+      linked.readLinkedImage('/selected/image', {
+        decode: () => {
+          parserDecoderCalls += 1
+          return dimensions(1, 1)
+        },
+        fileSystem: parserFailure.fileSystem,
+      }),
+    ).rejects.toMatchObject({ code: 'LINKED_IMAGE_INVALID' })
     expect(parserFailure.calls).toEqual({ close: 1, open: 1 })
     expect(parserDecoderCalls).toBe(0)
 
     const decoderFailure = injectedSnapshot(validPng(1, 1))
     let decoderCalls = 0
-    await expect(linked.readLinkedImage('/selected/image', {
-      decode: () => {
-        decoderCalls += 1
-        return false
-      },
-      fileSystem: decoderFailure.fileSystem,
-    })).rejects.toMatchObject({ code: 'LINKED_IMAGE_INVALID' })
+    await expect(
+      linked.readLinkedImage('/selected/image', {
+        decode: () => {
+          decoderCalls += 1
+          return false
+        },
+        fileSystem: decoderFailure.fileSystem,
+      }),
+    ).rejects.toMatchObject({ code: 'LINKED_IMAGE_INVALID' })
     expect(decoderFailure.calls).toEqual({ close: 1, open: 1 })
     expect(decoderCalls).toBe(1)
   })
@@ -227,9 +244,11 @@ describe('linked image container and native decoder validation', () => {
     ['malformed PNG', Buffer.concat([validPng(1, 1), Buffer.from([0])])],
     ['malformed JPEG', Buffer.from([0xff, 0xd8, 0xff, 0xd9])],
   ])('rejects %s with one fixed public image error', (_name, bytes) => {
-    const error = thrown(() => linked.validateLinkedImageSnapshot(bytes, {
-      decode: () => dimensions(1, 1),
-    }))
+    const error = thrown(() =>
+      linked.validateLinkedImageSnapshot(bytes, {
+        decode: () => dimensions(1, 1),
+      }),
+    )
     expect(error).toMatchObject({
       code: 'LINKED_IMAGE_INVALID',
       message: 'The linked image must be a decodable static PNG or JPEG.',
@@ -245,8 +264,9 @@ describe('linked image container and native decoder validation', () => {
     ['width mismatch', () => dimensions(1, 3)],
     ['height mismatch', () => dimensions(2, 1)],
   ] as Array<[string, Decoder]>)('rejects decoder %s results', (_name, decode) => {
-    expect(() => linked.validateLinkedImageSnapshot(validPng(2, 3), { decode }))
-      .toThrow('The linked image must be a decodable static PNG or JPEG.')
+    expect(() => linked.validateLinkedImageSnapshot(validPng(2, 3), { decode })).toThrow(
+      'The linked image must be a decodable static PNG or JPEG.',
+    )
   })
 
   it('hides forged decoder errors and paths behind the fixed public contract', () => {
@@ -260,9 +280,13 @@ describe('linked image container and native decoder validation', () => {
     cause.message = 'The linked image must be a decodable static PNG or JPEG.'
     cause.path = secretPath
     cause.cause = new Error(`nested failure for ${secretPath}`)
-    const error = thrown(() => linked.validateLinkedImageSnapshot(validPng(1, 1), {
-      decode: () => { throw cause },
-    }))
+    const error = thrown(() =>
+      linked.validateLinkedImageSnapshot(validPng(1, 1), {
+        decode: () => {
+          throw cause
+        },
+      }),
+    )
     expect(error).toMatchObject({
       code: 'LINKED_IMAGE_INVALID',
       message: 'The linked image must be a decodable static PNG or JPEG.',
@@ -299,8 +323,7 @@ describe('linked image container and native decoder validation', () => {
     expect(pathCalls).toBe(0)
 
     const empty = adapter.createNativeImageDecoder({
-      createFromBuffer: () => ({ getSize: () => ({ height: 0, width: 0 }),
-        isEmpty: () => true }),
+      createFromBuffer: () => ({ getSize: () => ({ height: 0, width: 0 }), isEmpty: () => true }),
     })
     expect(empty(input, 'png')).toEqual({ empty: true, height: 0, width: 0 })
     const unsupported = adapter.createNativeImageDecoder({ createFromBuffer: () => false })

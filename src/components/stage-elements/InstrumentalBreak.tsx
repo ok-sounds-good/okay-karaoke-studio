@@ -8,7 +8,10 @@ export function InstrumentalBreak() {
   return (
     <div className="instrumental-break">
       <span>Instrumental</span>
-      <i /><i /><i /><i />
+      <i />
+      <i />
+      <i />
+      <i />
     </div>
   )
 }

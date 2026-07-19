@@ -47,10 +47,9 @@ type VideoExportModule = {
 
 const require = createRequire(import.meta.url)
 const videoExport = require('../electron/video-export.cjs') as VideoExportModule
-const project = JSON.parse(readFileSync(
-  new URL('./fixtures/current-project-v0.json', import.meta.url),
-  'utf8',
-)) as unknown
+const project = JSON.parse(
+  readFileSync(new URL('./fixtures/current-project-v0.json', import.meta.url), 'utf8'),
+) as unknown
 const runtime = {}
 
 function isAssetInvocation(source: string) {
@@ -59,7 +58,9 @@ function isAssetInvocation(source: string) {
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void
-  const promise = new Promise<T>((accept) => { resolve = accept })
+  const promise = new Promise<T>((accept) => {
+    resolve = accept
+  })
   return { promise, resolve }
 }
 
@@ -70,17 +71,19 @@ describe('offscreen video frame presentation', () => {
     let currentFrame = -1
     let destroyed = false
     const contents = new EventEmitter() as FakeWebContents
-    contents.capturePage = vi.fn(() => { throw new Error('capturePage returned stale data') })
-    contents.invalidate = vi.fn(() => { throw new Error('invalidate requested stale data') })
+    contents.capturePage = vi.fn(() => {
+      throw new Error('capturePage returned stale data')
+    })
+    contents.invalidate = vi.fn(() => {
+      throw new Error('invalidate requested stale data')
+    })
     contents.executeJavaScript = vi.fn(async (source: string) => {
       if (isAssetInvocation(source)) {
         order.push('assets')
         return { fontFallbacks: [] }
       }
       expect(contents.listenerCount('paint')).toBe(0)
-      expect(source).toContain(
-        'requestAnimationFrame(()=>requestAnimationFrame(resolve))',
-      )
+      expect(source).toContain('requestAnimationFrame(()=>requestAnimationFrame(resolve))')
       currentFrame = Number(source.match(/,(\d+)\);await/u)?.[1])
       order.push(`update:${currentFrame}`)
       await Promise.resolve()
@@ -97,16 +100,23 @@ describe('offscreen video frame presentation', () => {
           return Buffer.from(`current-${currentFrame}`)
         },
       }
-      contents.emit('paint', {}, {}, {
-        getSize: () => ({ width: 852, height: 480 }),
-        isEmpty: () => false,
-        resize: (size: unknown) => {
-          expect(size).toEqual({ width: 426, height: 240, quality: 'best' })
-          order.push(`resize:${currentFrame}`)
-          return resized
+      contents.emit(
+        'paint',
+        {},
+        {},
+        {
+          getSize: () => ({ width: 852, height: 480 }),
+          isEmpty: () => false,
+          resize: (size: unknown) => {
+            expect(size).toEqual({ width: 426, height: 240, quality: 'best' })
+            order.push(`resize:${currentFrame}`)
+            return resized
+          },
+          toJPEG: () => {
+            throw new Error('unresized paint encoded')
+          },
         },
-        toJPEG: () => { throw new Error('unresized paint encoded') },
-      })
+      )
     })
     contents.stopPainting = vi.fn(() => order.push(`stop:${currentFrame}`))
 
@@ -116,9 +126,14 @@ describe('offscreen video frame presentation', () => {
         order.push('construct')
         expect(options).toMatchObject({ show: false, webPreferences: { offscreen: true } })
       }
-      loadURL = async () => { order.push('load') }
+      loadURL = async () => {
+        order.push('load')
+      }
       isDestroyed = () => destroyed
-      destroy = vi.fn(() => { destroyed = true; order.push('destroy') })
+      destroy = vi.fn(() => {
+        destroyed = true
+        order.push('destroy')
+      })
     }
 
     await videoExport.renderVideoFrames(
@@ -141,11 +156,26 @@ describe('offscreen video frame presentation', () => {
     expect(contents.invalidate).not.toHaveBeenCalled()
     expect(frames.map((frame) => frame.toString())).toEqual(['current-0', 'current-1'])
     expect(order).toEqual([
-      'construct', 'capture-rate:240', 'load', 'stop:-1', 'assets',
-      'update:0', 'commit:0', 'listen/start:0',
-      'resize:0', 'encode:0', 'stop:0', 'write:0',
-      'update:1', 'commit:1', 'listen/start:1',
-      'resize:1', 'encode:1', 'stop:1', 'write:1', 'destroy',
+      'construct',
+      'capture-rate:240',
+      'load',
+      'stop:-1',
+      'assets',
+      'update:0',
+      'commit:0',
+      'listen/start:0',
+      'resize:0',
+      'encode:0',
+      'stop:0',
+      'write:0',
+      'update:1',
+      'commit:1',
+      'listen/start:1',
+      'resize:1',
+      'encode:1',
+      'stop:1',
+      'write:1',
+      'destroy',
     ])
     expect(contents.listenerCount('paint')).toBe(0)
   })
@@ -156,11 +186,18 @@ describe('offscreen video frame presentation', () => {
     contents.executeJavaScript = vi.fn(async () => true)
     contents.setFrameRate = vi.fn()
     contents.startPainting = vi.fn(() => {
-      contents.emit('paint', {}, {}, {
-        getSize: () => ({ width: 426, height: 240 }),
-        isEmpty: () => false,
-        toJPEG: () => { throw new Error('JPEG encoding failed') },
-      })
+      contents.emit(
+        'paint',
+        {},
+        {},
+        {
+          getSize: () => ({ width: 426, height: 240 }),
+          isEmpty: () => false,
+          toJPEG: () => {
+            throw new Error('JPEG encoding failed')
+          },
+        },
+      )
     })
     contents.stopPainting = vi.fn()
 
@@ -168,17 +205,21 @@ describe('offscreen video frame presentation', () => {
       webContents = contents
       loadURL = async () => {}
       isDestroyed = () => destroyed
-      destroy = vi.fn(() => { destroyed = true })
+      destroy = vi.fn(() => {
+        destroyed = true
+      })
     }
 
-    await expect(videoExport.renderVideoFrames(
-      FakeBrowserWindow,
-      project,
-      { times: [0] },
-      { destroyed: false, write: vi.fn(() => true) },
-      videoExport.normalizeVideoSettings({ resolution: '240p', fps: 30 }),
-      runtime,
-    )).rejects.toThrow('JPEG encoding failed')
+    await expect(
+      videoExport.renderVideoFrames(
+        FakeBrowserWindow,
+        project,
+        { times: [0] },
+        { destroyed: false, write: vi.fn(() => true) },
+        videoExport.normalizeVideoSettings({ resolution: '240p', fps: 30 }),
+        runtime,
+      ),
+    ).rejects.toThrow('JPEG encoding failed')
 
     expect(contents.stopPainting).toHaveBeenCalledTimes(2)
     expect(contents.listenerCount('paint')).toBe(0)
@@ -199,7 +240,9 @@ describe('offscreen video frame presentation', () => {
     contents.setFrameRate = vi.fn()
     contents.startPainting = vi.fn()
     contents.stopPainting = vi.fn()
-    const destroyWindow = vi.fn(() => { destroyed = true })
+    const destroyWindow = vi.fn(() => {
+      destroyed = true
+    })
 
     class FakeBrowserWindow implements FakeWindow {
       webContents = contents
@@ -249,7 +292,9 @@ describe('offscreen video frame presentation', () => {
       contents.setFrameRate = vi.fn()
       contents.startPainting = vi.fn()
       contents.stopPainting = vi.fn()
-      const destroyWindow = vi.fn(() => { destroyed = true })
+      const destroyWindow = vi.fn(() => {
+        destroyed = true
+      })
 
       class FakeBrowserWindow implements FakeWindow {
         webContents = contents
@@ -269,9 +314,7 @@ describe('offscreen video frame presentation', () => {
         controller.signal,
       )
       await updateStarted.promise
-      const rejection = expect(rendering).rejects.toThrow(
-        'Timed out while rendering a video frame',
-      )
+      const rejection = expect(rendering).rejects.toThrow('Timed out while rendering a video frame')
       await vi.advanceTimersByTimeAsync(10_000)
       await rejection
 

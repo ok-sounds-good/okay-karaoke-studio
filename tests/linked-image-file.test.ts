@@ -63,17 +63,19 @@ function changed(stat: BigIntStat, overrides: Partial<BigIntStat>) {
   return makeStat({ ...stat, ...overrides })
 }
 
-function createHarness(options: {
-  bytes?: Buffer
-  growthAtEof?: boolean
-  handleStats?: BigIntStat[]
-  partialReadBytes?: number
-  pathStats?: BigIntStat[]
-  readErrorAt?: number
-  realpaths?: string[]
-  reportedSize?: bigint
-  zeroAt?: number
-} = {}) {
+function createHarness(
+  options: {
+    bytes?: Buffer
+    growthAtEof?: boolean
+    handleStats?: BigIntStat[]
+    partialReadBytes?: number
+    pathStats?: BigIntStat[]
+    readErrorAt?: number
+    realpaths?: string[]
+    reportedSize?: bigint
+    zeroAt?: number
+  } = {},
+) {
   const bytes = options.bytes ?? Buffer.from([1, 2, 3, 4])
   const selectedPath = '/chosen/background-link.png'
   const canonicalPath = '/media/background.png'
@@ -109,11 +111,7 @@ function createHarness(options: {
         return { buffer, bytesRead: 1 }
       }
       const available = Math.max(0, bytes.length - position)
-      const bytesRead = Math.min(
-        length,
-        available,
-        options.partialReadBytes ?? length,
-      )
+      const bytesRead = Math.min(length, available, options.partialReadBytes ?? length)
       if (bytesRead > 0) bytes.copy(buffer, offset, position, position + bytesRead)
       return { buffer, bytesRead }
     },
@@ -157,7 +155,9 @@ async function rejected(operation: Promise<unknown>) {
 describe('linked image FileHandle snapshots', () => {
   it('follows a canonical target once and loops over explicit-position partial reads', async () => {
     const bytes = Buffer.alloc(linkedFile.LINKED_IMAGE_FILE_LIMITS.readChunkBytes * 2 + 17)
-    bytes.forEach((_byte, index) => { bytes[index] = index & 0xff })
+    bytes.forEach((_byte, index) => {
+      bytes[index] = index & 0xff
+    })
     const harness = createHarness({ bytes, partialReadBytes: 7001 })
 
     const result = await linkedFile.snapshotLinkedImageFile(harness.selectedPath, {
@@ -180,9 +180,9 @@ describe('linked image FileHandle snapshots', () => {
 
     const dataReads = harness.calls.read.slice(0, -1)
     expect(dataReads.length).toBeGreaterThan(2)
-    expect(dataReads.every(({ length }) => (
-      length <= linkedFile.LINKED_IMAGE_FILE_LIMITS.readChunkBytes
-    ))).toBe(true)
+    expect(
+      dataReads.every(({ length }) => length <= linkedFile.LINKED_IMAGE_FILE_LIMITS.readChunkBytes),
+    ).toBe(true)
     expect(dataReads.every(({ offset, position }) => offset === position)).toBe(true)
     expect(harness.calls.read.at(-1)).toMatchObject({
       length: 1,
@@ -208,10 +208,11 @@ describe('linked image FileHandle snapshots', () => {
     'rejects the out-of-range %s-byte stat before opening',
     async (size) => {
       const harness = createHarness({ reportedSize: size })
-      const error = await rejected(linkedFile.snapshotLinkedImageFile(
-        harness.selectedPath,
-        { fileSystem: harness.fileSystem },
-      ))
+      const error = await rejected(
+        linkedFile.snapshotLinkedImageFile(harness.selectedPath, {
+          fileSystem: harness.fileSystem,
+        }),
+      )
       expect(error).toMatchObject({ code: 'LINKED_IMAGE_FILE_INVALID' })
       expect(harness.calls.open).toHaveLength(0)
     },
@@ -221,16 +222,20 @@ describe('linked image FileHandle snapshots', () => {
     const preDirectory = createHarness({
       pathStats: [makeStat({ isFile: () => false })],
     })
-    await expect(linkedFile.snapshotLinkedImageFile(preDirectory.selectedPath, {
-      fileSystem: preDirectory.fileSystem,
-    })).rejects.toMatchObject({ code: 'LINKED_IMAGE_FILE_INVALID' })
+    await expect(
+      linkedFile.snapshotLinkedImageFile(preDirectory.selectedPath, {
+        fileSystem: preDirectory.fileSystem,
+      }),
+    ).rejects.toMatchObject({ code: 'LINKED_IMAGE_FILE_INVALID' })
 
     const invalidStat = makeStat()
     invalidStat.mtimeNs = 5 as unknown as bigint
     const nonBigint = createHarness({ pathStats: [invalidStat] })
-    await expect(linkedFile.snapshotLinkedImageFile(nonBigint.selectedPath, {
-      fileSystem: nonBigint.fileSystem,
-    })).rejects.toMatchObject({ code: 'LINKED_IMAGE_FILE_INVALID' })
+    await expect(
+      linkedFile.snapshotLinkedImageFile(nonBigint.selectedPath, {
+        fileSystem: nonBigint.fileSystem,
+      }),
+    ).rejects.toMatchObject({ code: 'LINKED_IMAGE_FILE_INVALID' })
 
     const postDirectory = createHarness()
     const notFile = changed(postDirectory.base, { isFile: () => false })
@@ -238,9 +243,11 @@ describe('linked image FileHandle snapshots', () => {
       postDirectory.calls.stat.push({ options, path })
       return postDirectory.calls.stat.length === 3 ? notFile : postDirectory.base
     }
-    await expect(linkedFile.snapshotLinkedImageFile(postDirectory.selectedPath, {
-      fileSystem: postDirectory.fileSystem,
-    })).rejects.toMatchObject({ code: 'LINKED_IMAGE_FILE_INVALID' })
+    await expect(
+      linkedFile.snapshotLinkedImageFile(postDirectory.selectedPath, {
+        fileSystem: postDirectory.fileSystem,
+      }),
+    ).rejects.toMatchObject({ code: 'LINKED_IMAGE_FILE_INVALID' })
     expect(postDirectory.calls.close).toBe(1)
   })
 
@@ -258,9 +265,11 @@ describe('linked image FileHandle snapshots', () => {
       handleStats: [harness.base, after],
       pathStats: [harness.base, harness.base, after, after],
     })
-    await expect(linkedFile.snapshotLinkedImageFile(mutation.selectedPath, {
-      fileSystem: mutation.fileSystem,
-    })).rejects.toMatchObject({ code: 'LINKED_IMAGE_FILE_INVALID' })
+    await expect(
+      linkedFile.snapshotLinkedImageFile(mutation.selectedPath, {
+        fileSystem: mutation.fileSystem,
+      }),
+    ).rejects.toMatchObject({ code: 'LINKED_IMAGE_FILE_INVALID' })
     expect(mutation.calls.close).toBe(1)
   })
 
@@ -268,30 +277,31 @@ describe('linked image FileHandle snapshots', () => {
     const selectedChanged = createHarness()
     const replacement = changed(selectedChanged.base, { ino: 99n })
     const selectedPathMutation = createHarness({
-      pathStats: [
-        selectedChanged.base,
-        selectedChanged.base,
-        replacement,
-        selectedChanged.base,
-      ],
+      pathStats: [selectedChanged.base, selectedChanged.base, replacement, selectedChanged.base],
     })
-    await expect(linkedFile.snapshotLinkedImageFile(selectedPathMutation.selectedPath, {
-      fileSystem: selectedPathMutation.fileSystem,
-    })).rejects.toMatchObject({ code: 'LINKED_IMAGE_FILE_INVALID' })
+    await expect(
+      linkedFile.snapshotLinkedImageFile(selectedPathMutation.selectedPath, {
+        fileSystem: selectedPathMutation.fileSystem,
+      }),
+    ).rejects.toMatchObject({ code: 'LINKED_IMAGE_FILE_INVALID' })
 
     const canonicalMismatch = createHarness({
       pathStats: [selectedChanged.base, replacement],
     })
-    await expect(linkedFile.snapshotLinkedImageFile(canonicalMismatch.selectedPath, {
-      fileSystem: canonicalMismatch.fileSystem,
-    })).rejects.toMatchObject({ code: 'LINKED_IMAGE_FILE_INVALID' })
+    await expect(
+      linkedFile.snapshotLinkedImageFile(canonicalMismatch.selectedPath, {
+        fileSystem: canonicalMismatch.fileSystem,
+      }),
+    ).rejects.toMatchObject({ code: 'LINKED_IMAGE_FILE_INVALID' })
 
     const targetChanged = createHarness({
       realpaths: ['/media/background.png', '/media/replacement.png'],
     })
-    await expect(linkedFile.snapshotLinkedImageFile(targetChanged.selectedPath, {
-      fileSystem: targetChanged.fileSystem,
-    })).rejects.toMatchObject({ code: 'LINKED_IMAGE_FILE_INVALID' })
+    await expect(
+      linkedFile.snapshotLinkedImageFile(targetChanged.selectedPath, {
+        fileSystem: targetChanged.fileSystem,
+      }),
+    ).rejects.toMatchObject({ code: 'LINKED_IMAGE_FILE_INVALID' })
   })
 
   it('detects truncation, zero progress, and growth at the expected EOF', async () => {
@@ -299,31 +309,38 @@ describe('linked image FileHandle snapshots', () => {
       bytes: Buffer.from([1, 2, 3]),
       reportedSize: 4n,
     })
-    await expect(linkedFile.snapshotLinkedImageFile(truncated.selectedPath, {
-      fileSystem: truncated.fileSystem,
-    })).rejects.toMatchObject({ code: 'LINKED_IMAGE_FILE_INVALID' })
+    await expect(
+      linkedFile.snapshotLinkedImageFile(truncated.selectedPath, {
+        fileSystem: truncated.fileSystem,
+      }),
+    ).rejects.toMatchObject({ code: 'LINKED_IMAGE_FILE_INVALID' })
 
     const stalled = createHarness({
       bytes: Buffer.alloc(linkedFile.LINKED_IMAGE_FILE_LIMITS.readChunkBytes + 1),
       zeroAt: linkedFile.LINKED_IMAGE_FILE_LIMITS.readChunkBytes,
     })
-    await expect(linkedFile.snapshotLinkedImageFile(stalled.selectedPath, {
-      fileSystem: stalled.fileSystem,
-    })).rejects.toMatchObject({ code: 'LINKED_IMAGE_FILE_INVALID' })
+    await expect(
+      linkedFile.snapshotLinkedImageFile(stalled.selectedPath, {
+        fileSystem: stalled.fileSystem,
+      }),
+    ).rejects.toMatchObject({ code: 'LINKED_IMAGE_FILE_INVALID' })
 
     const grown = createHarness({ growthAtEof: true })
-    await expect(linkedFile.snapshotLinkedImageFile(grown.selectedPath, {
-      fileSystem: grown.fileSystem,
-    })).rejects.toMatchObject({ code: 'LINKED_IMAGE_FILE_INVALID' })
+    await expect(
+      linkedFile.snapshotLinkedImageFile(grown.selectedPath, {
+        fileSystem: grown.fileSystem,
+      }),
+    ).rejects.toMatchObject({ code: 'LINKED_IMAGE_FILE_INVALID' })
     expect(grown.calls.close).toBe(1)
   })
 
   it('maps read and filesystem failures to fixed messages without exposing paths', async () => {
     const readFailure = createHarness({ readErrorAt: 0 })
-    const readError = await rejected(linkedFile.snapshotLinkedImageFile(
-      readFailure.selectedPath,
-      { fileSystem: readFailure.fileSystem },
-    ))
+    const readError = await rejected(
+      linkedFile.snapshotLinkedImageFile(readFailure.selectedPath, {
+        fileSystem: readFailure.fileSystem,
+      }),
+    )
     expect(readError).toMatchObject({
       code: 'LINKED_IMAGE_READ_FAILED',
       message: linkedFile.LINKED_IMAGE_ERROR_MESSAGES.LINKED_IMAGE_READ_FAILED,
@@ -336,11 +353,15 @@ describe('linked image FileHandle snapshots', () => {
     const selectedPath = '/private/user/secret.png'
     const cause = new Error(`ENOENT: no such file, realpath '${selectedPath}'`)
     const fileSystem = {
-      async realpath() { throw cause },
+      async realpath() {
+        throw cause
+      },
     } as unknown as FakeFileSystem
-    const pathError = await rejected(linkedFile.snapshotLinkedImageFile(selectedPath, {
-      fileSystem,
-    }))
+    const pathError = await rejected(
+      linkedFile.snapshotLinkedImageFile(selectedPath, {
+        fileSystem,
+      }),
+    )
     expect(pathError).toMatchObject({
       code: 'LINKED_IMAGE_FILE_INVALID',
       message: linkedFile.LINKED_IMAGE_ERROR_MESSAGES.LINKED_IMAGE_FILE_INVALID,
@@ -352,12 +373,15 @@ describe('linked image FileHandle snapshots', () => {
 
   it('rejects an invalid selected path before making any filesystem call', async () => {
     let calls = 0
-    const fileSystem = new Proxy({}, {
-      get() {
-        calls += 1
-        throw new Error('filesystem must not be touched')
+    const fileSystem = new Proxy(
+      {},
+      {
+        get() {
+          calls += 1
+          throw new Error('filesystem must not be touched')
+        },
       },
-    }) as FakeFileSystem
+    ) as FakeFileSystem
     const error = await rejected(linkedFile.snapshotLinkedImageFile('', { fileSystem }))
     expect(error).toMatchObject({
       code: 'LINKED_IMAGE_FILE_INVALID',

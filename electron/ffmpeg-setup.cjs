@@ -27,7 +27,9 @@ function ffmpegExecutableCandidates({
     candidates.push('/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg')
   } else if (platform === 'win32') {
     if (env.LOCALAPPDATA) {
-      candidates.push(path.win32.join(env.LOCALAPPDATA, 'Microsoft', 'WinGet', 'Links', 'ffmpeg.exe'))
+      candidates.push(
+        path.win32.join(env.LOCALAPPDATA, 'Microsoft', 'WinGet', 'Links', 'ffmpeg.exe'),
+      )
     }
     if (env.ProgramFiles) {
       candidates.push(path.win32.join(env.ProgramFiles, 'WinGet', 'Links', 'ffmpeg.exe'))
@@ -40,11 +42,7 @@ function ffmpegExecutableCandidates({
 
 function packageManagerCandidates({ platform = process.platform, env = process.env } = {}) {
   if (platform === 'darwin') {
-    return uniqueStrings([
-      '/opt/homebrew/bin/brew',
-      '/usr/local/bin/brew',
-      'brew',
-    ])
+    return uniqueStrings(['/opt/homebrew/bin/brew', '/usr/local/bin/brew', 'brew'])
   }
   if (platform === 'win32') {
     return uniqueStrings([
@@ -62,9 +60,11 @@ function installArguments(platform) {
   if (platform === 'win32') {
     return [
       'install',
-      '--id', WINGET_PACKAGE_ID,
+      '--id',
+      WINGET_PACKAGE_ID,
       '--exact',
-      '--source', 'winget',
+      '--source',
+      'winget',
       '--accept-source-agreements',
       '--disable-interactivity',
     ]
@@ -124,13 +124,19 @@ function runCommand(executable, args, { signal, spawnImpl = spawn } = {}) {
     }
 
     signal?.addEventListener('abort', onAbort, { once: true })
-    child.stdout?.on('data', (chunk) => { stdout = appendBounded(stdout, chunk) })
-    child.stderr?.on('data', (chunk) => { stderr = appendBounded(stderr, chunk) })
+    child.stdout?.on('data', (chunk) => {
+      stdout = appendBounded(stdout, chunk)
+    })
+    child.stderr?.on('data', (chunk) => {
+      stderr = appendBounded(stderr, chunk)
+    })
     child.once('error', (error) => finish(() => reject(error)))
-    child.once('close', (code, terminationSignal) => finish(() => {
-      if (signal?.aborted) reject(createAbortError())
-      else resolve({ code: code ?? -1, signal: terminationSignal, stderr, stdout })
-    }))
+    child.once('close', (code, terminationSignal) =>
+      finish(() => {
+        if (signal?.aborted) reject(createAbortError())
+        else resolve({ code: code ?? -1, signal: terminationSignal, stderr, stdout })
+      }),
+    )
   })
 }
 
@@ -152,9 +158,10 @@ async function probeFfmpeg(executable, { run = runCommand, signal } = {}) {
   const versionResult = await run(executable, ['-hide_banner', '-version'], { signal })
   if (versionResult.code !== 0) return null
   const encoderResult = await run(executable, ['-hide_banner', '-encoders'], { signal })
-  const names = encoderResult.code === 0
-    ? parseEncoderNames(`${encoderResult.stdout}\n${encoderResult.stderr}`)
-    : new Set()
+  const names =
+    encoderResult.code === 0
+      ? parseEncoderNames(`${encoderResult.stdout}\n${encoderResult.stderr}`)
+      : new Set()
   const missingEncoders = REQUIRED_ENCODERS.filter((encoder) => !names.has(encoder))
   return {
     available: true,
@@ -178,13 +185,15 @@ async function detectFfmpeg(options = {}) {
       if (error?.name === 'AbortError' || signal?.aborted) throw error
     }
   }
-  return incomplete || {
-    available: false,
-    exportCapable: false,
-    missingEncoders: [...REQUIRED_ENCODERS],
-    path: null,
-    version: null,
-  }
+  return (
+    incomplete || {
+      available: false,
+      exportCapable: false,
+      missingEncoders: [...REQUIRED_ENCODERS],
+      path: null,
+      version: null,
+    }
+  )
 }
 
 async function discoverInstallPlan(options = {}) {
@@ -227,9 +236,10 @@ function setupPrompt(status, plan, platform) {
       detail: `${missingDetail}\n\nOkay Karaoke Studio does not bundle the FFmpeg command-line encoder. Install it from your system or package provider, then try the export again.`,
     }
   }
-  const platformDetail = platform === 'win32'
-    ? 'WinGet will download the third-party, GPL-licensed Gyan FFmpeg package. Windows may request permission.'
-    : 'Homebrew will download its FFmpeg formula and dependencies. Homebrew is already installed.'
+  const platformDetail =
+    platform === 'win32'
+      ? 'WinGet will download the third-party, GPL-licensed Gyan FFmpeg package. Windows may request permission.'
+      : 'Homebrew will download its FFmpeg formula and dependencies. Homebrew is already installed.'
   return {
     type: 'question',
     buttons: [plan.label, 'Open setup instructions', 'Not now'],
@@ -249,7 +259,9 @@ function installFailureMessage(plan, result) {
     `${plan.label} did not produce an FFmpeg installation that supports libx264 and AAC.`,
     shortDetail,
     'Open the setup instructions or install FFmpeg manually, then try again.',
-  ].filter(Boolean).join('\n\n')
+  ]
+    .filter(Boolean)
+    .join('\n\n')
 }
 
 async function verifyAfterInstall(options) {
@@ -257,21 +269,25 @@ async function verifyAfterInstall(options) {
   for (const delayMs of waits) {
     if (options.signal?.aborted) throw createAbortError()
     if (delayMs) {
-      await (options.wait || ((milliseconds) => new Promise((resolve, reject) => {
-        let timer
-        const cleanup = () => options.signal?.removeEventListener('abort', onAbort)
-        const onAbort = () => {
-          clearTimeout(timer)
-          cleanup()
-          reject(createAbortError())
-        }
-        timer = setTimeout(() => {
-          cleanup()
-          resolve()
-        }, milliseconds)
-        options.signal?.addEventListener('abort', onAbort, { once: true })
-        timer.unref?.()
-      })))(delayMs)
+      await (
+        options.wait ||
+        ((milliseconds) =>
+          new Promise((resolve, reject) => {
+            let timer
+            const cleanup = () => options.signal?.removeEventListener('abort', onAbort)
+            const onAbort = () => {
+              clearTimeout(timer)
+              cleanup()
+              reject(createAbortError())
+            }
+            timer = setTimeout(() => {
+              cleanup()
+              resolve()
+            }, milliseconds)
+            options.signal?.addEventListener('abort', onAbort, { once: true })
+            timer.unref?.()
+          }))
+      )(delayMs)
     }
     if (options.signal?.aborted) throw createAbortError()
     const status = await detectFfmpeg(options)
@@ -280,11 +296,7 @@ async function verifyAfterInstall(options) {
   return detectFfmpeg(options)
 }
 
-async function ensureFfmpegForExport({
-  openExternal,
-  showMessageBox,
-  ...options
-}) {
+async function ensureFfmpegForExport({ openExternal, showMessageBox, ...options }) {
   const platform = options.platform || process.platform
   const status = await detectFfmpeg(options)
   if (status.exportCapable) return status.path
@@ -301,7 +313,9 @@ async function ensureFfmpegForExport({
 
   let result
   try {
-    result = await (options.run || runCommand)(plan.executable, plan.args, { signal: options.signal })
+    result = await (options.run || runCommand)(plan.executable, plan.args, {
+      signal: options.signal,
+    })
   } catch (error) {
     if (error?.name === 'AbortError' || options.signal?.aborted) throw error
     result = { code: -1, stderr: error?.message || String(error), stdout: '' }

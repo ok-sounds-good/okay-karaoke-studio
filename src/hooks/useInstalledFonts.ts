@@ -2,13 +2,7 @@ import { useCallback, useRef, useState } from 'react'
 import { normalizeInstalledFontCatalog } from '../lib/installed-font-catalog'
 import type { FontTypefaceDescriptor } from '../lib/video-style'
 
-export type InstalledFontStatus =
-  | 'idle'
-  | 'loading'
-  | 'ready'
-  | 'denied'
-  | 'unavailable'
-  | 'error'
+export type InstalledFontStatus = 'idle' | 'loading' | 'ready' | 'denied' | 'unavailable' | 'error'
 
 export interface InstalledFontState {
   typefaces: FontTypefaceDescriptor[]

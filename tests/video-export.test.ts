@@ -82,26 +82,34 @@ function videoProject() {
     lyricDisplay: { lineCount: 3, advanceMode: 'clear' },
     createdAt: '2026-07-14T00:00:00.000Z',
     updatedAt: '2026-07-14T00:00:00.000Z',
-    tracks: [createVocalTrack({
-      id: 'video-lead',
-      name: 'Lead',
-      vocalStyle,
-      muted: false,
-      solo: false,
-      lines: [createLyricLine('Hello world', {
-        id: 'video-line',
-        startMs: 1_000,
-        endMs: 3_000,
-        words: [
-          createLyricWord('Hello', {
-            id: 'video-word-1', startMs: 1_000, endMs: 2_000,
-          }),
-          createLyricWord('world', {
-            id: 'video-word-2', startMs: 2_000, endMs: 3_000,
+    tracks: [
+      createVocalTrack({
+        id: 'video-lead',
+        name: 'Lead',
+        vocalStyle,
+        muted: false,
+        solo: false,
+        lines: [
+          createLyricLine('Hello world', {
+            id: 'video-line',
+            startMs: 1_000,
+            endMs: 3_000,
+            words: [
+              createLyricWord('Hello', {
+                id: 'video-word-1',
+                startMs: 1_000,
+                endMs: 2_000,
+              }),
+              createLyricWord('world', {
+                id: 'video-word-2',
+                startMs: 2_000,
+                endMs: 3_000,
+              }),
+            ],
           }),
         ],
-      })],
-    })],
+      }),
+    ],
   })
 }
 
@@ -202,8 +210,12 @@ describe('karaoke video frame planning', () => {
     const commitState = videoExport.createVideoExportCommitState()
     let releaseRename = () => {}
     let reportRenameStarted = () => {}
-    const renameGate = new Promise<void>((resolve) => { releaseRename = resolve })
-    const renameStarted = new Promise<void>((resolve) => { reportRenameStarted = resolve })
+    const renameGate = new Promise<void>((resolve) => {
+      releaseRename = resolve
+    })
+    const renameStarted = new Promise<void>((resolve) => {
+      reportRenameStarted = resolve
+    })
 
     await writeFile(partialPath, 'new complete video')
     await writeFile(outputPath, 'existing destination')
@@ -283,14 +295,14 @@ describe('karaoke video frame planning', () => {
 
     expect(timeline30.durationMs).toBe(6_000)
     expect(timeline30.times).toHaveLength(180)
-    expect(timeline30.times.every(
-      (time, index) => time === Math.round(index * 1_000 / 30),
-    )).toBe(true)
+    expect(timeline30.times.every((time, index) => time === Math.round((index * 1_000) / 30))).toBe(
+      true,
+    )
     expect(timeline60.durationMs).toBe(6_000)
     expect(timeline60.times).toHaveLength(360)
-    expect(timeline60.times.every(
-      (time, index) => time === Math.round(index * 1_000 / 60),
-    )).toBe(true)
+    expect(timeline60.times.every((time, index) => time === Math.round((index * 1_000) / 60))).toBe(
+      true,
+    )
   })
 
   it('renders title and per-word progress aligned to word starts and ends', () => {
@@ -331,20 +343,22 @@ describe('karaoke video frame planning', () => {
       offsetMs: 0,
       durationMs: 11_000,
       lyricDisplay: { lineCount: 5, advanceMode: 'clear' },
-      tracks: [{
-        ...base.tracks[0],
-        lines: [
-          timedVideoLine('A', 0, 1_000),
-          timedVideoLine('B', 1_000, 2_000),
-          timedVideoLine('C', 2_000, 3_000),
-          blankVideoLine(),
-          timedVideoLine('D', 5_000, 6_000),
-          timedVideoLine('E', 6_000, 7_000),
-          timedVideoLine('F', 7_000, 8_000),
-          timedVideoLine('G', 8_000, 9_000),
-          timedVideoLine('H', 9_000, 10_000),
-        ],
-      }],
+      tracks: [
+        {
+          ...base.tracks[0],
+          lines: [
+            timedVideoLine('A', 0, 1_000),
+            timedVideoLine('B', 1_000, 2_000),
+            timedVideoLine('C', 2_000, 3_000),
+            blankVideoLine(),
+            timedVideoLine('D', 5_000, 6_000),
+            timedVideoLine('E', 6_000, 7_000),
+            timedVideoLine('F', 7_000, 8_000),
+            timedVideoLine('G', 8_000, 9_000),
+            timedVideoLine('H', 9_000, 10_000),
+          ],
+        },
+      ],
     }
 
     expect(videoExport.frameStateAt(project, 0).lines.map((line) => line.text)).toEqual([
@@ -377,22 +391,50 @@ describe('karaoke video frame planning', () => {
       tracks: [{ ...base.tracks[0], lines }],
     }
 
-    expect(videoExport.frameStateAt({
-      ...project,
-      lyricDisplay: { lineCount: 2, advanceMode: 'clear' },
-    }, 1_500).lines.map((line) => line.text)).toEqual(['One', 'Two'])
-    expect(videoExport.frameStateAt({
-      ...project,
-      lyricDisplay: { lineCount: 2, advanceMode: 'clear' },
-    }, 2_000).lines.map((line) => line.text)).toEqual(['Three', 'Four'])
-    expect(videoExport.frameStateAt({
-      ...project,
-      lyricDisplay: { lineCount: 3, advanceMode: 'scroll' },
-    }, 1_000).lines.map((line) => line.text)).toEqual(['Two', 'Three', 'Four'])
-    expect(videoExport.frameStateAt({
-      ...project,
-      lyricDisplay: { lineCount: 3, advanceMode: 'scroll' },
-    }, 2_000).lines.map((line) => line.text)).toEqual(['Two', 'Three', 'Four'])
+    expect(
+      videoExport
+        .frameStateAt(
+          {
+            ...project,
+            lyricDisplay: { lineCount: 2, advanceMode: 'clear' },
+          },
+          1_500,
+        )
+        .lines.map((line) => line.text),
+    ).toEqual(['One', 'Two'])
+    expect(
+      videoExport
+        .frameStateAt(
+          {
+            ...project,
+            lyricDisplay: { lineCount: 2, advanceMode: 'clear' },
+          },
+          2_000,
+        )
+        .lines.map((line) => line.text),
+    ).toEqual(['Three', 'Four'])
+    expect(
+      videoExport
+        .frameStateAt(
+          {
+            ...project,
+            lyricDisplay: { lineCount: 3, advanceMode: 'scroll' },
+          },
+          1_000,
+        )
+        .lines.map((line) => line.text),
+    ).toEqual(['Two', 'Three', 'Four'])
+    expect(
+      videoExport
+        .frameStateAt(
+          {
+            ...project,
+            lyricDisplay: { lineCount: 3, advanceMode: 'scroll' },
+          },
+          2_000,
+        )
+        .lines.map((line) => line.text),
+    ).toEqual(['Two', 'Three', 'Four'])
   })
 
   it('treats line count as a stage-wide limit while retaining both visible voices', () => {
@@ -436,10 +478,14 @@ describe('karaoke video frame planning', () => {
 
   it('rejects malformed and semantically invalid current projects', () => {
     expect(() => videoExport.parseProjectForVideo('{oops')).toThrow('Invalid project JSON')
-    expect(videoExport.parseProjectForVideo(JSON.stringify({
-      ...videoProject(),
-      tracks: [],
-    }))).toMatchObject({ tracks: [] })
+    expect(
+      videoExport.parseProjectForVideo(
+        JSON.stringify({
+          ...videoProject(),
+          tracks: [],
+        }),
+      ),
+    ).toMatchObject({ tracks: [] })
 
     const invalidTiming = videoProject()
     invalidTiming.tracks[0].lines[0].words[0].startMs = -1
@@ -453,10 +499,14 @@ describe('karaoke video frame planning', () => {
       'must have both a start and end time',
     )
 
-    expect(() => videoExport.parseProjectForVideo(JSON.stringify({
-      ...videoProject(),
-      lyricDisplay: { lineCount: 6, advanceMode: 'clear' },
-    }))).toThrow('line count must be an integer from 1 to 5')
+    expect(() =>
+      videoExport.parseProjectForVideo(
+        JSON.stringify({
+          ...videoProject(),
+          lyricDisplay: { lineCount: 6, advanceMode: 'clear' },
+        }),
+      ),
+    ).toThrow('line count must be an integer from 1 to 5')
   })
 
   it('renders neither track labels, mini upcoming lines, nor an instrumental fallback', () => {
@@ -475,16 +525,18 @@ describe('karaoke video frame planning', () => {
 
   it('installs the frozen planner without CommonJS globals for Vite/browser use', () => {
     const browserGlobal = {}
-    new Script(readFileSync('electron/stage-frame-state.cjs', 'utf8'))
-      .runInNewContext({ globalThis: browserGlobal, Symbol })
-    const api = Reflect.get(
-      browserGlobal,
-      Symbol.for('studio.okay-karaoke.stage-frame-state'),
-    ) as { frameStateAt(project: unknown, playbackMs: number): { lines: Array<{ text: string }> } }
+    new Script(readFileSync('electron/stage-frame-state.cjs', 'utf8')).runInNewContext({
+      globalThis: browserGlobal,
+      Symbol,
+    })
+    const api = Reflect.get(browserGlobal, Symbol.for('studio.okay-karaoke.stage-frame-state')) as {
+      frameStateAt(project: unknown, playbackMs: number): { lines: Array<{ text: string }> }
+    }
     expect(Object.isFrozen(api)).toBe(true)
     expect(api.frameStateAt(videoProject(), 2_000).lines[0].text).toBe('Hello world')
-    expect(readFileSync('src/lib/stage-frame-state.ts', 'utf8'))
-      .toContain("import '../../electron/stage-frame-state.cjs'")
+    expect(readFileSync('src/lib/stage-frame-state.ts', 'utf8')).toContain(
+      "import '../../electron/stage-frame-state.cjs'",
+    )
   })
 
   it('uses the app palette for stage chrome while preserving authored word accents', () => {
@@ -508,20 +560,28 @@ describe('karaoke video frame planning', () => {
   it('uses only visible tracks when extending duration', () => {
     const project = videoProject()
     project.durationMs = null
-    project.tracks.push(createVocalTrack({
-      id: 'muted-guide',
-      name: 'Muted guide',
-      muted: true,
-      solo: false,
-      lines: [createLyricLine('Hidden', {
-        id: 'muted-line',
-        startMs: 20_000,
-        endMs: 25_000,
-        words: [createLyricWord('Hidden', {
-          id: 'muted-word', startMs: 20_000, endMs: 25_000,
-        })],
-      })],
-    }))
+    project.tracks.push(
+      createVocalTrack({
+        id: 'muted-guide',
+        name: 'Muted guide',
+        muted: true,
+        solo: false,
+        lines: [
+          createLyricLine('Hidden', {
+            id: 'muted-line',
+            startMs: 20_000,
+            endMs: 25_000,
+            words: [
+              createLyricWord('Hidden', {
+                id: 'muted-word',
+                startMs: 20_000,
+                endMs: 25_000,
+              }),
+            ],
+          }),
+        ],
+      }),
+    )
 
     expect(videoExport.effectiveVideoDuration(project, 1_000)).toBe(4_000)
   })
@@ -537,16 +597,24 @@ describe('karaoke video frame planning', () => {
     ]
     project.tracks[0].lines = [
       createLyricLine('Line timed only', {
-        id: 'untimed-line-one', startMs: 0, endMs: 2_000, words: untimedWords,
+        id: 'untimed-line-one',
+        startMs: 0,
+        endMs: 2_000,
+        words: untimedWords,
       }),
       createLyricLine('After the break', {
-        id: 'untimed-line-two', startMs: 20_000, endMs: 22_000,
+        id: 'untimed-line-two',
+        startMs: 20_000,
+        endMs: 22_000,
         words: untimedWords.map((word) => ({ ...word, id: `later-${word.id}` })),
       }),
     ]
 
-    expect(videoExport.frameStateAt(project, 1_000).lines[0].words
-      .map(({ text, progress }) => ({ text, progress }))).toEqual([
+    expect(
+      videoExport
+        .frameStateAt(project, 1_000)
+        .lines[0].words.map(({ text, progress }) => ({ text, progress })),
+    ).toEqual([
       { text: 'Line', progress: 0 },
       { text: 'timed', progress: 0 },
       { text: 'only', progress: 0 },
@@ -561,14 +629,22 @@ describe('karaoke video frame planning', () => {
       { resolution: '1440p', fps: 60 },
     )
 
-    expect(args).toEqual(expect.arrayContaining([
-      '-f', 'image2pipe',
-      '-framerate', '60',
-      '-vcodec', 'mjpeg',
-      '-i', 'pipe:0',
-      '-af', 'apad',
-      '-t', '5.000',
-    ]))
+    expect(args).toEqual(
+      expect.arrayContaining([
+        '-f',
+        'image2pipe',
+        '-framerate',
+        '60',
+        '-vcodec',
+        'mjpeg',
+        '-i',
+        'pipe:0',
+        '-af',
+        'apad',
+        '-t',
+        '5.000',
+      ]),
+    )
     expect(args.some((argument) => /(?:^|,)fps=/u.test(argument))).toBe(false)
     expect(args).not.toContain('concat')
     expect(args).not.toContain('-shortest')
@@ -586,14 +662,16 @@ describe('karaoke video frame planning', () => {
     vocal.unsungColor = '#123456'
     vocal.sungColor = null
     vocal.alignment = 'right'
-    vocal.fontStyle = project.stageStyle.lyrics.typeface.faces.find(
-      ({ style }) => style === 'Bold',
-    ) ?? null
+    vocal.fontStyle =
+      project.stageStyle.lyrics.typeface.faces.find(({ style }) => style === 'Bold') ?? null
     vocal.syncAid = { enabled: true, minLeadMs: 1_000, maxLeadMs: 2_000 }
     project.tracks[0].lines = [
-      timedVideoLine('A', 3_000, 4_000), timedVideoLine('B', 4_000, 5_000),
-      timedVideoLine('C', 5_000, 6_000), blankVideoLine(),
-      timedVideoLine('D', 8_000, 9_000), timedVideoLine('E', 9_000, 10_000),
+      timedVideoLine('A', 3_000, 4_000),
+      timedVideoLine('B', 4_000, 5_000),
+      timedVideoLine('C', 5_000, 6_000),
+      blankVideoLine(),
+      timedVideoLine('D', 8_000, 9_000),
+      timedVideoLine('E', 9_000, 10_000),
     ]
 
     for (const time of [999, 1_000, 2_500, 5_000, 6_000, 7_500, 10_000]) {
@@ -601,10 +679,15 @@ describe('karaoke video frame planning', () => {
     }
     const first = previewFrameStateAt(project, 1_000)
     expect(first.showTitle).toBe(false)
-    expect(first.lines[0]).toMatchObject({ text: 'A', style: {
-      alignment: 'right', sizePx: 96, unsungColor: '#123456',
-      sungColor: project.stageStyle.lyrics.sungColor,
-    } })
+    expect(first.lines[0]).toMatchObject({
+      text: 'A',
+      style: {
+        alignment: 'right',
+        sizePx: 96,
+        unsungColor: '#123456',
+        sungColor: project.stageStyle.lyrics.sungColor,
+      },
+    })
     expect(first.syncAids[0]).toMatchObject({ lineId: project.tracks[0].lines[0].id, progress: 0 })
     expect(previewFrameStateAt(project, 999).showTitle).toBe(true)
     expect(previewFrameStateAt(project, 6_000).lines.map(({ text }) => text)).toEqual(['D', 'E'])

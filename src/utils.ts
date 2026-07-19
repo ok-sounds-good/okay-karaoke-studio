@@ -26,9 +26,7 @@ export type WordResizeEdge = 'start' | 'end'
 export const MIN_EDITED_WORD_DURATION_MS = 80
 
 export function motionAwareScrollBehavior(): ScrollBehavior {
-  return globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-    ? 'auto'
-    : 'smooth'
+  return globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
 }
 
 export function flattenTrack(track: VocalTrack): WordRef[] {
@@ -57,9 +55,7 @@ export function effectiveDuration(project: KaraokeProject): number {
       })
     })
   })
-  const adjustedLatest = latestTiming > 0
-    ? latestTiming + Math.max(0, project.offsetMs)
-    : 0
+  const adjustedLatest = latestTiming > 0 ? latestTiming + Math.max(0, project.offsetMs) : 0
   const paddedLatest = Math.min(
     MAX_PROJECT_DURATION_MS,
     adjustedLatest > 0 ? adjustedLatest + 4_000 : 0,
@@ -70,7 +66,8 @@ export function effectiveDuration(project: KaraokeProject): number {
 export function getActiveLine(track: VocalTrack, timeMs: number): LyricLine | null {
   const timed = track.lines.filter((line) => line.startMs !== null)
   const direct = timed.find(
-    (line) => timeMs >= (line.startMs ?? 0) - 120 && timeMs <= (line.endMs ?? line.startMs ?? 0) + 500,
+    (line) =>
+      timeMs >= (line.startMs ?? 0) - 120 && timeMs <= (line.endMs ?? line.startMs ?? 0) + 500,
   )
   if (direct) return direct
   const upcoming = timed.find((line) => (line.startMs ?? Number.POSITIVE_INFINITY) > timeMs)
@@ -98,9 +95,10 @@ export function clearTrackTimingFrom(track: VocalTrack, fromMs: number): VocalTr
   const lines = track.lines.map((line) => {
     let wordsChanged = false
     const words = line.words.map((word) => {
-      const clearWord = boundaryMs === 0
-        ? word.startMs !== null || word.endMs !== null
-        : word.startMs !== null && word.startMs >= boundaryMs
+      const clearWord =
+        boundaryMs === 0
+          ? word.startMs !== null || word.endMs !== null
+          : word.startMs !== null && word.startMs >= boundaryMs
       if (!clearWord) return word
       wordsChanged = true
       return { ...word, startMs: null, endMs: null }
@@ -112,9 +110,10 @@ export function clearTrackTimingFrom(track: VocalTrack, fromMs: number): VocalTr
     }
 
     const hasTimedWords = line.words.some((word) => word.startMs !== null || word.endMs !== null)
-    const clearLine = boundaryMs === 0
-      ? line.startMs !== null || line.endMs !== null
-      : line.startMs !== null && line.startMs >= boundaryMs
+    const clearLine =
+      boundaryMs === 0
+        ? line.startMs !== null || line.endMs !== null
+        : line.startMs !== null && line.startMs >= boundaryMs
     if (!hasTimedWords && clearLine) {
       trackChanged = true
       return { ...line, startMs: null, endMs: null }
@@ -136,10 +135,7 @@ export function patchWord(
 
 export function patchWords(
   project: KaraokeProject,
-  patches: ReadonlyMap<
-    string,
-    Partial<Pick<LyricWord, 'text' | 'startMs' | 'endMs'>>
-  >,
+  patches: ReadonlyMap<string, Partial<Pick<LyricWord, 'text' | 'startMs' | 'endMs'>>>,
 ): KaraokeProject {
   if (patches.size === 0) return project
   let projectChanged = false
@@ -151,7 +147,8 @@ export function patchWords(
         const patch = patches.get(word.id)
         if (!patch) return word
         const changed = Object.entries(patch).some(
-          ([key, value]) => word[key as keyof Pick<LyricWord, 'text' | 'startMs' | 'endMs'>] !== value,
+          ([key, value]) =>
+            word[key as keyof Pick<LyricWord, 'text' | 'startMs' | 'endMs'>] !== value,
         )
         if (!changed) return word
         lineChanged = true
@@ -166,9 +163,7 @@ export function patchWords(
     return { ...track, lines }
   })
 
-  return projectChanged
-    ? { ...project, updatedAt: new Date().toISOString(), tracks }
-    : project
+  return projectChanged ? { ...project, updatedAt: new Date().toISOString(), tracks } : project
 }
 
 /**
@@ -189,10 +184,7 @@ export function applyTimingDraft(
       let lineChanged = false
       const words = line.words.map((word) => {
         const timing = draft.get(word.id)
-        if (
-          !timing ||
-          (word.startMs === timing.startMs && word.endMs === timing.endMs)
-        ) return word
+        if (!timing || (word.startMs === timing.startMs && word.endMs === timing.endMs)) return word
 
         lineChanged = true
         return { ...word, startMs: timing.startMs, endMs: timing.endMs }
@@ -218,9 +210,10 @@ function effectiveWordEnd(word: LyricWord): number | null {
 
 function projectRawTimingCeiling(project: KaraokeProject): number {
   const offsetLimit = Math.max(0, MAX_PROJECT_DURATION_MS - Math.max(0, project.offsetMs))
-  const durationLimit = project.durationMs === null
-    ? MAX_PROJECT_DURATION_MS
-    : Math.max(0, project.durationMs - project.offsetMs)
+  const durationLimit =
+    project.durationMs === null
+      ? MAX_PROJECT_DURATION_MS
+      : Math.max(0, project.durationMs - project.offsetMs)
   return Math.min(MAX_PROJECT_DURATION_MS, offsetLimit, durationLimit)
 }
 
@@ -317,7 +310,7 @@ export function constrainWordResizeTiming(
     const originalEndMs = effectiveWordEnd(word) ?? originalStartMs + 1
     if (edge === 'start') {
       const previous = previousTimedWord(words, index)
-      const minimumStartMs = Math.max(0, previous ? effectiveWordEnd(previous) ?? 0 : 0)
+      const minimumStartMs = Math.max(0, previous ? (effectiveWordEnd(previous) ?? 0) : 0)
       const maximumStartMs = originalEndMs - MIN_EDITED_WORD_DURATION_MS
       if (minimumStartMs > maximumStartMs) {
         return { startMs: originalStartMs, endMs: originalEndMs }
@@ -333,10 +326,7 @@ export function constrainWordResizeTiming(
         return { startMs: originalStartMs, endMs: originalEndMs }
       }
       return {
-        startMs: Math.max(
-          minimumStartMs,
-          Math.min(maximumStartMs, requested),
-        ),
+        startMs: Math.max(minimumStartMs, Math.min(maximumStartMs, requested)),
         endMs: originalEndMs,
       }
     }
@@ -362,16 +352,17 @@ export function constrainWordResizeTiming(
     }
     return {
       startMs: originalStartMs,
-      endMs: Math.max(
-        minimumEndMs,
-        Math.min(maximumEndMs, requested),
-      ),
+      endMs: Math.max(minimumEndMs, Math.min(maximumEndMs, requested)),
     }
   }
   return null
 }
 
-export function shiftWords(project: KaraokeProject, wordIds: Set<string>, deltaMs: number): KaraokeProject {
+export function shiftWords(
+  project: KaraokeProject,
+  wordIds: Set<string>,
+  deltaMs: number,
+): KaraokeProject {
   const constrainedDeltaMs = constrainWordShiftDelta(project, wordIds, deltaMs)
   if (Math.abs(constrainedDeltaMs) < 1) return project
   let projectChanged = false
@@ -397,9 +388,7 @@ export function shiftWords(project: KaraokeProject, wordIds: Set<string>, deltaM
     return { ...track, lines }
   })
 
-  return projectChanged
-    ? { ...project, updatedAt: new Date().toISOString(), tracks }
-    : project
+  return projectChanged ? { ...project, updatedAt: new Date().toISOString(), tracks } : project
 }
 
 export function downloadText(filename: string, contents: string, type = 'text/plain') {
@@ -413,9 +402,11 @@ export function downloadText(filename: string, contents: string, type = 'text/pl
 }
 
 export function slugify(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '') || 'untitled-karaoke'
+  return (
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') || 'untitled-karaoke'
+  )
 }

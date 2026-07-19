@@ -2,10 +2,10 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  color: rgba(231, 238, 233, .56);
+  color: rgba(231, 238, 233, 0.56);
   font-size: 10px;
   font-weight: 800;
-  letter-spacing: .13em;
+  letter-spacing: 0.13em;
   text-transform: uppercase;
 }
 
@@ -14,13 +14,25 @@
   height: 15px;
   border-radius: 2px;
   background: var(--accent);
-  animation: instrumental-pulse-bar .8s ease-in-out infinite alternate;
+  animation: instrumental-pulse-bar 0.8s ease-in-out infinite alternate;
 }
 
-.instrumental-break i:nth-of-type(2) { height: 24px; animation-delay: -.3s; }
-.instrumental-break i:nth-of-type(3) { height: 18px; animation-delay: -.5s; }
-.instrumental-break i:nth-of-type(4) { height: 11px; animation-delay: -.7s; }
+.instrumental-break i:nth-of-type(2) {
+  height: 24px;
+  animation-delay: -0.3s;
+}
+.instrumental-break i:nth-of-type(3) {
+  height: 18px;
+  animation-delay: -0.5s;
+}
+.instrumental-break i:nth-of-type(4) {
+  height: 11px;
+  animation-delay: -0.7s;
+}
 
 @keyframes instrumental-pulse-bar {
-  to { transform: scaleY(.45); opacity: .45; }
+  to {
+    transform: scaleY(0.45);
+    opacity: 0.45;
+  }
 }

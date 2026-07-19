@@ -57,7 +57,7 @@ describe('bounded PNG container validation', () => {
     expect(png.crc32(Buffer.from('123456789', 'ascii'))).toBe(0xcbf43926)
     const golden = Buffer.from(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+' +
-      'A8AAQUBAScY42YAAAAASUVORK5CYII=',
+        'A8AAQUBAScY42YAAAAASUVORK5CYII=',
       'base64',
     )
     expect(png.parseBoundedPngContainer(golden)).toMatchObject({ height: 1, width: 1 })
@@ -104,12 +104,10 @@ describe('bounded PNG container validation', () => {
     const corrupted = Buffer.from(pngContainer(4, 3))
     corrupted[corrupted.length - 17] ^= 1
     expect(() => png.parseBoundedPngContainer(corrupted)).toThrow('VISUAL_PNG_INVALID')
-    expect(() => png.parseBoundedPngContainer(pngContainer(0, 3))).toThrow(
-      'VISUAL_PNG_INVALID',
-    )
-    expect(() => png.parseBoundedPngContainer(
-      pngContainer(png.PNG_LIMITS.maxWidth + 1, 1),
-    )).toThrow('VISUAL_PNG_INVALID')
+    expect(() => png.parseBoundedPngContainer(pngContainer(0, 3))).toThrow('VISUAL_PNG_INVALID')
+    expect(() =>
+      png.parseBoundedPngContainer(pngContainer(png.PNG_LIMITS.maxWidth + 1, 1)),
+    ).toThrow('VISUAL_PNG_INVALID')
   })
 
   it('enforces byte, chunk-size, chunk-count, and dimension boundaries', () => {
@@ -122,32 +120,33 @@ describe('bounded PNG container validation', () => {
     ])
     expect(exactBytes).toHaveLength(png.PNG_LIMITS.maxBytes)
     expect(png.parseBoundedPngContainer(exactBytes)).toMatchObject({ width: 1 })
-    expect(() => png.parseBoundedPngContainer(
-      Buffer.alloc(png.PNG_LIMITS.maxBytes + 1),
-    )).toThrow(
+    expect(() => png.parseBoundedPngContainer(Buffer.alloc(png.PNG_LIMITS.maxBytes + 1))).toThrow(
       'VISUAL_PNG_INVALID',
     )
-    expect(png.parseBoundedPngContainer(pngContainer(1, 1, [
-      pngChunk('raNd', Buffer.alloc(png.PNG_LIMITS.maxChunkBytes)),
-    ]))).toMatchObject({ width: 1 })
-    expect(() => png.parseBoundedPngContainer(pngFromChunks([
-      ihdr(1, 1),
-      pngChunk('raNd', Buffer.alloc(png.PNG_LIMITS.maxChunkBytes + 1)),
-    ]))).toThrow('VISUAL_PNG_INVALID')
+    expect(
+      png.parseBoundedPngContainer(
+        pngContainer(1, 1, [pngChunk('raNd', Buffer.alloc(png.PNG_LIMITS.maxChunkBytes))]),
+      ),
+    ).toMatchObject({ width: 1 })
+    expect(() =>
+      png.parseBoundedPngContainer(
+        pngFromChunks([
+          ihdr(1, 1),
+          pngChunk('raNd', Buffer.alloc(png.PNG_LIMITS.maxChunkBytes + 1)),
+        ]),
+      ),
+    ).toThrow('VISUAL_PNG_INVALID')
 
-    const exactChunks = Array.from(
-      { length: png.PNG_LIMITS.maxChunks - 3 },
-      () => pngChunk('raNd'),
-    )
+    const exactChunks = Array.from({ length: png.PNG_LIMITS.maxChunks - 3 }, () => pngChunk('raNd'))
     expect(png.parseBoundedPngContainer(pngContainer(1, 1, exactChunks))).toMatchObject({
       width: 1,
     })
-    expect(() => png.parseBoundedPngContainer(
-      pngContainer(1, 1, [...exactChunks, pngChunk('raNd')]),
-    )).toThrow('VISUAL_PNG_INVALID')
-    expect(png.parseBoundedPngContainer(
-      pngContainer(png.PNG_LIMITS.maxWidth, png.PNG_LIMITS.maxHeight),
-    )).toMatchObject({ height: 4096, width: 4096 })
+    expect(() =>
+      png.parseBoundedPngContainer(pngContainer(1, 1, [...exactChunks, pngChunk('raNd')])),
+    ).toThrow('VISUAL_PNG_INVALID')
+    expect(
+      png.parseBoundedPngContainer(pngContainer(png.PNG_LIMITS.maxWidth, png.PNG_LIMITS.maxHeight)),
+    ).toMatchObject({ height: 4096, width: 4096 })
   })
 
   it('parses ordered APNG control markers and rejects malformed marker sequences', () => {
@@ -172,20 +171,34 @@ describe('bounded PNG container validation', () => {
 
     const orphan = pngContainer(4, 3, [frameControl(0, 4, 3)])
     const badCount = pngFromChunks([
-      ihdr(4, 3), animationControl(2), frameControl(0, 4, 3),
-      pngChunk('IDAT', Buffer.from([0])), pngChunk('IEND'),
+      ihdr(4, 3),
+      animationControl(2),
+      frameControl(0, 4, 3),
+      pngChunk('IDAT', Buffer.from([0])),
+      pngChunk('IEND'),
     ])
     const badSequence = pngFromChunks([
-      ihdr(4, 3), animationControl(1), frameControl(1, 4, 3),
-      pngChunk('IDAT', Buffer.from([0])), pngChunk('IEND'),
+      ihdr(4, 3),
+      animationControl(1),
+      frameControl(1, 4, 3),
+      pngChunk('IDAT', Buffer.from([0])),
+      pngChunk('IEND'),
     ])
     const twoControlsBeforeIdat = pngFromChunks([
-      ihdr(4, 3), animationControl(2), frameControl(0, 4, 3),
-      frameControl(1, 4, 3), pngChunk('IDAT', Buffer.from([0])), pngChunk('IEND'),
+      ihdr(4, 3),
+      animationControl(2),
+      frameControl(0, 4, 3),
+      frameControl(1, 4, 3),
+      pngChunk('IDAT', Buffer.from([0])),
+      pngChunk('IEND'),
     ])
     const controlledFrameWithoutData = pngFromChunks([
-      ihdr(4, 3), animationControl(2), pngChunk('IDAT', Buffer.from([0])),
-      frameControl(0, 4, 3), frameControl(1, 4, 3), pngChunk('IEND'),
+      ihdr(4, 3),
+      animationControl(2),
+      pngChunk('IDAT', Buffer.from([0])),
+      frameControl(0, 4, 3),
+      frameControl(1, 4, 3),
+      pngChunk('IEND'),
     ])
     for (const bytes of [
       orphan,

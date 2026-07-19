@@ -19,15 +19,15 @@ function sniffLinkedImageFormat(bytes) {
   if (
     bytes.length >= PNG_SIGNATURE.length &&
     bytes.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)
-  ) return 'png'
+  )
+    return 'png'
   if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xd8) return 'jpeg'
   throw invalidImage()
 }
 
 function parsedContainer(bytes, format) {
-  const metadata = format === 'png'
-    ? parseBoundedPngContainer(bytes)
-    : parseBoundedJpegContainer(bytes)
+  const metadata =
+    format === 'png' ? parseBoundedPngContainer(bytes) : parseBoundedJpegContainer(bytes)
   if (format === 'png' && metadata.animated !== false) throw invalidImage()
   return metadata
 }

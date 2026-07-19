@@ -8,11 +8,20 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: 'sm' | 'md'
 }
 
-export function Button({ variant = 'secondary', size = 'md', className = '', ...props }: ButtonProps) {
+export function Button({
+  variant = 'secondary',
+  size = 'md',
+  className = '',
+  ...props
+}: ButtonProps) {
   return <button className={`button button--${variant} button--${size} ${className}`} {...props} />
 }
 
-export function IconButton({ className = '', title, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
+export function IconButton({
+  className = '',
+  title,
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement>) {
   const hoverLabel = typeof props['aria-label'] === 'string' ? props['aria-label'] : undefined
   return <button className={`icon-button ${className}`} title={title ?? hoverLabel} {...props} />
 }
@@ -66,21 +75,26 @@ export function Modal({
     const backdrop = backdropRef.current
     const dialog = dialogRef.current
     if (!backdrop || !dialog) return
-    const previousFocus = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null
+    const previousFocus =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null
     const siblings = backdrop.parentElement
       ? [...backdrop.parentElement.children].filter(
-          (element): element is HTMLElement => element instanceof HTMLElement && element !== backdrop,
+          (element): element is HTMLElement =>
+            element instanceof HTMLElement && element !== backdrop,
         )
       : []
     const priorInert = siblings.map((element) => element.inert)
-    siblings.forEach((element) => { element.inert = true })
+    siblings.forEach((element) => {
+      element.inert = true
+    })
 
-    const focusable = () => [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)]
-      .filter((element) => !element.hidden)
+    const focusable = () =>
+      [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)].filter(
+        (element) => !element.hidden,
+      )
     const focusFrame = window.requestAnimationFrame(() => {
-      if (document.activeElement instanceof HTMLElement && dialog.contains(document.activeElement)) return
+      if (document.activeElement instanceof HTMLElement && dialog.contains(document.activeElement))
+        return
       const autofocus = dialog.querySelector<HTMLElement>('[autofocus]')
       ;(autofocus ?? focusable()[0] ?? dialog).focus()
     })
@@ -113,7 +127,9 @@ export function Modal({
     return () => {
       window.cancelAnimationFrame(focusFrame)
       document.removeEventListener('keydown', handleKeyDown, true)
-      siblings.forEach((element, index) => { element.inert = priorInert[index] })
+      siblings.forEach((element, index) => {
+        element.inert = priorInert[index]
+      })
       previousFocus?.focus()
     }
   }, [closeDisabled])
@@ -158,7 +174,10 @@ export function KeyboardKey({ children }: { children: ReactNode }) {
 export function Meter({ value, label }: { value: number; label: string }) {
   return (
     <div className="meter" title={label}>
-      <span className="meter__fill" style={{ width: `${Math.max(0, Math.min(1, value)) * 100}%` }} />
+      <span
+        className="meter__fill"
+        style={{ width: `${Math.max(0, Math.min(1, value)) * 100}%` }}
+      />
     </div>
   )
 }

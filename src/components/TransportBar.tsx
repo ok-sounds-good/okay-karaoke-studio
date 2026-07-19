@@ -1,4 +1,14 @@
-import { Gauge, Pause, Play, RotateCcw, RotateCw, Square, Volume1, Volume2, Zap } from 'lucide-react'
+import {
+  Gauge,
+  Pause,
+  Play,
+  RotateCcw,
+  RotateCw,
+  Square,
+  Volume1,
+  Volume2,
+  Zap,
+} from 'lucide-react'
 import { formatTime } from '../lib/model'
 import { KeyboardKey } from './ui'
 

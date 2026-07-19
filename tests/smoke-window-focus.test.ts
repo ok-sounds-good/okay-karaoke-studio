@@ -47,12 +47,14 @@ describe('font smoke focus acquisition', () => {
       attempts += 1
       return attempts >= 2
     })
-    await expect(focus.focusSmokeWindow({
-      ...setup,
-      delay: async () => undefined,
-      now: () => attempts * 10,
-      timeoutMs: 100,
-    })).resolves.toBe(true)
+    await expect(
+      focus.focusSmokeWindow({
+        ...setup,
+        delay: async () => undefined,
+        now: () => attempts * 10,
+        timeoutMs: 100,
+      }),
+    ).resolves.toBe(true)
     expect(setup.methods.app).toHaveBeenCalledWith({ steal: true })
     expect(setup.methods.show).toHaveBeenCalledTimes(2)
     expect(setup.methods.window).toHaveBeenCalledTimes(2)
@@ -67,13 +69,17 @@ describe('font smoke focus acquisition', () => {
     let current = 0
     setup.methods.native.mockReturnValue(false)
     setup.methods.execute.mockResolvedValue(false)
-    const failure = await focus.focusSmokeWindow({
-      ...setup,
-      delay: async () => { current += 10 },
-      now: () => current,
-      timeoutMs: 20,
-      ...(customCode ? { errorCode: code } : {}),
-    }).catch((error: unknown) => error)
+    const failure = await focus
+      .focusSmokeWindow({
+        ...setup,
+        delay: async () => {
+          current += 10
+        },
+        now: () => current,
+        timeoutMs: 20,
+        ...(customCode ? { errorCode: code } : {}),
+      })
+      .catch((error: unknown) => error)
     expect(failure).toMatchObject({ code, message: code })
   })
 
@@ -82,14 +88,20 @@ describe('font smoke focus acquisition', () => {
     const secret = 'TransientSecret-DoNotLeak'
     let current = 0
     setup.methods.app
-      .mockImplementationOnce(() => { throw new Error(secret) })
+      .mockImplementationOnce(() => {
+        throw new Error(secret)
+      })
       .mockImplementationOnce(() => undefined)
-    await expect(focus.focusSmokeWindow({
-      ...setup,
-      delay: async () => { current += 10 },
-      now: () => current,
-      timeoutMs: 30,
-    })).resolves.toBe(true)
+    await expect(
+      focus.focusSmokeWindow({
+        ...setup,
+        delay: async () => {
+          current += 10
+        },
+        now: () => current,
+        timeoutMs: 30,
+      }),
+    ).resolves.toBe(true)
     expect(setup.methods.app).toHaveBeenCalledTimes(2)
     expect(setup.methods.show).toHaveBeenCalledTimes(1)
   })
@@ -100,12 +112,14 @@ describe('font smoke focus acquisition', () => {
       vi.useFakeTimers()
       const setup = fixture()
       setup.methods[source].mockReturnValue(new Promise(() => undefined))
-      const pending = focus.focusSmokeWindow({
-        ...setup,
-        errorCode: 'VISUAL_SMOKE_FOCUS_FAILED',
-        now: () => 0,
-        timeoutMs: 20,
-      }).catch((error: unknown) => error)
+      const pending = focus
+        .focusSmokeWindow({
+          ...setup,
+          errorCode: 'VISUAL_SMOKE_FOCUS_FAILED',
+          now: () => 0,
+          timeoutMs: 20,
+        })
+        .catch((error: unknown) => error)
 
       await vi.advanceTimersByTimeAsync(20)
       await expect(pending).resolves.toMatchObject({
@@ -122,15 +136,21 @@ describe('font smoke focus acquisition', () => {
       const setup = fixture()
       const secret = `PersistentSecret-${source}-DoNotLeak`
       let current = 0
-      setup.methods[source].mockImplementation(() => { throw new Error(secret) })
-      const failure = await focus.focusSmokeWindow({
-        ...setup,
-        delay: async () => { current += 10 },
-        errorCode: 'VISUAL_SMOKE_FOCUS_FAILED',
-        intervalMs: 10,
-        now: () => current,
-        timeoutMs: 20,
-      }).catch((error: unknown) => error)
+      setup.methods[source].mockImplementation(() => {
+        throw new Error(secret)
+      })
+      const failure = await focus
+        .focusSmokeWindow({
+          ...setup,
+          delay: async () => {
+            current += 10
+          },
+          errorCode: 'VISUAL_SMOKE_FOCUS_FAILED',
+          intervalMs: 10,
+          now: () => current,
+          timeoutMs: 20,
+        })
+        .catch((error: unknown) => error)
       expect(failure).toMatchObject({
         code: 'VISUAL_SMOKE_FOCUS_FAILED',
         message: 'VISUAL_SMOKE_FOCUS_FAILED',
@@ -142,10 +162,12 @@ describe('font smoke focus acquisition', () => {
   it('fails a destroyed window with only the caller fixed code', async () => {
     const setup = fixture()
     setup.methods.destroyed.mockReturnValue(true)
-    const failure = await focus.focusSmokeWindow({
-      ...setup,
-      errorCode: 'VISUAL_SMOKE_FOCUS_FAILED',
-    }).catch((error: unknown) => error)
+    const failure = await focus
+      .focusSmokeWindow({
+        ...setup,
+        errorCode: 'VISUAL_SMOKE_FOCUS_FAILED',
+      })
+      .catch((error: unknown) => error)
     expect(failure).toMatchObject({
       code: 'VISUAL_SMOKE_FOCUS_FAILED',
       message: 'VISUAL_SMOKE_FOCUS_FAILED',
@@ -157,10 +179,12 @@ describe('font smoke focus acquisition', () => {
   it('fails when webContents is destroyed without attempting focus', async () => {
     const setup = fixture()
     setup.methods.webDestroyed.mockReturnValue(true)
-    await expect(focus.focusSmokeWindow({
-      ...setup,
-      errorCode: 'VISUAL_SMOKE_FOCUS_FAILED',
-    })).rejects.toMatchObject({ code: 'VISUAL_SMOKE_FOCUS_FAILED' })
+    await expect(
+      focus.focusSmokeWindow({
+        ...setup,
+        errorCode: 'VISUAL_SMOKE_FOCUS_FAILED',
+      }),
+    ).rejects.toMatchObject({ code: 'VISUAL_SMOKE_FOCUS_FAILED' })
     expect(setup.methods.app).not.toHaveBeenCalled()
   })
 
@@ -173,11 +197,13 @@ describe('font smoke focus acquisition', () => {
     { intervalMs: 1.5 },
   ])('rejects invalid bounded timing %# with a fixed fallback code', async (timing) => {
     const setup = fixture()
-    const failure = await focus.focusSmokeWindow({
-      ...setup,
-      ...timing,
-      errorCode: 'PrivateSecret-DoNotLeak',
-    }).catch((error: unknown) => error)
+    const failure = await focus
+      .focusSmokeWindow({
+        ...setup,
+        ...timing,
+        errorCode: 'PrivateSecret-DoNotLeak',
+      })
+      .catch((error: unknown) => error)
     expect(failure).toMatchObject({
       code: 'FONT_ACCESS_SMOKE_FOCUS_FAILED',
       message: 'FONT_ACCESS_SMOKE_FOCUS_FAILED',
@@ -185,19 +211,19 @@ describe('font smoke focus acquisition', () => {
     expect(String(failure)).not.toContain('PrivateSecret')
   })
 
-  it.each([
-    [Number.NaN],
-    [Number.POSITIVE_INFINITY],
-    [-1],
-    [10, 9],
-  ])('rejects a non-finite, negative, or decreasing monotonic clock', async (...values) => {
-    const setup = fixture()
-    let index = 0
-    const failure = await focus.focusSmokeWindow({
-      ...setup,
-      now: () => values[Math.min(index++, values.length - 1)],
-      timeoutMs: 20,
-    }).catch((error: unknown) => error)
-    expect(failure).toMatchObject({ code: 'FONT_ACCESS_SMOKE_FOCUS_FAILED' })
-  })
+  it.each([[Number.NaN], [Number.POSITIVE_INFINITY], [-1], [10, 9]])(
+    'rejects a non-finite, negative, or decreasing monotonic clock',
+    async (...values) => {
+      const setup = fixture()
+      let index = 0
+      const failure = await focus
+        .focusSmokeWindow({
+          ...setup,
+          now: () => values[Math.min(index++, values.length - 1)],
+          timeoutMs: 20,
+        })
+        .catch((error: unknown) => error)
+      expect(failure).toMatchObject({ code: 'FONT_ACCESS_SMOKE_FOCUS_FAILED' })
+    },
+  )
 })

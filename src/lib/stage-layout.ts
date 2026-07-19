@@ -29,7 +29,9 @@ export function lyricGapPx(actualLineCount: number): number {
   return STAGE_LAYOUT.lyric.gapsPx[lineCount]
 }
 
-export function previewStageLayoutVariables(actualLineCount: number): Record<string, string | number> {
+export function previewStageLayoutVariables(
+  actualLineCount: number,
+): Record<string, string | number> {
   const { brand, clock, content, footer, frame, grain, lyric, sync, title } = STAGE_LAYOUT
   return {
     '--stage-frame-top': logicalStagePx(frame.topPx),

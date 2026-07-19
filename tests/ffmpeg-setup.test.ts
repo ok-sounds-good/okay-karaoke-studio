@@ -33,22 +33,22 @@ function missingExecutable(): NodeJS.ErrnoException {
 
 describe('guided FFmpeg setup', () => {
   it('detects Homebrew and WinGet locations without depending on a refreshed GUI PATH', () => {
-    expect(ffmpegSetup.ffmpegExecutableCandidates({
-      platform: 'darwin',
-      env: {},
-    })).toEqual([
-      'ffmpeg',
-      '/opt/homebrew/bin/ffmpeg',
-      '/usr/local/bin/ffmpeg',
-    ])
+    expect(
+      ffmpegSetup.ffmpegExecutableCandidates({
+        platform: 'darwin',
+        env: {},
+      }),
+    ).toEqual(['ffmpeg', '/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg'])
 
-    expect(ffmpegSetup.ffmpegExecutableCandidates({
-      platform: 'win32',
-      env: {
-        LOCALAPPDATA: 'C:\\Users\\Singer\\AppData\\Local',
-        ProgramFiles: 'C:\\Program Files',
-      },
-    })).toEqual([
+    expect(
+      ffmpegSetup.ffmpegExecutableCandidates({
+        platform: 'win32',
+        env: {
+          LOCALAPPDATA: 'C:\\Users\\Singer\\AppData\\Local',
+          ProgramFiles: 'C:\\Program Files',
+        },
+      }),
+    ).toEqual([
       'ffmpeg',
       'C:\\Users\\Singer\\AppData\\Local\\Microsoft\\WinGet\\Links\\ffmpeg.exe',
       'C:\\Program Files\\WinGet\\Links\\ffmpeg.exe',
@@ -64,13 +64,14 @@ describe('guided FFmpeg setup', () => {
         : VERSION_OUTPUT,
     }))
 
-    await expect(ffmpegSetup.detectFfmpeg({ platform: 'linux', env: {}, run }))
-      .resolves.toMatchObject({
-        available: true,
-        exportCapable: false,
-        missingEncoders: ['aac'],
-        path: 'ffmpeg',
-      })
+    await expect(
+      ffmpegSetup.detectFfmpeg({ platform: 'linux', env: {}, run }),
+    ).resolves.toMatchObject({
+      available: true,
+      exportCapable: false,
+      missingEncoders: ['aac'],
+      path: 'ffmpeg',
+    })
     expect(ffmpegSetup.parseEncoderNames(ENCODER_OUTPUT)).toEqual(new Set(['libx264', 'aac']))
   })
 
@@ -81,16 +82,20 @@ describe('guided FFmpeg setup', () => {
     })
     const plan = await ffmpegSetup.discoverInstallPlan({ platform: 'win32', env: {}, run })
 
-    expect(plan).toEqual(expect.objectContaining({
-      executable: 'winget',
-      method: 'winget',
-      packageName: 'Gyan FFmpeg',
-    }))
+    expect(plan).toEqual(
+      expect.objectContaining({
+        executable: 'winget',
+        method: 'winget',
+        packageName: 'Gyan FFmpeg',
+      }),
+    )
     expect(plan?.args).toEqual([
       'install',
-      '--id', 'Gyan.FFmpeg',
+      '--id',
+      'Gyan.FFmpeg',
       '--exact',
-      '--source', 'winget',
+      '--source',
+      'winget',
       '--accept-source-agreements',
       '--disable-interactivity',
     ])
@@ -108,29 +113,35 @@ describe('guided FFmpeg setup', () => {
     const showMessageBox = vi.fn()
     const openExternal = vi.fn()
 
-    await expect(ffmpegSetup.ensureFfmpegForExport({
-      platform: 'darwin',
-      env: {},
-      run,
-      showMessageBox,
-      openExternal,
-    })).resolves.toBe('ffmpeg')
+    await expect(
+      ffmpegSetup.ensureFfmpegForExport({
+        platform: 'darwin',
+        env: {},
+        run,
+        showMessageBox,
+        openExternal,
+      }),
+    ).resolves.toBe('ffmpeg')
     expect(showMessageBox).not.toHaveBeenCalled()
     expect(openExternal).not.toHaveBeenCalled()
   })
 
   it('opens official instructions and makes no system change when no provider exists', async () => {
-    const run = vi.fn(async () => { throw missingExecutable() })
+    const run = vi.fn(async () => {
+      throw missingExecutable()
+    })
     const showMessageBox = vi.fn(async () => ({ response: 0 }))
     const openExternal = vi.fn(async () => undefined)
 
-    await expect(ffmpegSetup.ensureFfmpegForExport({
-      platform: 'linux',
-      env: {},
-      run,
-      showMessageBox,
-      openExternal,
-    })).resolves.toBeNull()
+    await expect(
+      ffmpegSetup.ensureFfmpegForExport({
+        platform: 'linux',
+        env: {},
+        run,
+        showMessageBox,
+        openExternal,
+      }),
+    ).resolves.toBeNull()
     expect(openExternal).toHaveBeenCalledWith('https://ffmpeg.org/download.html#build-linux')
   })
 
@@ -156,14 +167,16 @@ describe('guided FFmpeg setup', () => {
       throw missingExecutable()
     })
 
-    await expect(ffmpegSetup.ensureFfmpegForExport({
-      platform: 'win32',
-      env: { LOCALAPPDATA: localAppData },
-      run,
-      verifyWaits: [0],
-      showMessageBox: vi.fn(async () => ({ response: 0 })),
-      openExternal: vi.fn(),
-    })).resolves.toBe(installedPath)
+    await expect(
+      ffmpegSetup.ensureFfmpegForExport({
+        platform: 'win32',
+        env: { LOCALAPPDATA: localAppData },
+        run,
+        verifyWaits: [0],
+        showMessageBox: vi.fn(async () => ({ response: 0 })),
+        openExternal: vi.fn(),
+      }),
+    ).resolves.toBe(installedPath)
     expect(run).toHaveBeenCalledWith('winget', ffmpegSetup.installArguments('win32'), {
       signal: undefined,
     })
@@ -180,14 +193,16 @@ describe('guided FFmpeg setup', () => {
       throw missingExecutable()
     })
 
-    await expect(ffmpegSetup.ensureFfmpegForExport({
-      platform: 'win32',
-      env: {},
-      run,
-      verifyWaits: [0],
-      showMessageBox: vi.fn(async () => ({ response: 0 })),
-      openExternal: vi.fn(),
-    })).rejects.toThrow('did not produce an FFmpeg installation')
+    await expect(
+      ffmpegSetup.ensureFfmpegForExport({
+        platform: 'win32',
+        env: {},
+        run,
+        verifyWaits: [0],
+        showMessageBox: vi.fn(async () => ({ response: 0 })),
+        openExternal: vi.fn(),
+      }),
+    ).rejects.toThrow('did not produce an FFmpeg installation')
   })
 
   it('spawns fixed argv without a shell', async () => {

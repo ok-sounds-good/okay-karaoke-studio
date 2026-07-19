@@ -5,8 +5,8 @@ export const DEFAULT_SYNC_AID_MIN_MS = 2_000
 export const DEFAULT_SYNC_AID_MAX_MS = 3_000
 
 export const FONT_SIZE_OPTIONS = Object.freeze([
-  8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 24, 25, 27, 28, 32, 36, 40, 42,
-  48, 56, 64, 72, 82, 96, 104, 120, 144, 180, 240, 320, 400,
+  8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 24, 25, 27, 28, 32, 36, 40, 42, 48, 56, 64, 72, 82, 96, 104,
+  120, 144, 180, 240, 320, 400,
 ] as const)
 
 export type FontSizePx = (typeof FONT_SIZE_OPTIONS)[number]
@@ -129,12 +129,7 @@ export interface ResolvedVocalStyle {
   syncAid: VocalStyle['syncAid']
 }
 
-function genericFace(
-  family: string,
-  style: string,
-  weight: number,
-  slant: FontSlant = 'normal',
-) {
+function genericFace(family: string, style: string, weight: number, slant: FontSlant = 'normal') {
   return Object.freeze({
     fullName: `${family} ${style}`,
     style,
@@ -340,9 +335,11 @@ function compareOrdinal(left: string, right: string): number {
 }
 
 function compareFontFaces(left: FontFaceDescriptor, right: FontFaceDescriptor): number {
-  return compareOrdinal(left.style, right.style) ||
+  return (
+    compareOrdinal(left.style, right.style) ||
     compareOrdinal(left.fullName, right.fullName) ||
     compareOrdinal(String(left.postscriptName), String(right.postscriptName))
+  )
 }
 
 export function resolveFontFace(
@@ -353,17 +350,18 @@ export function resolveFontFace(
     ? typeface.faces.find((face) => face.postscriptName === requested.postscriptName)
     : null
   if (exactPostscript) return cloneFontFace(exactPostscript)
-  const exactStyle = typeface.faces.filter((face) => (
-    face.style.toLowerCase() === requested.style.toLowerCase() &&
-    face.weight === requested.weight &&
-    face.slant === requested.slant
-  )).sort(compareFontFaces)[0]
+  const exactStyle = typeface.faces
+    .filter(
+      (face) =>
+        face.style.toLowerCase() === requested.style.toLowerCase() &&
+        face.weight === requested.weight &&
+        face.slant === requested.slant,
+    )
+    .sort(compareFontFaces)[0]
   if (exactStyle) return cloneFontFace(exactStyle)
   const ranked = [...typeface.faces].sort((left, right) => {
-    const score = (face: FontFaceDescriptor) => (
-      Math.abs(face.weight - requested.weight) +
-      (face.slant === requested.slant ? 0 : 1_000)
-    )
+    const score = (face: FontFaceDescriptor) =>
+      Math.abs(face.weight - requested.weight) + (face.slant === requested.slant ? 0 : 1_000)
     return score(left) - score(right) || compareFontFaces(left, right)
   })
   return cloneFontFace(ranked[0] ?? genericFontFace(SYSTEM_UI_TYPEFACE, 'Regular'))
@@ -392,11 +390,7 @@ export function backgroundReadiness(
   return { ready: true, reason: null }
 }
 
-export function normalizeStyleInteger(
-  value: string | number,
-  minimum: number,
-  maximum: number,
-) {
+export function normalizeStyleInteger(value: string | number, minimum: number, maximum: number) {
   const parsed = Number(value)
   if (!Number.isFinite(parsed)) return minimum
   return Math.max(minimum, Math.min(maximum, Math.round(parsed)))
@@ -404,7 +398,8 @@ export function normalizeStyleInteger(
 
 export function isValidSyncAid(style: VocalStyle): boolean {
   const { previewMs, syncAid } = style
-  return typeof syncAid.enabled === 'boolean' &&
+  return (
+    typeof syncAid.enabled === 'boolean' &&
     Number.isSafeInteger(previewMs) &&
     Number.isSafeInteger(syncAid.minLeadMs) &&
     Number.isSafeInteger(syncAid.maxLeadMs) &&
@@ -413,4 +408,5 @@ export function isValidSyncAid(style: VocalStyle): boolean {
     syncAid.minLeadMs <= syncAid.maxLeadMs &&
     syncAid.maxLeadMs <= previewMs &&
     previewMs <= 60_000
+  )
 }

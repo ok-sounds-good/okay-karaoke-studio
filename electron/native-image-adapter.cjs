@@ -7,11 +7,8 @@ function createNativeImageDecoder(nativeImage) {
 
   return function decodeNativeImage(bytes) {
     const image = nativeImage.createFromBuffer(bytes)
-    if (
-      !image ||
-      typeof image.isEmpty !== 'function' ||
-      typeof image.getSize !== 'function'
-    ) return false
+    if (!image || typeof image.isEmpty !== 'function' || typeof image.getSize !== 'function')
+      return false
     if (image.isEmpty()) return { empty: true, height: 0, width: 0 }
     const size = image.getSize()
     return {

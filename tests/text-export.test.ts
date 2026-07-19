@@ -40,9 +40,7 @@ describe('desktop text export formats', () => {
     expect(() => textExport.normalizeExportFormat('json')).toThrow(
       'format must be lrc, ass, or oks',
     )
-    expect(() => textExport.normalizeExportFormat(null)).toThrow(
-      'format must be a string',
-    )
+    expect(() => textExport.normalizeExportFormat(null)).toThrow('format must be a string')
   })
 
   it('preserves LRC and ASS filename normalization', () => {

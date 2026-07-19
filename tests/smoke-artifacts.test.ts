@@ -41,14 +41,19 @@ const visualResults = require('../scripts/visual-result-validation.cjs') as {
   STYLE_SESSION_NAMES: readonly string[]
 }
 
-interface Artifact { bytes: Buffer; name: string }
+interface Artifact {
+  bytes: Buffer
+  name: string
+}
 
 const temporaryDirectories: string[] = []
 
 afterEach(async () => {
-  await Promise.all(temporaryDirectories.splice(0).map((directory) => (
-    rm(directory, { force: true, recursive: true })
-  )))
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { force: true, recursive: true })),
+  )
 })
 
 async function temporaryRoot() {
@@ -72,24 +77,26 @@ describe('smoke artifact ownership and publication', () => {
     const order: string[] = []
     let privateMarker = ''
 
-    await expect(artifacts.publishArtifactBuffers(output, values, {
-      beforeMarkerCleanup: async (claimed: string, tempName: string, marker: string) => {
-        privateMarker = join(claimed, tempName)
-        const temporary = await lstat(privateMarker, { bigint: true })
-        const published = await lstat(join(claimed, marker), { bigint: true })
-        expect({ dev: temporary.dev, ino: temporary.ino }).toEqual({
-          dev: published.dev,
-          ino: published.ino,
-        })
-      },
-      beforeWrite: async (_claimed: string, name: string) => {
-        order.push(name)
-        if (name === '01-default.png') values[0].bytes.fill(120)
-        if (name === 'result.json') {
-          expect(await readFile(join(output, '01-default.png'), 'utf8')).toBe('png bytes')
-        }
-      },
-    })).resolves.toBe(output)
+    await expect(
+      artifacts.publishArtifactBuffers(output, values, {
+        beforeMarkerCleanup: async (claimed: string, tempName: string, marker: string) => {
+          privateMarker = join(claimed, tempName)
+          const temporary = await lstat(privateMarker, { bigint: true })
+          const published = await lstat(join(claimed, marker), { bigint: true })
+          expect({ dev: temporary.dev, ino: temporary.ino }).toEqual({
+            dev: published.dev,
+            ino: published.ino,
+          })
+        },
+        beforeWrite: async (_claimed: string, name: string) => {
+          order.push(name)
+          if (name === '01-default.png') values[0].bytes.fill(120)
+          if (name === 'result.json') {
+            expect(await readFile(join(output, '01-default.png'), 'utf8')).toBe('png bytes')
+          }
+        },
+      }),
+    ).resolves.toBe(output)
 
     expect(order).toEqual(['01-default.png', 'result.json'])
     await expect(lstat(privateMarker)).rejects.toMatchObject({ code: 'ENOENT' })
@@ -101,7 +108,9 @@ describe('smoke artifact ownership and publication', () => {
     const output = join(root, 'evidence')
     let releaseWrite = () => undefined
     let reportPrivate = (_value: { tempName: string; marker: string }) => undefined
-    const writeReleased = new Promise<void>((resolve) => { releaseWrite = resolve })
+    const writeReleased = new Promise<void>((resolve) => {
+      releaseWrite = resolve
+    })
     const privateReady = new Promise<{ tempName: string; marker: string }>((resolve) => {
       reportPrivate = resolve
     })
@@ -151,31 +160,37 @@ describe('smoke artifact ownership and publication', () => {
   it('loses claim, directory-swap, and exclusive-file races without overwriting', async () => {
     const root = await temporaryRoot()
     const claimedByOther = join(root, 'other-claim')
-    await expect(artifacts.publishArtifactBuffers(claimedByOther, resultArtifacts(), {
-      beforeClaim: async () => {
-        await mkdir(claimedByOther)
-        await writeFile(join(claimedByOther, 'winner'), 'preserve winner')
-      },
-    })).rejects.toThrow('VISUAL_OUTPUT_EXISTS')
+    await expect(
+      artifacts.publishArtifactBuffers(claimedByOther, resultArtifacts(), {
+        beforeClaim: async () => {
+          await mkdir(claimedByOther)
+          await writeFile(join(claimedByOther, 'winner'), 'preserve winner')
+        },
+      }),
+    ).rejects.toThrow('VISUAL_OUTPUT_EXISTS')
     expect(await readFile(join(claimedByOther, 'winner'), 'utf8')).toBe('preserve winner')
 
     const swapped = join(root, 'swapped')
     const displaced = join(root, 'displaced')
-    await expect(artifacts.publishArtifactBuffers(swapped, resultArtifacts(), {
-      beforeWrite: async () => {
-        await rename(swapped, displaced)
-        await mkdir(swapped)
-        await writeFile(join(swapped, 'racer'), 'preserve racer')
-      },
-    })).rejects.toThrow('VISUAL_OUTPUT_RACE')
+    await expect(
+      artifacts.publishArtifactBuffers(swapped, resultArtifacts(), {
+        beforeWrite: async () => {
+          await rename(swapped, displaced)
+          await mkdir(swapped)
+          await writeFile(join(swapped, 'racer'), 'preserve racer')
+        },
+      }),
+    ).rejects.toThrow('VISUAL_OUTPUT_RACE')
     expect(await readFile(join(swapped, 'racer'), 'utf8')).toBe('preserve racer')
 
     const fileRace = join(root, 'file-race')
-    await expect(artifacts.publishArtifactBuffers(fileRace, resultArtifacts(), {
-      beforeWrite: async (output: string, name: string) => {
-        if (name === '01-default.png') await mkdir(join(output, name))
-      },
-    })).rejects.toThrow('VISUAL_OUTPUT_RACE')
+    await expect(
+      artifacts.publishArtifactBuffers(fileRace, resultArtifacts(), {
+        beforeWrite: async (output: string, name: string) => {
+          if (name === '01-default.png') await mkdir(join(output, name))
+        },
+      }),
+    ).rejects.toThrow('VISUAL_OUTPUT_RACE')
     expect((await lstat(join(fileRace, '01-default.png'))).isDirectory()).toBe(true)
   })
 
@@ -184,13 +199,15 @@ describe('smoke artifact ownership and publication', () => {
     const output = join(root, 'evidence')
     const displaced = join(root, 'displaced-file')
 
-    await expect(artifacts.publishArtifactBuffers(output, resultArtifacts(), {
-      afterWrite: async (claimed: string, name: string) => {
-        if (name !== '01-default.png') return
-        await rename(join(claimed, name), displaced)
-        await mkdir(join(claimed, name))
-      },
-    })).rejects.toThrow('VISUAL_OUTPUT_RACE')
+    await expect(
+      artifacts.publishArtifactBuffers(output, resultArtifacts(), {
+        afterWrite: async (claimed: string, name: string) => {
+          if (name !== '01-default.png') return
+          await rename(join(claimed, name), displaced)
+          await mkdir(join(claimed, name))
+        },
+      }),
+    ).rejects.toThrow('VISUAL_OUTPUT_RACE')
     expect(await readFile(displaced, 'utf8')).toBe('png bytes')
     expect((await lstat(join(output, '01-default.png'))).isDirectory()).toBe(true)
   })
@@ -198,11 +215,13 @@ describe('smoke artifact ownership and publication', () => {
   it('never replaces a completion marker raced in before hard-link publication', async () => {
     const root = await temporaryRoot()
     const output = join(root, 'evidence')
-    await expect(artifacts.publishArtifactBuffers(output, resultArtifacts(), {
-      beforeMarkerPublish: async (claimed: string, _tempName: string, marker: string) => {
-        await writeFile(join(claimed, marker), 'racer marker')
-      },
-    })).rejects.toThrow('VISUAL_OUTPUT_RACE')
+    await expect(
+      artifacts.publishArtifactBuffers(output, resultArtifacts(), {
+        beforeMarkerPublish: async (claimed: string, _tempName: string, marker: string) => {
+          await writeFile(join(claimed, marker), 'racer marker')
+        },
+      }),
+    ).rejects.toThrow('VISUAL_OUTPUT_RACE')
     expect(await readFile(join(output, 'result.json'), 'utf8')).toBe('racer marker')
     expect((await readdir(output)).some((name) => name.startsWith('.oks-marker-'))).toBe(false)
   })
@@ -212,13 +231,15 @@ describe('smoke artifact ownership and publication', () => {
     const output = join(root, 'evidence')
     const displaced = join(root, 'owned-private-marker')
     let racedTemp = ''
-    await expect(artifacts.publishArtifactBuffers(output, resultArtifacts(), {
-      beforeMarkerCleanup: async (claimed: string, tempName: string) => {
-        racedTemp = join(claimed, tempName)
-        await rename(racedTemp, displaced)
-        await writeFile(racedTemp, 'racer-owned bytes')
-      },
-    })).rejects.toThrow('VISUAL_OUTPUT_RACE')
+    await expect(
+      artifacts.publishArtifactBuffers(output, resultArtifacts(), {
+        beforeMarkerCleanup: async (claimed: string, tempName: string) => {
+          racedTemp = join(claimed, tempName)
+          await rename(racedTemp, displaced)
+          await writeFile(racedTemp, 'racer-owned bytes')
+        },
+      }),
+    ).rejects.toThrow('VISUAL_OUTPUT_RACE')
     expect(await readFile(racedTemp, 'utf8')).toBe('racer-owned bytes')
     expect(await readFile(displaced, 'utf8')).toBe('{"ok":true}\n')
     expect(await readFile(join(output, 'result.json'), 'utf8')).toBe('{"ok":true}\n')
@@ -236,17 +257,20 @@ describe('smoke artifact ownership and publication', () => {
       'A.png',
       'a'.repeat(artifacts.ARTIFACT_LIMITS.maxNameLength + 1),
     ]) {
-      expect(() => artifacts.normalizeArtifactBuffers([
-        { bytes: Buffer.from('x'), name }, marker,
-      ])).toThrow('VISUAL_ARTIFACTS_INVALID')
+      expect(() =>
+        artifacts.normalizeArtifactBuffers([{ bytes: Buffer.from('x'), name }, marker]),
+      ).toThrow('VISUAL_ARTIFACTS_INVALID')
     }
     for (const values of [
       [marker, { bytes: Buffer.from('png'), name: '01.png' }],
       [marker, { bytes: Buffer.from('{}'), name: 'failure.json' }],
-      [{ bytes: Buffer.from('a'), name: '01.png' }, { bytes: Buffer.from('b'), name: '01.png' }, marker],
-    ]) expect(() => artifacts.normalizeArtifactBuffers(values)).toThrow(
-      'VISUAL_ARTIFACTS_INVALID',
-    )
+      [
+        { bytes: Buffer.from('a'), name: '01.png' },
+        { bytes: Buffer.from('b'), name: '01.png' },
+        marker,
+      ],
+    ])
+      expect(() => artifacts.normalizeArtifactBuffers(values)).toThrow('VISUAL_ARTIFACTS_INVALID')
   })
 
   it('enforces inclusive count, per-artifact, and aggregate byte limits', () => {
@@ -258,25 +282,32 @@ describe('smoke artifact ownership and publication', () => {
       name: `${index}.png`,
     }))
     expect(artifacts.normalizeArtifactBuffers([...atCount, marker])).toHaveLength(maxArtifacts)
-    expect(() => artifacts.normalizeArtifactBuffers([
-      ...atCount,
-      { bytes: Buffer.from('x'), name: 'overflow.png' },
-      marker,
-    ])).toThrow('VISUAL_ARTIFACTS_INVALID')
+    expect(() =>
+      artifacts.normalizeArtifactBuffers([
+        ...atCount,
+        { bytes: Buffer.from('x'), name: 'overflow.png' },
+        marker,
+      ]),
+    ).toThrow('VISUAL_ARTIFACTS_INVALID')
 
     const full = Buffer.alloc(maxArtifactBytes)
     const exactTotal = [0, 1, 2].map((index) => ({ bytes: full, name: `${index}-full.png` }))
     exactTotal.push({ bytes: full.subarray(0, maxArtifactBytes - 1), name: '3-full.png' })
     expect(maxTotalBytes).toBe(maxArtifactBytes * 4)
     expect(artifacts.normalizeArtifactBuffers([...exactTotal, marker])).toHaveLength(5)
-    expect(() => artifacts.normalizeArtifactBuffers([
-      ...exactTotal.slice(0, 3),
-      { bytes: full, name: '3-full.png' },
-      marker,
-    ])).toThrow('VISUAL_ARTIFACTS_INVALID')
-    expect(() => artifacts.normalizeArtifactBuffers([
-      { bytes: Buffer.alloc(maxArtifactBytes + 1), name: 'large.png' }, marker,
-    ])).toThrow('VISUAL_ARTIFACTS_INVALID')
+    expect(() =>
+      artifacts.normalizeArtifactBuffers([
+        ...exactTotal.slice(0, 3),
+        { bytes: full, name: '3-full.png' },
+        marker,
+      ]),
+    ).toThrow('VISUAL_ARTIFACTS_INVALID')
+    expect(() =>
+      artifacts.normalizeArtifactBuffers([
+        { bytes: Buffer.alloc(maxArtifactBytes + 1), name: 'large.png' },
+        marker,
+      ]),
+    ).toThrow('VISUAL_ARTIFACTS_INVALID')
   })
 
   it('publishes only the fixed launcher-failure schema and never raw errors', async () => {
@@ -298,10 +329,13 @@ describe('smoke artifact ownership and publication', () => {
       new Error(secret),
       { code: 'VISUAL_SMOKE_FAILED', detail: secret, ok: false },
       { code: secret, ok: false },
-      Object.defineProperties({}, {
-        code: { enumerable: true, get: () => 'VISUAL_SMOKE_FAILED' },
-        ok: { enumerable: true, value: false },
-      }),
+      Object.defineProperties(
+        {},
+        {
+          code: { enumerable: true, get: () => 'VISUAL_SMOKE_FAILED' },
+          ok: { enumerable: true, value: false },
+        },
+      ),
       'VISUAL_SMOKE_FAILED',
     ]) {
       expect(() => artifacts.normalizeLauncherFailure(value)).toThrow('VISUAL_FAILURE_INVALID')
@@ -320,28 +354,38 @@ describe('smoke artifact ownership and publication', () => {
       ['empty-marker', [['failure.json', Buffer.alloc(0)]]],
       ['malformed-marker', [['failure.json', Buffer.from('{')]]],
       ['oversized-marker', [['failure.json', oversized]]],
-      ['dual-markers', [
-        ['failure.json', Buffer.from('{}')],
-        ['result.json', Buffer.from('{}')],
-      ]],
-      ['extra-field', [[
-        'failure.json',
-        Buffer.from('{"code":"VISUAL_SMOKE_FAILED","detail":"private","ok":false}\n'),
-      ]]],
-      ['valid-looking', [[
-        'failure.json',
-        Buffer.from('{"code":"VISUAL_SMOKE_FAILED","ok":false}\n'),
-      ]]],
+      [
+        'dual-markers',
+        [
+          ['failure.json', Buffer.from('{}')],
+          ['result.json', Buffer.from('{}')],
+        ],
+      ],
+      [
+        'extra-field',
+        [
+          [
+            'failure.json',
+            Buffer.from('{"code":"VISUAL_SMOKE_FAILED","detail":"private","ok":false}\n'),
+          ],
+        ],
+      ],
+      [
+        'valid-looking',
+        [['failure.json', Buffer.from('{"code":"VISUAL_SMOKE_FAILED","ok":false}\n')]],
+      ],
     ]
 
     for (const [name, files] of cases) {
       const output = join(root, name)
       await mkdir(output)
       for (const [file, bytes] of files) await writeFile(join(output, file), bytes)
-      await expect(artifacts.writeFreshLauncherFailure(output, {
-        code: 'VISUAL_SMOKE_FAILED',
-        ok: false,
-      })).rejects.toThrow('VISUAL_OUTPUT_EXISTS')
+      await expect(
+        artifacts.writeFreshLauncherFailure(output, {
+          code: 'VISUAL_SMOKE_FAILED',
+          ok: false,
+        }),
+      ).rejects.toThrow('VISUAL_OUTPUT_EXISTS')
       expect(await readdir(output)).toEqual(files.map(([file]) => file).sort())
       for (const [file, bytes] of files) {
         expect((await readFile(join(output, file))).equals(bytes)).toBe(true)
@@ -358,7 +402,8 @@ describe('smoke artifact ownership and publication', () => {
       `${join(root, 'evidence')}${sep}`,
       `${join(root, 'bad')}\0leaf`,
       join(root, 'con'),
-    ]) expect(() => artifacts.validateFreshOutputPath(value)).toThrow('VISUAL_OUTPUT_INVALID')
+    ])
+      expect(() => artifacts.validateFreshOutputPath(value)).toThrow('VISUAL_OUTPUT_INVALID')
   })
 
   it('validates Windows drive and UNC paths without using the host platform', () => {
@@ -368,16 +413,26 @@ describe('smoke artifact ownership and publication', () => {
     expect(artifacts.validateFreshOutputPath(unc, win32)).toBe(unc)
 
     const devices = [
-      'aux', 'clock$', 'con', 'conin$', 'conout$', 'nul', 'prn',
+      'aux',
+      'clock$',
+      'con',
+      'conin$',
+      'conout$',
+      'nul',
+      'prn',
       ...Array.from({ length: 9 }, (_, index) => `com${index + 1}`),
       ...Array.from({ length: 9 }, (_, index) => `lpt${index + 1}`),
-      'COM¹', 'COM²', 'COM³', 'LPT¹', 'LPT²', 'LPT³', 'ＣＯＮ',
+      'COM¹',
+      'COM²',
+      'COM³',
+      'LPT¹',
+      'LPT²',
+      'LPT³',
+      'ＣＯＮ',
     ]
     for (const device of devices) {
       const value = `C:\\safe\\${device}.evidence`
-      expect(() => artifacts.validateFreshOutputPath(value, win32)).toThrow(
-        'VISUAL_OUTPUT_INVALID',
-      )
+      expect(() => artifacts.validateFreshOutputPath(value, win32)).toThrow('VISUAL_OUTPUT_INVALID')
     }
 
     for (const value of [
@@ -398,8 +453,7 @@ describe('smoke artifact ownership and publication', () => {
       String.raw`C:\safe\evidence.`,
       String.raw`C:\safe\evidence `,
       String.raw`\root-relative\evidence`,
-    ]) expect(() => artifacts.validateFreshOutputPath(value, win32)).toThrow(
-      'VISUAL_OUTPUT_INVALID',
-    )
+    ])
+      expect(() => artifacts.validateFreshOutputPath(value, win32)).toThrow('VISUAL_OUTPUT_INVALID')
   })
 })

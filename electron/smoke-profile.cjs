@@ -19,11 +19,7 @@ function statIdentity(stats) {
 }
 
 function sameIdentity(left, right) {
-  return Boolean(
-    left && right &&
-    left.dev === right.dev &&
-    left.ino === right.ino,
-  )
+  return Boolean(left && right && left.dev === right.dev && left.ino === right.ino)
 }
 
 function encodeProfileIdentity(identity) {
@@ -35,13 +31,20 @@ function decodeProfileIdentity(rawIdentity, code) {
     if (typeof rawIdentity !== 'string' || !rawIdentity) throw new Error('missing')
     const parsed = JSON.parse(Buffer.from(rawIdentity, 'base64url').toString('utf8'))
     if (
-      !parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
-      typeof parsed.dev !== 'string' || !/^\d+$/u.test(parsed.dev) ||
-      typeof parsed.ino !== 'string' || !/^\d+$/u.test(parsed.ino) ||
-      typeof parsed.realPath !== 'string' || !path.isAbsolute(parsed.realPath) ||
-      typeof parsed.token !== 'string' || !/^[0-9a-f-]{36}$/iu.test(parsed.token) ||
+      !parsed ||
+      typeof parsed !== 'object' ||
+      Array.isArray(parsed) ||
+      typeof parsed.dev !== 'string' ||
+      !/^\d+$/u.test(parsed.dev) ||
+      typeof parsed.ino !== 'string' ||
+      !/^\d+$/u.test(parsed.ino) ||
+      typeof parsed.realPath !== 'string' ||
+      !path.isAbsolute(parsed.realPath) ||
+      typeof parsed.token !== 'string' ||
+      !/^[0-9a-f-]{36}$/iu.test(parsed.token) ||
       Object.keys(parsed).sort().join(',') !== 'dev,ino,realPath,token'
-    ) throw new Error('shape')
+    )
+      throw new Error('shape')
     return parsed
   } catch {
     throw profileError(code)
@@ -60,11 +63,8 @@ function canonicalPathSync(filePath) {
 function pathIsOutside(base, candidate, pathApi) {
   const relative = pathApi.relative(base, candidate)
   return Boolean(
-    relative && (
-      pathApi.isAbsolute(relative) ||
-      relative === '..' ||
-      relative.startsWith(`..${pathApi.sep}`)
-    ),
+    relative &&
+    (pathApi.isAbsolute(relative) || relative === '..' || relative.startsWith(`..${pathApi.sep}`)),
   )
 }
 
@@ -79,9 +79,13 @@ function readOwnerSync(profilePath, code) {
   try {
     const value = JSON.parse(fsSync.readFileSync(ownerPath, 'utf8'))
     if (
-      !value || typeof value !== 'object' || Array.isArray(value) ||
-      typeof value.token !== 'string' || Object.keys(value).join(',') !== 'token'
-    ) throw new Error('shape')
+      !value ||
+      typeof value !== 'object' ||
+      Array.isArray(value) ||
+      typeof value.token !== 'string' ||
+      Object.keys(value).join(',') !== 'token'
+    )
+      throw new Error('shape')
     return value.token
   } catch {
     throw profileError(code)
@@ -104,10 +108,12 @@ function validateOwnedSmokeProfile(rawPath, defaultUserDataPath, rawIdentity, co
     if (
       realPath !== expected.realPath ||
       !sameIdentity(statIdentity(stats), expected) ||
-      entries.length !== 1 || entries[0] !== OWNER_FILE ||
+      entries.length !== 1 ||
+      entries[0] !== OWNER_FILE ||
       readOwnerSync(profilePath, code) !== expected.token ||
       !pathsAreSeparate(realPath, defaultPath)
-    ) throw profileError(code)
+    )
+      throw profileError(code)
     return profilePath
   } catch (error) {
     if (error?.code === code) throw error
@@ -146,7 +152,7 @@ async function ownedProfileStillMatches(profile, fsApi) {
     const stats = await fsApi.lstat(profile.path, { bigint: true })
     if (!stats.isDirectory() || stats.isSymbolicLink()) return false
     if (!sameIdentity(statIdentity(stats), profile.identity)) return false
-    if (await fsApi.realpath(profile.path) !== profile.identity.realPath) return false
+    if ((await fsApi.realpath(profile.path)) !== profile.identity.realPath) return false
     const ownerPath = path.join(profile.path, OWNER_FILE)
     const ownerStats = await fsApi.lstat(ownerPath, { bigint: true })
     if (!ownerStats.isFile() || ownerStats.isSymbolicLink()) return false
@@ -160,7 +166,7 @@ async function ownedProfileStillMatches(profile, fsApi) {
 async function verifyRetainedSmokeProfile(profile, options = {}) {
   const fsApi = options.fsApi || fs
   await options.beforeIdentityCheck?.(profile)
-  if (!await ownedProfileStillMatches(profile, fsApi)) {
+  if (!(await ownedProfileStillMatches(profile, fsApi))) {
     throw profileError('SMOKE_PROFILE_IDENTITY_MISMATCH')
   }
   // Node has no cross-platform openat-style recursive removal API. A path can

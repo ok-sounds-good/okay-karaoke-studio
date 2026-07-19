@@ -106,8 +106,9 @@ function deferred<T>() {
 }
 
 function buttonContaining(label: string): HTMLButtonElement {
-  const button = [...document.querySelectorAll<HTMLButtonElement>('button')]
-    .find((candidate) => candidate.textContent?.includes(label))
+  const button = [...document.querySelectorAll<HTMLButtonElement>('button')].find((candidate) =>
+    candidate.textContent?.includes(label),
+  )
   if (!button) throw new Error(`Could not find button containing: ${label}`)
   return button
 }
@@ -148,23 +149,31 @@ async function replaceProjectTitle(text: string) {
 }
 
 async function pressKey(code: string, init: KeyboardEventInit = {}) {
-  await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', {
-    bubbles: true,
-    cancelable: true,
-    code,
-    key: code === 'Space' ? ' ' : code,
-    ...init,
-  })))
+  await act(async () =>
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        bubbles: true,
+        cancelable: true,
+        code,
+        key: code === 'Space' ? ' ' : code,
+        ...init,
+      }),
+    ),
+  )
 }
 
 async function releaseKey(code: string, init: KeyboardEventInit = {}) {
-  await act(async () => window.dispatchEvent(new KeyboardEvent('keyup', {
-    bubbles: true,
-    cancelable: true,
-    code,
-    key: code === 'Space' ? ' ' : code,
-    ...init,
-  })))
+  await act(async () =>
+    window.dispatchEvent(
+      new KeyboardEvent('keyup', {
+        bubbles: true,
+        cancelable: true,
+        code,
+        key: code === 'Space' ? ' ' : code,
+        ...init,
+      }),
+    ),
+  )
 }
 
 async function tapSyncWord() {
@@ -173,8 +182,9 @@ async function tapSyncWord() {
 }
 
 function timelineTimingLabels() {
-  return [...document.querySelectorAll<HTMLElement>('.timeline-word')]
-    .map((word) => word.getAttribute('aria-label'))
+  return [...document.querySelectorAll<HTMLElement>('.timeline-word')].map((word) =>
+    word.getAttribute('aria-label'),
+  )
 }
 
 describe('mounted first-time workflow', () => {
@@ -183,8 +193,9 @@ describe('mounted first-time workflow', () => {
   let harness: StudioHarness
 
   beforeEach(async () => {
-    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
-      .IS_REACT_ACT_ENVIRONMENT = true
+    ;(
+      globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }
+    ).IS_REACT_ACT_ENVIRONMENT = true
     harness = createStudioHarness()
     Object.defineProperty(window, 'studio', {
       configurable: true,
@@ -212,15 +223,21 @@ describe('mounted first-time workflow', () => {
   })
 
   async function prepareVideoExportProject() {
-    vi.stubGlobal('AudioContext', class {
-      async close() {}
-      async decodeAudioData() {
-        return { getChannelData: () => new Float32Array([0]) }
-      }
-    })
-    vi.stubGlobal('fetch', vi.fn(async () => ({
-      arrayBuffer: async () => new ArrayBuffer(0),
-    })))
+    vi.stubGlobal(
+      'AudioContext',
+      class {
+        async close() {}
+        async decodeAudioData() {
+          return { getChannelData: () => new Float32Array([0]) }
+        }
+      },
+    )
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        arrayBuffer: async () => new ArrayBuffer(0),
+      })),
+    )
     harness.importAudio.mockResolvedValueOnce({
       path: '/music/backing.mp3',
       name: 'backing.mp3',
@@ -239,8 +256,9 @@ describe('mounted first-time workflow', () => {
   it('offers lyric editing only from Live Preview in the non-sync workspace', () => {
     const preview = document.querySelector<HTMLElement>('[aria-label="Karaoke preview"]')
     const timeline = document.querySelector<HTMLElement>('[aria-label="Lyric Timing"]')
-    const editTextButtons = [...document.querySelectorAll<HTMLButtonElement>('button')]
-      .filter((button) => button.textContent?.trim() === 'Edit text')
+    const editTextButtons = [...document.querySelectorAll<HTMLButtonElement>('button')].filter(
+      (button) => button.textContent?.trim() === 'Edit text',
+    )
 
     expect(preview).not.toBeNull()
     expect(timeline).not.toBeNull()
@@ -295,7 +313,9 @@ describe('mounted first-time workflow', () => {
     expect(document.querySelector('.transport')?.classList.contains('is-syncing')).toBe(true)
 
     await act(async () => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, code: 'Escape', key: 'Escape' }))
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', { bubbles: true, code: 'Escape', key: 'Escape' }),
+      )
     })
     expect(document.querySelector('.transport')?.classList.contains('is-syncing')).toBe(false)
   })
@@ -308,10 +328,12 @@ describe('mounted first-time workflow', () => {
 
     await clickButton('Workflow')
     await clickButton('Save .oks')
-    expect(harness.saveProject).toHaveBeenCalledWith(expect.objectContaining({
-      path: undefined,
-      suggestedName: 'untitled-song.oks',
-    }))
+    expect(harness.saveProject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: undefined,
+        suggestedName: 'untitled-song.oks',
+      }),
+    )
     const savedContents = harness.saveProject.mock.calls[0][0].contents
     expect(parseProject(savedContents)).toMatchObject({
       title: 'Untitled Song',
@@ -327,8 +349,10 @@ describe('mounted first-time workflow', () => {
     const exportDialog = document.querySelector<HTMLElement>('[role="dialog"]')
     expect(exportDialog?.textContent).toContain('Add lyrics before exporting karaoke')
     expect(exportDialog?.textContent).toContain('Editable .oks project')
-    const exportOption = (label: string) => [...exportDialog!.querySelectorAll<HTMLButtonElement>('button')]
-      .find((button) => button.textContent?.includes(label))
+    const exportOption = (label: string) =>
+      [...exportDialog!.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
+        button.textContent?.includes(label),
+      )
     expect(exportOption('Enhanced LRC')?.disabled).toBe(true)
     expect(exportOption('ASS karaoke subtitles')?.disabled).toBe(true)
     expect(exportOption('Karaoke video')?.disabled).toBe(true)
@@ -342,8 +366,12 @@ describe('mounted first-time workflow', () => {
   })
 
   it('persists the shared preview and video lyric-display options', async () => {
-    const lineCount = document.querySelector<HTMLSelectElement>('[aria-label="Visible lyric lines"]')!
-    const advanceMode = document.querySelector<HTMLSelectElement>('[aria-label="Lyric line advance mode"]')!
+    const lineCount = document.querySelector<HTMLSelectElement>(
+      '[aria-label="Visible lyric lines"]',
+    )!
+    const advanceMode = document.querySelector<HTMLSelectElement>(
+      '[aria-label="Lyric line advance mode"]',
+    )!
     await act(async () => {
       lineCount.value = '5'
       lineCount.dispatchEvent(new Event('change', { bubbles: true }))
@@ -442,8 +470,12 @@ describe('mounted first-time workflow', () => {
 
     expect(document.querySelector('[aria-label="Play"]')).not.toBeNull()
     expect(document.querySelector('.time-readout strong')?.textContent).toBe('0:00.000')
-    expect(document.querySelector<HTMLSelectElement>('[aria-label="Playback speed"]')?.title).toBe('Set playback speed')
-    expect(document.querySelector<HTMLInputElement>('[aria-label="Volume"]')?.title).toBe('Adjust playback volume')
+    expect(document.querySelector<HTMLSelectElement>('[aria-label="Playback speed"]')?.title).toBe(
+      'Set playback speed',
+    )
+    expect(document.querySelector<HTMLInputElement>('[aria-label="Volume"]')?.title).toBe(
+      'Adjust playback volume',
+    )
     expect(
       document.querySelector<HTMLInputElement>('[aria-label="Track 1 Sung color"]')?.title,
     ).toBe('Choose Sung color for Lead Vocal')
@@ -488,7 +520,9 @@ describe('mounted first-time workflow', () => {
 
     expect(shiftedSpace.defaultPrevented).toBe(true)
     expect(document.querySelector('[aria-label="Pause"]')).not.toBeNull()
-    expect(document.querySelector<HTMLButtonElement>('.timeline-word')?.getAttribute('aria-pressed')).toBe('true')
+    expect(
+      document.querySelector<HTMLButtonElement>('.timeline-word')?.getAttribute('aria-pressed'),
+    ).toBe('true')
   })
 
   it.each([
@@ -613,21 +647,29 @@ describe('mounted first-time workflow', () => {
     expect(document.querySelector('.sync-cue__line.is-next')?.textContent).toContain('Fourth')
 
     const press = async (code: string, init: KeyboardEventInit = {}) => {
-      await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', {
-        bubbles: true,
-        cancelable: true,
-        code,
-        key: code === 'Space' ? ' ' : code === 'ArrowRight' ? 'ArrowRight' : code,
-        ...init,
-      })))
+      await act(async () =>
+        window.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            bubbles: true,
+            cancelable: true,
+            code,
+            key: code === 'Space' ? ' ' : code === 'ArrowRight' ? 'ArrowRight' : code,
+            ...init,
+          }),
+        ),
+      )
     }
     const releaseSpace = async () => {
-      await act(async () => window.dispatchEvent(new KeyboardEvent('keyup', {
-        bubbles: true,
-        cancelable: true,
-        code: 'Space',
-        key: ' ',
-      })))
+      await act(async () =>
+        window.dispatchEvent(
+          new KeyboardEvent('keyup', {
+            bubbles: true,
+            cancelable: true,
+            code: 'Space',
+            key: ' ',
+          }),
+        ),
+      )
     }
 
     await press('Space')
@@ -640,13 +682,16 @@ describe('mounted first-time workflow', () => {
     await press('ArrowRight', { shiftKey: true })
     await releaseSpace()
 
-    const labels = [...document.querySelectorAll<HTMLElement>('.timeline-word')]
-      .map((word) => word.getAttribute('aria-label'))
-    expect(labels).toEqual(expect.arrayContaining([
-      'First timing block, 0:00.000–0:00.250',
-      'second timing block, 0:00.250–0:00.500',
-      'third timing block, 0:00.500–0:01.500',
-    ]))
+    const labels = [...document.querySelectorAll<HTMLElement>('.timeline-word')].map((word) =>
+      word.getAttribute('aria-label'),
+    )
+    expect(labels).toEqual(
+      expect.arrayContaining([
+        'First timing block, 0:00.000–0:00.250',
+        'second timing block, 0:00.250–0:00.500',
+        'third timing block, 0:00.500–0:01.500',
+      ]),
+    )
     expect(document.querySelector('.sync-cue__line.is-current')?.textContent).toContain('Fourth')
 
     await press('Escape')
@@ -676,10 +721,12 @@ describe('mounted first-time workflow', () => {
     await pressKey('ArrowRight')
     await pressKey('ArrowRight')
     await tapSyncWord()
-    expect(timelineTimingLabels()).toEqual(expect.arrayContaining([
-      'Alpha timing block, 0:00.000–0:00.500',
-      'beta timing block, 0:00.500–0:00.600',
-    ]))
+    expect(timelineTimingLabels()).toEqual(
+      expect.arrayContaining([
+        'Alpha timing block, 0:00.000–0:00.500',
+        'beta timing block, 0:00.500–0:00.600',
+      ]),
+    )
 
     await act(async () => {
       document.querySelector<HTMLButtonElement>('[aria-label="Stop"]')!.click()
@@ -707,10 +754,12 @@ describe('mounted first-time workflow', () => {
     await pressKey('ArrowRight')
     await pressKey('ArrowRight')
     await tapSyncWord()
-    expect(timelineTimingLabels()).toEqual(expect.arrayContaining([
-      'North timing block, 0:00.000–0:00.100',
-      'South timing block, 0:00.500–0:00.600',
-    ]))
+    expect(timelineTimingLabels()).toEqual(
+      expect.arrayContaining([
+        'North timing block, 0:00.000–0:00.100',
+        'South timing block, 0:00.500–0:00.600',
+      ]),
+    )
 
     await act(async () => {
       document.querySelector<HTMLButtonElement>('[aria-label="Stop"]')!.click()
@@ -725,12 +774,9 @@ describe('mounted first-time workflow', () => {
 
     await act(async () => harness.sendMenuAction('save'))
     const saved = parseProject(harness.saveProject.mock.calls.at(-1)?.[0].contents)
-    expect(saved.tracks[0].lines.map((line) => (
-      line.words.map(({ startMs, endMs }) => [startMs, endMs])
-    ))).toEqual([
-      [[0, 500]],
-      [[500, 600]],
-    ])
+    expect(
+      saved.tracks[0].lines.map((line) => line.words.map(({ startMs, endMs }) => [startMs, endMs])),
+    ).toEqual([[[0, 500]], [[500, 600]]])
   })
 
   it('ends an armed sync before Undo and keeps Redo and later bare Space outside that session', async () => {
@@ -779,7 +825,9 @@ describe('mounted first-time workflow', () => {
     expect(document.querySelector('.transport')?.classList.contains('is-syncing')).toBe(true)
 
     await replaceProjectTitle('Retitled after one tap')
-    expect(document.querySelector('.topbar__document')?.textContent).toContain('Retitled after one tap')
+    expect(document.querySelector('.topbar__document')?.textContent).toContain(
+      'Retitled after one tap',
+    )
     expect(document.querySelector('.transport')?.classList.contains('is-syncing')).toBe(false)
 
     await tapSyncWord()
@@ -802,10 +850,12 @@ describe('mounted first-time workflow', () => {
     await tapSyncWord()
     await pressKey('ArrowRight')
     await tapSyncWord()
-    expect(timelineTimingLabels()).toEqual(expect.arrayContaining([
-      'First timing block, 0:00.000–0:00.100',
-      'Second timing block, 0:00.250–0:00.350',
-    ]))
+    expect(timelineTimingLabels()).toEqual(
+      expect.arrayContaining([
+        'First timing block, 0:00.000–0:00.100',
+        'Second timing block, 0:00.250–0:00.350',
+      ]),
+    )
 
     await act(async () => {
       document.querySelector<HTMLButtonElement>('[aria-label="Stop"]')!.click()
@@ -815,16 +865,20 @@ describe('mounted first-time workflow', () => {
     await pressKey('ArrowRight')
     await pressKey('ArrowRight')
     await tapSyncWord()
-    expect(timelineTimingLabels()).toEqual(expect.arrayContaining([
-      'First timing block, 0:00.000–0:00.100',
-      'Second timing block, 0:00.500–0:00.600',
-    ]))
+    expect(timelineTimingLabels()).toEqual(
+      expect.arrayContaining([
+        'First timing block, 0:00.000–0:00.100',
+        'Second timing block, 0:00.500–0:00.600',
+      ]),
+    )
 
     await act(async () => harness.sendMenuAction('undo'))
-    expect(timelineTimingLabels()).toEqual(expect.arrayContaining([
-      'First timing block, 0:00.000–0:00.100',
-      'Second timing block, 0:00.250–0:00.350',
-    ]))
+    expect(timelineTimingLabels()).toEqual(
+      expect.arrayContaining([
+        'First timing block, 0:00.000–0:00.100',
+        'Second timing block, 0:00.250–0:00.350',
+      ]),
+    )
   })
 
   it('does not collapse sync taps into lyric time zero during a positive-offset pre-roll', async () => {
@@ -843,18 +897,22 @@ describe('mounted first-time workflow', () => {
     await clickButton('Start sync')
 
     await act(async () => {
-      window.dispatchEvent(new KeyboardEvent('keydown', {
-        bubbles: true,
-        cancelable: true,
-        code: 'Space',
-        key: ' ',
-      }))
-      window.dispatchEvent(new KeyboardEvent('keyup', {
-        bubbles: true,
-        cancelable: true,
-        code: 'Space',
-        key: ' ',
-      }))
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          bubbles: true,
+          cancelable: true,
+          code: 'Space',
+          key: ' ',
+        }),
+      )
+      window.dispatchEvent(
+        new KeyboardEvent('keyup', {
+          bubbles: true,
+          cancelable: true,
+          code: 'Space',
+          key: ' ',
+        }),
+      )
     })
 
     expect(document.querySelectorAll('.timeline-word')).toHaveLength(0)
@@ -862,26 +920,34 @@ describe('mounted first-time workflow', () => {
       'lyric clock has not reached 0:00',
     )
 
-    await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', {
-      bubbles: true,
-      cancelable: true,
-      code: 'ArrowRight',
-      key: 'ArrowRight',
-      shiftKey: true,
-    })))
+    await act(async () =>
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          bubbles: true,
+          cancelable: true,
+          code: 'ArrowRight',
+          key: 'ArrowRight',
+          shiftKey: true,
+        }),
+      ),
+    )
     await act(async () => {
-      window.dispatchEvent(new KeyboardEvent('keydown', {
-        bubbles: true,
-        cancelable: true,
-        code: 'Space',
-        key: ' ',
-      }))
-      window.dispatchEvent(new KeyboardEvent('keyup', {
-        bubbles: true,
-        cancelable: true,
-        code: 'Space',
-        key: ' ',
-      }))
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          bubbles: true,
+          cancelable: true,
+          code: 'Space',
+          key: ' ',
+        }),
+      )
+      window.dispatchEvent(
+        new KeyboardEvent('keyup', {
+          bubbles: true,
+          cancelable: true,
+          code: 'Space',
+          key: ' ',
+        }),
+      )
     })
     expect(document.querySelectorAll('.timeline-word')).toHaveLength(1)
   })
@@ -893,59 +959,85 @@ describe('mounted first-time workflow', () => {
     await clickButton('Start sync')
 
     await act(async () => {
-      window.dispatchEvent(new KeyboardEvent('keydown', {
-        bubbles: true,
-        cancelable: true,
-        code: 'Space',
-        key: ' ',
-      }))
-      window.dispatchEvent(new KeyboardEvent('keyup', {
-        bubbles: true,
-        cancelable: true,
-        code: 'Space',
-        key: ' ',
-      }))
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          bubbles: true,
+          cancelable: true,
+          code: 'Space',
+          key: ' ',
+        }),
+      )
+      window.dispatchEvent(
+        new KeyboardEvent('keyup', {
+          bubbles: true,
+          cancelable: true,
+          code: 'Space',
+          key: ' ',
+        }),
+      )
     })
     const firstTiming = document.querySelector('.timeline-word')?.getAttribute('aria-label')
     expect(firstTiming).toContain('Only timing block')
 
     const stop = document.querySelector<HTMLButtonElement>('[aria-label="Stop"]')!
-    const forward = document.querySelector<HTMLButtonElement>('[aria-label="Skip forward five seconds"]')!
+    const forward = document.querySelector<HTMLButtonElement>(
+      '[aria-label="Skip forward five seconds"]',
+    )!
     await act(async () => stop.click())
     await act(async () => forward.click())
     expect(document.querySelector('.time-readout strong')?.textContent).toBe('0:05.000')
 
     await clickButton('Start sync')
     expect(document.querySelector('.transport')?.classList.contains('is-syncing')).toBe(false)
-    expect(document.querySelector('[role="status"]')?.textContent).toContain('No words remain at or after the playhead')
+    expect(document.querySelector('[role="status"]')?.textContent).toContain(
+      'No words remain at or after the playhead',
+    )
 
     await act(async () => {
-      window.dispatchEvent(new KeyboardEvent('keydown', {
-        bubbles: true,
-        cancelable: true,
-        code: 'Space',
-        key: ' ',
-      }))
-      window.dispatchEvent(new KeyboardEvent('keyup', {
-        bubbles: true,
-        cancelable: true,
-        code: 'Space',
-        key: ' ',
-      }))
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          bubbles: true,
+          cancelable: true,
+          code: 'Space',
+          key: ' ',
+        }),
+      )
+      window.dispatchEvent(
+        new KeyboardEvent('keyup', {
+          bubbles: true,
+          cancelable: true,
+          code: 'Space',
+          key: ' ',
+        }),
+      )
     })
     expect(document.querySelector('.timeline-word')?.getAttribute('aria-label')).toBe(firstTiming)
   })
 
   it('reloads an unavailable local font only when the user retries it', async () => {
-    const fontLoads = vi.fn(async () => { throw new Error('Font unavailable') })
-    vi.stubGlobal('FontFace', class { load() { return fontLoads() } })
+    const fontLoads = vi.fn(async () => {
+      throw new Error('Font unavailable')
+    })
+    vi.stubGlobal(
+      'FontFace',
+      class {
+        load() {
+          return fontLoads()
+        }
+      },
+    )
     const project = createDemoProject()
     const face = {
-      fullName: 'Unavailable Test Regular', style: 'Regular',
-      postscriptName: 'UnavailableTest-Regular', weight: 400 as const, slant: 'normal' as const,
+      fullName: 'Unavailable Test Regular',
+      style: 'Regular',
+      postscriptName: 'UnavailableTest-Regular',
+      weight: 400 as const,
+      slant: 'normal' as const,
     }
     project.stageStyle.lyrics.typeface = {
-      kind: 'local', family: 'Unavailable Test', faces: [face],
+      kind: 'local',
+      family: 'Unavailable Test',
+      faces: [face],
     }
     project.stageStyle.lyrics.fontStyle = face
     harness.openProject.mockResolvedValueOnce({
@@ -999,20 +1091,28 @@ describe('mounted first-time workflow', () => {
     const leadLane = document.querySelector<HTMLElement>('[data-track-id="demo-lead"]')!
     const duetLane = document.querySelector<HTMLElement>('[data-track-id="offset-duet"]')!
     const totalLeadWords = lead.lines.reduce((total, line) => total + line.words.length, 0)
-    const retainedLeadWords = lead.lines.slice(0, 2).reduce((total, line) => total + line.words.length, 0)
+    const retainedLeadWords = lead.lines
+      .slice(0, 2)
+      .reduce((total, line) => total + line.words.length, 0)
     expect(leadLane.querySelectorAll('.timeline-word')).toHaveLength(totalLeadWords)
     expect(duetLane.querySelectorAll('.timeline-word')).toHaveLength(totalLeadWords)
 
-    const forward = document.querySelector<HTMLButtonElement>('[aria-label="Skip forward five seconds"]')!
+    const forward = document.querySelector<HTMLButtonElement>(
+      '[aria-label="Skip forward five seconds"]',
+    )!
     await act(async () => forward.click())
     await act(async () => forward.click())
-    await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', {
-      bubbles: true,
-      cancelable: true,
-      code: 'ArrowRight',
-      key: 'ArrowRight',
-      shiftKey: true,
-    })))
+    await act(async () =>
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          bubbles: true,
+          cancelable: true,
+          code: 'ArrowRight',
+          key: 'ArrowRight',
+          shiftKey: true,
+        }),
+      ),
+    )
     expect(document.querySelector('.time-readout strong')?.textContent).toBe('0:11.000')
 
     await clickButton('Clear from cursor')
@@ -1061,8 +1161,10 @@ describe('mounted first-time workflow', () => {
     await clickButton('Workflow')
     await clickButton('Choose export')
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!
-    const option = (label: string) => [...dialog.querySelectorAll<HTMLButtonElement>('button')]
-      .find((button) => button.textContent?.includes(label))
+    const option = (label: string) =>
+      [...dialog.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
+        button.textContent?.includes(label),
+      )
     expect(option('Enhanced LRC')?.disabled).toBe(true)
     expect(option('Enhanced LRC')?.textContent).toContain('add lyrics to this track first')
     expect(option('ASS karaoke subtitles')?.disabled).toBe(false)
@@ -1071,17 +1173,21 @@ describe('mounted first-time workflow', () => {
   it('forwards the default and selected video resolution and frame rate', async () => {
     await prepareVideoExportProject()
 
-    expect(document.querySelector<HTMLSelectElement>('[aria-label="Video resolution"]')?.value)
-      .toBe('720p')
-    expect(document.querySelector<HTMLSelectElement>('[aria-label="Video frame rate"]')?.value)
-      .toBe('30')
+    expect(
+      document.querySelector<HTMLSelectElement>('[aria-label="Video resolution"]')?.value,
+    ).toBe('720p')
+    expect(
+      document.querySelector<HTMLSelectElement>('[aria-label="Video frame rate"]')?.value,
+    ).toBe('30')
     await clickButton('Karaoke video')
 
     expect(harness.exportVideo).toHaveBeenCalledOnce()
-    expect(harness.exportVideo).toHaveBeenLastCalledWith(expect.objectContaining({
-      resolution: '720p',
-      fps: 30,
-    }))
+    expect(harness.exportVideo).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        resolution: '720p',
+        fps: 30,
+      }),
+    )
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Export karaoke')
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Karaoke video')
     expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain(
@@ -1092,10 +1198,12 @@ describe('mounted first-time workflow', () => {
     await selectValue('Video frame rate', '60')
     await clickButton('Karaoke video')
     expect(harness.exportVideo).toHaveBeenCalledTimes(2)
-    expect(harness.exportVideo).toHaveBeenLastCalledWith(expect.objectContaining({
-      resolution: '2160p',
-      fps: 60,
-    }))
+    expect(harness.exportVideo).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        resolution: '2160p',
+        fps: 60,
+      }),
+    )
   })
 
   it('rejects linked-image video export before IPC or progress starts', async () => {
@@ -1229,7 +1337,9 @@ describe('mounted first-time workflow', () => {
 
     expect(document.querySelector('[role="dialog"]')).not.toBeNull()
     expect(buttonContaining('Canceling…').disabled).toBe(true)
-    expect(document.querySelector<HTMLButtonElement>('[aria-label="Close dialog"]')?.disabled).toBe(true)
+    expect(document.querySelector<HTMLButtonElement>('[aria-label="Close dialog"]')?.disabled).toBe(
+      true,
+    )
 
     await act(async () => {
       cancellation.resolve(true)
@@ -1277,15 +1387,21 @@ describe('mounted first-time workflow', () => {
   })
 
   it('warns on a rejected desktop open without changing current project state', async () => {
-    vi.stubGlobal('AudioContext', class {
-      async close() {}
-      async decodeAudioData() {
-        return { getChannelData: () => new Float32Array([0]) }
-      }
-    })
-    vi.stubGlobal('fetch', vi.fn(async () => ({
-      arrayBuffer: async () => new ArrayBuffer(0),
-    })))
+    vi.stubGlobal(
+      'AudioContext',
+      class {
+        async close() {}
+        async decodeAudioData() {
+          return { getChannelData: () => new Float32Array([0]) }
+        }
+      },
+    )
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        arrayBuffer: async () => new ArrayBuffer(0),
+      })),
+    )
     harness.importAudio.mockResolvedValueOnce({
       path: '/music/current.mp3',
       name: 'current.mp3',
@@ -1303,9 +1419,7 @@ describe('mounted first-time workflow', () => {
     await act(async () => {
       document.querySelector<HTMLButtonElement>('[aria-label="Undo"]')?.click()
     })
-    expect(document.querySelector('.topbar__document')?.textContent).toContain(
-      'First unsaved edit',
-    )
+    expect(document.querySelector('.topbar__document')?.textContent).toContain('First unsaved edit')
     expect(document.querySelector('[title="Unsaved changes"]')).not.toBeNull()
     expect(document.querySelector<HTMLButtonElement>('[aria-label="Undo"]')?.disabled).toBe(false)
     expect(document.querySelector<HTMLButtonElement>('[aria-label="Redo"]')?.disabled).toBe(false)
@@ -1320,9 +1434,7 @@ describe('mounted first-time workflow', () => {
     )
     expect(window.confirm).not.toHaveBeenCalled()
     expect(harness.studio.releaseAudio).not.toHaveBeenCalled()
-    expect(document.querySelector('.topbar__document')?.textContent).toContain(
-      'First unsaved edit',
-    )
+    expect(document.querySelector('.topbar__document')?.textContent).toContain('First unsaved edit')
     expect(document.querySelector('[title="Unsaved changes"]')).not.toBeNull()
     expect(document.querySelector<HTMLButtonElement>('[aria-label="Undo"]')?.disabled).toBe(false)
     expect(document.querySelector<HTMLButtonElement>('[aria-label="Redo"]')?.disabled).toBe(false)
@@ -1330,9 +1442,11 @@ describe('mounted first-time workflow', () => {
 
     await clickButton('Workflow')
     await clickButton('Save .oks')
-    expect(harness.saveProject).toHaveBeenLastCalledWith(expect.objectContaining({
-      path: '/saved/project.oks',
-    }))
+    expect(harness.saveProject).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        path: '/saved/project.oks',
+      }),
+    )
     expect(parseProject(harness.saveProject.mock.calls.at(-1)?.[0].contents)).toMatchObject({
       title: 'First unsaved edit',
       audioPath: '/music/current.mp3',
@@ -1638,10 +1752,12 @@ describe('mounted first-time workflow', () => {
 
     await clickButton('Workflow')
     await clickButton('Save .oks')
-    expect(harness.saveProject).toHaveBeenLastCalledWith(expect.objectContaining({
-      path: undefined,
-      suggestedName: 'untitled-song.oks',
-    }))
+    expect(harness.saveProject).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        path: undefined,
+        suggestedName: 'untitled-song.oks',
+      }),
+    )
   })
 
   it('allows only the newest concurrent save completion to choose the active project path', async () => {
@@ -1670,9 +1786,11 @@ describe('mounted first-time workflow', () => {
 
     await clickButton('Workflow')
     await clickButton('Save .oks')
-    expect(harness.saveProject).toHaveBeenLastCalledWith(expect.objectContaining({
-      path: '/saved/newest.oks',
-    }))
+    expect(harness.saveProject).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        path: '/saved/newest.oks',
+      }),
+    )
   })
 
   it('ignores stale save completions after Open and retains the opened project path', async () => {
@@ -1698,9 +1816,11 @@ describe('mounted first-time workflow', () => {
 
     await clickButton('Workflow')
     await clickButton('Save .oks')
-    expect(harness.saveProject).toHaveBeenLastCalledWith(expect.objectContaining({
-      path: '/opened/project-b.oks',
-    }))
+    expect(harness.saveProject).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        path: '/opened/project-b.oks',
+      }),
+    )
   })
 
   it('does not surface a stale save rejection after the user starts a new project', async () => {
