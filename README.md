@@ -35,9 +35,12 @@ application. The command never publishes an artifact. CircleCI validates the
 actual PE architecture, installer payload, packaged-file inventory, and bounded
 artifact sizes before retaining both outputs.
 
-FFmpeg and FFprobe are not included in either artifact. MP4 export continues to
-use the separately installed executable described above; packaging does not
-change the external-FFmpeg or licensing policy.
+FFmpeg and FFprobe command-line executables and external encoder libraries are
+not included in either artifact. Electron's standard `ffmpeg.dll` media runtime
+remains part of the Electron distribution and is inventoried separately. MP4
+export continues to use the separately installed executable described above;
+packaging does not add FFmpeg, FFprobe, libx264, or AAC encoder binaries and does
+not change the external-FFmpeg or licensing policy.
 
 ## Start a project
 

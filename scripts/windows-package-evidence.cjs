@@ -17,6 +17,7 @@ const asar = require('@electron/asar')
 const MAX_INSTALLER_BYTES = 300 * 1024 * 1024
 const MAX_UNPACKED_BYTES = 600 * 1024 * 1024
 const PE_X64_MACHINE = 0x8664
+const ELECTRON_MEDIA_RUNTIME = 'ffmpeg.dll'
 const PROHIBITED_ARCHIVE_PATHS = [
   /^\/tests(?:\/|$)/u,
   /^\/(?:release|\.worktrees)(?:\/|$)/u,
@@ -209,6 +210,14 @@ async function validateWindowsPackage(root = process.cwd()) {
       `Packaged output contains external media binaries: ${bundledMediaTools.join(', ')}`,
     )
   }
+  const electronMediaRuntime = files.filter(
+    (file) => path.basename(file).toLowerCase() === ELECTRON_MEDIA_RUNTIME,
+  )
+  if (electronMediaRuntime.join() !== ELECTRON_MEDIA_RUNTIME) {
+    throw new Error(
+      `Unexpected Electron media runtime inventory: ${electronMediaRuntime.join(', ')}`,
+    )
+  }
 
   const payloads = listInstallerPayloads(installer)
   if (payloads.length !== 1 || payloads[0].architecture !== 'x64') {
@@ -239,6 +248,7 @@ async function validateWindowsPackage(root = process.cwd()) {
       archiveFiles: archiveFiles.length,
     },
     externalMediaBinaries: [],
+    electronMediaRuntime,
     signatures,
     published: false,
   }

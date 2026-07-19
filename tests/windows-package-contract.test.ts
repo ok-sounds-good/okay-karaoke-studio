@@ -90,6 +90,9 @@ describe('Windows x64 package contract', () => {
     expect(await repositoryFile('scripts/windows-package-evidence.cjs')).toContain(
       'Get-AuthenticodeSignature',
     )
+    expect(await repositoryFile('scripts/windows-package-evidence.cjs')).toContain(
+      "ELECTRON_MEDIA_RUNTIME = 'ffmpeg.dll'",
+    )
     expect(windows).toContain('path: release/win-unpacked')
     expect(windows).toContain('destination: windows-x64-unpacked')
     expect(windows).toContain('path: release/windows-x64-installer')
