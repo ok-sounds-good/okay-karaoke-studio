@@ -160,10 +160,12 @@ function lyricEvidence({ ffmpegPath, videoPath, width, height, fps, startMs, roo
 }
 
 function lyricPresenceEvidence({ ffmpegPath, videoPath, fps, root }) {
+  const blank = decodeLyricCrop(ffmpegPath, videoPath, (300 * fps) / 1_000, 960, 540, root)
   const before = decodeLyricCrop(ffmpegPath, videoPath, (400 * fps) / 1_000, 960, 540, root)
   const after = decodeLyricCrop(ffmpegPath, videoPath, (900 * fps) / 1_000, 960, 540, root)
   const lyricPixels = countSungPixels(after) - countSungPixels(before)
-  if (lyricPixels < 8) throw new Error(`decoded lyric evidence absent (${lyricPixels})`)
+  if (countSungPixels(before) !== countSungPixels(blank) || lyricPixels < 8)
+    throw new Error(`decoded lyric evidence absent (${lyricPixels})`)
   return { observedFrame: (900 * fps) / 1_000, lyricPixels }
 }
 
@@ -177,6 +179,7 @@ function projectFixture(project, audioPath) {
     offsetMs: 0,
   })
   Object.assign(project.stageStyle.background, { mode: 'gradient', imagePath: null })
+  project.stageStyle.stageFrame.enabled = false
   project.stageStyle.lyrics.sungColor = '#FF00FF'
   Object.assign(project.tracks[0], {
     id: 'smoke-track',
