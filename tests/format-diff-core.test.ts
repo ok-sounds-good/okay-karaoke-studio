@@ -125,6 +125,59 @@ describe('range-formatting algorithm', () => {
     expect(result.formatted).toBe('const legacy={alpha:1}\r\n\r\nconst changed = { beta: 2 }\r\n')
   })
 
+  it('preserves a canonical final newline when changed ranges stop before EOF', async () => {
+    const source = [
+      'import {',
+      '  Fragment,',
+      '  useEffect,',
+      '  useLayoutEffect,',
+      '  useMemo,',
+      '  useRef,',
+      '  useState,',
+      '  type CSSProperties,',
+      '  type KeyboardEvent as ReactKeyboardEvent,',
+      '  type PointerEvent as ReactPointerEvent,',
+      "} from 'react'",
+      'import {',
+      '  AudioWaveform,',
+      '  ChevronLeft,',
+      '  ChevronRight,',
+      '  Minus,',
+      '  Plus,',
+      '  RotateCcw,',
+      '  SkipBack,',
+      '  TimerReset,',
+      '  Zap,',
+      '  ZoomIn,',
+      "} from 'lucide-react'",
+      '',
+      'export const unchanged = true',
+      '',
+    ].join('\n')
+
+    const result = await formatChangedRanges({
+      source,
+      filePath: 'example.tsx',
+      ranges: [{ startLine: 1, lineCount: 23 }],
+      options: { parser: 'typescript', semi: false, singleQuote: true },
+    })
+
+    expect(result.formatted).toBe(source)
+  })
+
+  it('does not add a final newline when a non-EOF range leaves that boundary untouched', async () => {
+    const source = 'const changed={alpha:1}\nconst untouched = true'
+
+    const result = await formatChangedRanges({
+      source,
+      filePath: 'example.ts',
+      ranges: [{ startLine: 1, lineCount: 1 }],
+      options: { parser: 'typescript', semi: false, singleQuote: true },
+    })
+
+    expect(result.formatted).toBe('const changed = { alpha: 1 }\nconst untouched = true')
+  })
+
   it('rejects mixed line endings instead of normalizing untouched lines', async () => {
     await expect(
       formatChangedRanges({

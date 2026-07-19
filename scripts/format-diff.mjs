@@ -242,6 +242,14 @@ function rangesCoverFile(ranges, lineCount) {
   return ranges.length === 1 && ranges[0].startLine === 1 && ranges[0].endLine === lineCount
 }
 
+function preserveUnchangedTerminalLineEnding(source, formatted, ranges, lineCount) {
+  if (ranges.some((range) => range.endLine === lineCount)) return formatted
+
+  const sourceEnding = source.match(/\r\n$|\r$|\n$/)?.[0] ?? ''
+  const formattedWithoutEnding = formatted.replace(/\r\n$|\r$|\n$/, '')
+  return formattedWithoutEnding + sourceEnding
+}
+
 function expansionNeighbors(ranges, lineCount) {
   const neighbors = []
   for (let index = 0; index < ranges.length; index += 1) {
@@ -346,6 +354,8 @@ export async function formatChangedRanges({ source, filePath, ranges, options = 
     }
   }
   formatted ??= await formatProjectedRanges(source, filePath, normalized, effectiveOptions)
+
+  formatted = preserveUnchangedTerminalLineEnding(source, formatted, normalized, lineCount)
 
   return { formatted, ranges: normalized }
 }
