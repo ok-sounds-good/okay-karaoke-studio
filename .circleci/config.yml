@@ -83,6 +83,19 @@ jobs:
           name: Verify style template atomic replacement
           command: bun run test -- tests/style-template-store.test.ts
 
+      - run:
+          name: Install and verify external H.264/AAC tools
+          command: |
+            brew install ffmpeg
+            ffprobe -version
+            ffmpeg -hide_banner -encoders > /tmp/oks-ffmpeg-encoders.txt 2>&1
+            grep -E '^[[:space:]]*V[^[:space:]]*[[:space:]]+libx264[[:space:]]' /tmp/oks-ffmpeg-encoders.txt
+            grep -E '^[[:space:]]*A[^[:space:]]*[[:space:]]+aac[[:space:]]' /tmp/oks-ffmpeg-encoders.txt
+
+      - run:
+          name: Smoke production-path H.264/AAC export matrix
+          command: bun run test:video
+
   Windows:
     machine:
       image: windows-server-2022-gui:current
@@ -127,6 +140,24 @@ jobs:
           name: Verify style template atomic replacement
           command: |
             bun run test -- tests/style-template-store.test.ts
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - run:
+          name: Install and verify external H.264/AAC tools
+          command: |
+            choco install ffmpeg --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            ffprobe -version
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $encoders = (ffmpeg -hide_banner -encoders 2>&1 | Out-String)
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            if ($encoders -notmatch '(?m)^\s*V\S*\s+libx264\s') { throw "libx264 unavailable" }
+            if ($encoders -notmatch '(?m)^\s*A\S*\s+aac\s') { throw "AAC unavailable" }
+
+      - run:
+          name: Smoke production-path H.264/AAC export matrix
+          command: |
+            bun run test:video
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 workflows:

@@ -221,7 +221,9 @@ A pull-request workflow has three named phases:
    older head never carries forward.
 3. **Native-candidate phase (`macOS` and `Windows`).** After both prerequisites
    are satisfied, run the native-image decode, live Electron lifecycle, and
-   focused style-template atomic-replacement checks on both native executors.
+   focused style-template atomic-replacement checks, then verify external
+   FFmpeg/FFprobe `libx264` and AAC capability and run the sequential
+   production-path 14-case H.264/AAC export matrix on both executors.
 
 The approval is a declarative CircleCI workflow job. Do not replace its event
 filter with shell inspection, dump environment variables or event payloads, or
@@ -249,8 +251,9 @@ exception.
 Routine hosted CI is a compatibility backstop, not the primary proof for a
 change. The Linux job runs changed-range `bun run format:check`, the portable
 unit suite, and the renderer build once. The macOS and Windows jobs run only the
-native-image decode smoke, live Electron lifecycle smoke, and focused
-style-template atomic-replacement check on their respective platforms.
+native-image decode smoke, live Electron lifecycle smoke, focused style-template
+atomic-replacement check, and production-path video export matrix with externally
+installed FFmpeg on their respective platforms.
 Broader full-environment macOS and Windows suites belong to a future
 official-v1 deployment or release step, not routine pull-request CI, and do not
 replace the targeted final Windows MVP acceptance run. Configure

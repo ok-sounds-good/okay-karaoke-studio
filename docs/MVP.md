@@ -456,9 +456,12 @@ Karaoke Studio identity.
       (`GPL-3.0-or-later`).
 - [ ] The user decides whether FFmpeg remains externally installed or is
       redistributed with a documented compatible build and compliance plan.
-- [ ] A linked-audio project renders synchronized H.264/AAC MP4 lyric frames at
-      every supported resolution and at 30 or 60 fps; a new export defaults to
-      720p/30.
+- [x] A synthetic linked-audio project renders synchronized H.264/AAC MP4 lyric
+      frames through the production export path at every supported resolution
+      and both 30 and 60 fps; exact `r_frame_rate` plus decoded frame count over
+      the bounded one-second fixture proves the rational rate, and decoded frame
+      evidence proves lyric transitions, while a new export defaults to 720p/30.
+      This does not close the user-held real-song or distribution gates.
 - [x] Cancelling an active MP4 export from its dialog, application close, or quit
       requires confirmation and preserves a UUID-named partial file beside the
       chosen destination, while an ordinary export failure leaves the destination

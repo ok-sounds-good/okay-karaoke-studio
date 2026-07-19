@@ -26,7 +26,7 @@
     "test:image": "electron scripts/image-decoder-smoke.cjs",
     "test:visual": "node scripts/video-style-visual-smoke.cjs",
     "test:watch": "vitest",
-    "test:video": "electron scripts/video-export-smoke.cjs",
+    "test:video": "node scripts/video-export-smoke-launcher.cjs",
     "dist": "bun run build && electron-builder",
     "dist:dir": "bun run build && electron-builder --dir"
   },

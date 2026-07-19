@@ -1,11 +1,27 @@
 'use strict'
 
+const { createHash } = require('node:crypto')
 const { spawnSync } = require('node:child_process')
 const fs = require('node:fs/promises')
-const os = require('node:os')
 const path = require('node:path')
 const { app, BrowserWindow } = require('electron')
+const presets = require('../electron/video-export-presets.json')
 const { exportKaraokeVideo, findFfmpeg } = require('../electron/video-export.cjs')
+const { countSungPixels } = require('./video-export-smoke-evidence.cjs')
+
+const ROOT_ENVIRONMENT_KEY = 'OKS_VIDEO_SMOKE_ROOT'
+const FIXTURE_DURATION_MS = 1_000
+const AUDIO_DURATION_SECONDS = 0.5
+const CASE_TIMEOUT_MS = 2 * 60 * 1_000
+const PROCESS_TIMEOUT_MS = 30_000
+const MAX_DIAGNOSTIC_CHARACTERS = 400
+const MATRIX = Object.freeze(
+  presets.resolutions
+    .flatMap((preset) =>
+      presets.frameRates.map((fps, index) => Object.freeze({ ...preset, fps, ordinal: index + 1 })),
+    )
+    .map((entry, index) => Object.freeze({ ...entry, ordinal: index + 1 })),
+)
 
 function silentWav(durationSeconds, sampleRate = 48_000) {
   const channels = 2
@@ -38,14 +54,50 @@ function probeExecutable(ffmpegPath) {
   return process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe'
 }
 
-function rationalValue(value) {
-  const [numerator, denominator = '1'] = String(value).split('/')
-  return Number(numerator) / Number(denominator)
+function sanitizedDiagnostic(value, root) {
+  const diagnostic = String(value || 'unknown failure')
+  return (root ? diagnostic.split(root).join('<smoke-root>') : diagnostic)
+    .replace(/[\r\n\t]+/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .slice(0, MAX_DIAGNOSTIC_CHARACTERS)
 }
 
-function decodeRgbFrame(ffmpegPath, videoPath, frameIndex, width, height) {
-  const frameBytes = width * height * 3
-  const decoded = spawnSync(
+function checkedSpawn(executable, args, options, label, root) {
+  const result = spawnSync(executable, args, {
+    ...options,
+    timeout: PROCESS_TIMEOUT_MS,
+    windowsHide: true,
+  })
+  if (result.error || result.status !== 0) {
+    throw new Error(
+      `${label}: ${sanitizedDiagnostic(result.error?.message || result.stderr, root)}`,
+    )
+  }
+  return result
+}
+
+function rationalValue(value) {
+  const [numerator, denominator = '1'] = String(value).split('/')
+  const result = Number(numerator) / Number(denominator)
+  return Number.isFinite(result) ? result : Number.NaN
+}
+
+function cropFor(width, height) {
+  const cropWidth = Math.min(1_024, Math.floor((width * 0.68) / 2) * 2)
+  const cropHeight = Math.min(320, Math.floor((height * 0.28) / 2) * 2)
+  return {
+    height: cropHeight,
+    width: cropWidth,
+    x: Math.floor((width - cropWidth) / 2),
+    y: Math.floor(height * 0.36),
+  }
+}
+
+function decodeLyricCrop(ffmpegPath, videoPath, frameIndex, width, height, root) {
+  const fullFrame = width === 960 && height === 540
+  const crop = fullFrame ? { width: 960, height: 540 } : cropFor(width, height)
+  const frameBytes = crop.width * crop.height * 3
+  const decoded = checkedSpawn(
     ffmpegPath,
     [
       '-v',
@@ -54,7 +106,9 @@ function decodeRgbFrame(ffmpegPath, videoPath, frameIndex, width, height) {
       videoPath,
       '-an',
       '-vf',
-      `select=eq(n\\,${frameIndex})`,
+      fullFrame
+        ? `select=eq(n\\,${frameIndex}),scale=${crop.width}:${crop.height}`
+        : `select=eq(n\\,${frameIndex}),crop=${crop.width}:${crop.height}:${crop.x}:${crop.y}`,
       '-frames:v',
       '1',
       '-pix_fmt',
@@ -63,339 +117,306 @@ function decodeRgbFrame(ffmpegPath, videoPath, frameIndex, width, height) {
       'rawvideo',
       'pipe:1',
     ],
-    { maxBuffer: frameBytes * 2 },
+    { maxBuffer: frameBytes + 1_024 },
+    `decode frame ${frameIndex}`,
+    root,
   )
-  if (decoded.status !== 0) {
-    throw new Error(decoded.stderr?.toString() || `Could not decode video frame ${frameIndex}`)
-  }
   if (!Buffer.isBuffer(decoded.stdout) || decoded.stdout.length !== frameBytes) {
-    throw new Error(
-      `Expected ${frameBytes} RGB bytes for frame ${frameIndex}, received ${decoded.stdout?.length ?? 0}`,
-    )
+    throw new Error(`decode frame ${frameIndex}: expected ${frameBytes} bytes`)
   }
   return decoded.stdout
 }
 
-function lyricFrameDifference(before, after, width, height) {
-  // The lyric text is centered in this crop. Excluding the header keeps the
-  // clock and brand from masking a missing word transition.
-  const left = Math.floor(width * 0.16)
-  const right = Math.ceil(width * 0.84)
-  const top = Math.floor(height * 0.36)
-  const bottom = Math.ceil(height * 0.64)
+function lyricDifference(before, after) {
   let changedPixels = 0
   let totalDifference = 0
-  for (let y = top; y < bottom; y += 1) {
-    for (let x = left; x < right; x += 1) {
-      const pixel = (y * width + x) * 3
-      const redDifference = Math.abs(after[pixel] - before[pixel])
-      const greenDifference = Math.abs(after[pixel + 1] - before[pixel + 1])
-      const blueDifference = Math.abs(after[pixel + 2] - before[pixel + 2])
-      const strongestDifference = Math.max(redDifference, greenDifference, blueDifference)
-      if (strongestDifference >= 12) changedPixels += 1
-      totalDifference += redDifference + greenDifference + blueDifference
-    }
+  for (let pixel = 0; pixel < before.length; pixel += 3) {
+    const red = Math.abs(after[pixel] - before[pixel])
+    const green = Math.abs(after[pixel + 1] - before[pixel + 1])
+    const blue = Math.abs(after[pixel + 2] - before[pixel + 2])
+    if (Math.max(red, green, blue) >= 12) changedPixels += 1
+    totalDifference += red + green + blue
   }
   return { changedPixels, totalDifference }
 }
 
-function assertHighlightStartsOnPlannedFrame({
-  ffmpegPath,
-  videoPath,
-  width,
-  height,
-  fps,
-  startMs,
-  label,
-}) {
+function lyricEvidence({ ffmpegPath, videoPath, fps, startMs, root }) {
   const boundaryFrame = (startMs * fps) / 1_000
-  if (!Number.isInteger(boundaryFrame)) {
-    throw new Error(`${label} must start on an exact ${fps} fps frame boundary`)
-  }
-  const boundaryRgb = decodeRgbFrame(ffmpegPath, videoPath, boundaryFrame, width, height)
-  const firstProgressRgb = decodeRgbFrame(ffmpegPath, videoPath, boundaryFrame + 1, width, height)
-  const difference = lyricFrameDifference(boundaryRgb, firstProgressRgb, width, height)
-  const minimumChangedPixels = Math.max(8, Math.round((width * height) / 10_000))
+  if (!Number.isInteger(boundaryFrame)) throw new Error('transition is not frame-aligned')
+  const before = decodeLyricCrop(ffmpegPath, videoPath, boundaryFrame, 960, 540, root)
+  const after = decodeLyricCrop(ffmpegPath, videoPath, boundaryFrame + 1, 960, 540, root)
+  const minimumChangedPixels = Math.max(8, Math.round(before.length / 30_000))
+  const difference = lyricDifference(before, after)
   if (difference.changedPixels < minimumChangedPixels) {
-    let firstObservedChange
-    for (let frameOffset = 2; frameOffset <= 4; frameOffset += 1) {
-      const laterRgb = decodeRgbFrame(
-        ffmpegPath,
-        videoPath,
-        boundaryFrame + frameOffset,
-        width,
-        height,
-      )
-      const laterDifference = lyricFrameDifference(boundaryRgb, laterRgb, width, height)
-      if (laterDifference.changedPixels >= minimumChangedPixels) {
-        firstObservedChange = {
-          frame: boundaryFrame + frameOffset,
-          ...laterDifference,
-        }
-        break
-      }
-    }
+    const next = lyricDifference(
+      before,
+      decodeLyricCrop(ffmpegPath, videoPath, boundaryFrame + 2, 960, 540, root),
+    )
     throw new Error(
-      `${label} highlight did not appear on frame ${boundaryFrame + 1} at ${fps} fps: ` +
-        `changed-pixels=${difference.changedPixels}, total-difference=${difference.totalDifference}, ` +
-        `minimum-changed-pixels=${minimumChangedPixels}, ` +
-        `first-observed-change=${JSON.stringify(firstObservedChange ?? null)}`,
+      `transition absent (${difference.changedPixels}/${minimumChangedPixels}; next=${next.changedPixels})`,
     )
   }
-  return {
-    boundaryFrame,
-    firstProgressFrame: boundaryFrame + 1,
-    ...difference,
+  return { boundaryFrame, observedFrame: boundaryFrame + 1, ...difference }
+}
+
+function lyricPresenceEvidence({ ffmpegPath, videoPath, fps, root }) {
+  const blank = decodeLyricCrop(ffmpegPath, videoPath, (300 * fps) / 1_000, 960, 540, root)
+  const before = decodeLyricCrop(ffmpegPath, videoPath, (400 * fps) / 1_000, 960, 540, root)
+  const after = decodeLyricCrop(ffmpegPath, videoPath, (900 * fps) / 1_000, 960, 540, root)
+  const lyricPixels = countSungPixels(after) - countSungPixels(before)
+  if (countSungPixels(before) !== countSungPixels(blank) || lyricPixels < 8)
+    throw new Error(`decoded lyric evidence absent (${lyricPixels})`)
+  return { observedFrame: (900 * fps) / 1_000, lyricPixels }
+}
+
+function projectFixture(project, audioPath) {
+  Object.assign(project, {
+    id: 'video-export-smoke',
+    title: 'Video export smoke test',
+    artist: 'Okay Karaoke Studio',
+    audioPath,
+    durationMs: FIXTURE_DURATION_MS,
+    offsetMs: 0,
+  })
+  Object.assign(project.stageStyle.background, { mode: 'gradient', imagePath: null })
+  project.stageStyle.stageFrame.enabled = false
+  Object.assign(project.stageStyle.lyrics, { sizePx: 180, sungColor: '#FF00FF' })
+  Object.assign(project.tracks[0], {
+    id: 'smoke-track',
+    lines: [
+      {
+        id: 'smoke-line',
+        text: 'Smoke test',
+        startMs: 500,
+        endMs: 1_000,
+        words: [
+          { id: 'smoke-word-1', text: 'Smoke', startMs: 500, endMs: 533 },
+          { id: 'smoke-word-2', text: 'test', startMs: 700, endMs: 733 },
+        ],
+      },
+    ],
+  })
+  return project
+}
+
+function failCase(entry, phase, error) {
+  const failure = new Error(error?.message || String(error))
+  failure.case = {
+    ordinal: entry?.ordinal ?? 0,
+    preset: entry?.value ?? 'setup',
+    fps: entry?.fps ?? 0,
+    phase,
   }
+  return failure
+}
+
+async function probeCase(entry, ffmpegPath, outputPath, root) {
+  const probe = checkedSpawn(
+    probeExecutable(ffmpegPath),
+    [
+      '-v',
+      'error',
+      '-show_entries',
+      'format=duration,start_time:stream=codec_type,codec_name,width,height,r_frame_rate,avg_frame_rate,start_time,nb_read_frames',
+      '-count_frames',
+      '-of',
+      'json',
+      outputPath,
+    ],
+    { encoding: 'utf8', maxBuffer: 256 * 1_024 },
+    'ffprobe',
+    root,
+  )
+  const report = JSON.parse(probe.stdout)
+  const streams = Array.isArray(report.streams) ? report.streams : []
+  const videos = streams.filter((stream) => stream.codec_type === 'video')
+  const audios = streams.filter((stream) => stream.codec_type === 'audio')
+  const video = videos[0]
+  const audio = audios[0]
+  const durationSeconds = Number(report.format?.duration)
+  const videoStartSeconds = Number(video?.start_time)
+  const audioStartSeconds = Number(audio?.start_time)
+  const renderedRate = rationalValue(video?.r_frame_rate)
+  const observedFrameCount = Number(video?.nb_read_frames)
+  if (
+    streams.length !== 2 ||
+    videos.length !== 1 ||
+    audios.length !== 1 ||
+    video.codec_name !== 'h264' ||
+    audio.codec_name !== 'aac' ||
+    video.width !== entry.width ||
+    video.height !== entry.height ||
+    !Number.isFinite(renderedRate) ||
+    Math.abs(renderedRate - entry.fps) > 0.001 ||
+    observedFrameCount !== (FIXTURE_DURATION_MS * entry.fps) / 1_000 ||
+    !Number.isFinite(videoStartSeconds) ||
+    !Number.isFinite(audioStartSeconds) ||
+    Math.abs(videoStartSeconds) > 0.001 ||
+    Math.abs(audioStartSeconds) > 0.001 ||
+    Math.abs(videoStartSeconds - audioStartSeconds) > 0.001 ||
+    !Number.isFinite(durationSeconds) ||
+    Math.abs(durationSeconds - FIXTURE_DURATION_MS / 1_000) > 0.05
+  ) {
+    throw new Error(`stream mismatch ${JSON.stringify(report)}`)
+  }
+  return {
+    observedDimensions: { width: video.width, height: video.height },
+    rationalRate: {
+      average: video.avg_frame_rate,
+      frames: observedFrameCount,
+      rendered: video.r_frame_rate,
+    },
+    codecs: { audio: audio.codec_name, video: video.codec_name },
+    streamStarts: { audioSeconds: audioStartSeconds, videoSeconds: videoStartSeconds },
+    durationSeconds,
+  }
+}
+
+async function exportCase(entry, context) {
+  const outputPath = path.join(context.root, `${entry.ordinal}-${entry.value}-${entry.fps}.mp4`)
+  let exported
+  const controller = new AbortController()
+  let timedOut = false
+  const timeout = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, CASE_TIMEOUT_MS)
+  try {
+    exported = await exportKaraokeVideo({
+      BrowserWindow,
+      projectJson: context.projectJson,
+      durationMs: FIXTURE_DURATION_MS,
+      audioPath: context.audioPath,
+      outputPath,
+      ffmpegPath: context.ffmpegPath,
+      resolution: entry.value,
+      fps: entry.fps,
+      signal: controller.signal,
+    })
+  } catch (error) {
+    throw failCase(entry, timedOut ? 'export-timeout' : 'export', error)
+  } finally {
+    clearTimeout(timeout)
+  }
+  let probe
+  try {
+    probe = await probeCase(entry, context.ffmpegPath, outputPath, context.root)
+  } catch (error) {
+    throw failCase(entry, 'probe', error)
+  }
+  let decodedLyricEvidence
+  try {
+    const parameters = {
+      ...entry,
+      ffmpegPath: context.ffmpegPath,
+      videoPath: outputPath,
+      root: context.root,
+    }
+    decodedLyricEvidence =
+      entry.ordinal <= 2
+        ? [500, 700].map((startMs) => lyricEvidence({ ...parameters, startMs }))
+        : [lyricPresenceEvidence(parameters)]
+  } catch (error) {
+    throw failCase(entry, 'decode', error)
+  }
+  const file = await fs.readFile(outputPath)
+  if (exported.frameCount !== (FIXTURE_DURATION_MS * entry.fps) / 1_000 || file.length < 1) {
+    throw failCase(entry, 'validate', new Error('export result or output size is invalid'))
+  }
+  return {
+    ordinal: entry.ordinal,
+    preset: entry.value,
+    fps: entry.fps,
+    ...probe,
+    decodedLyricEvidence,
+    bytes: file.length,
+    sha256: createHash('sha256').update(file).digest('hex'),
+  }
+}
+
+async function verifyCancellation(context) {
+  const outputPath = path.join(context.root, 'canceled.mp4')
+  const controller = new AbortController()
+  let observed = false
+  let scheduled = false
+  try {
+    await exportKaraokeVideo({
+      BrowserWindow,
+      projectJson: context.projectJson,
+      durationMs: FIXTURE_DURATION_MS,
+      audioPath: context.audioPath,
+      outputPath,
+      ffmpegPath: context.ffmpegPath,
+      resolution: '240p',
+      fps: 30,
+      signal: controller.signal,
+      onProgress: (progress) => {
+        if (progress.phase === 'frames' && progress.completed >= 8 && !scheduled) {
+          scheduled = true
+          setImmediate(() => controller.abort())
+        }
+      },
+    })
+  } catch (error) {
+    if (error?.name !== 'AbortError') throw failCase(null, 'cancellation', error)
+    observed = true
+  }
+  const entries = await fs.readdir(context.root)
+  const partials = entries.filter((name) => /^canceled\.partial-[0-9a-f-]{36}\.mp4$/iu.test(name))
+  const destinationExists = await fs.stat(outputPath).then(
+    () => true,
+    () => false,
+  )
+  if (!observed || destinationExists || partials.length !== 1) {
+    throw failCase(null, 'cancellation', new Error('partial-output contract failed'))
+  }
+  return { cancellationPartialPreserved: true }
+}
+
+async function writeJson(root, name, value) {
+  const temporary = path.join(root, `${name}.partial`)
+  await fs.writeFile(temporary, `${JSON.stringify(value)}\n`, { flag: 'wx' })
+  await fs.rename(temporary, path.join(root, name))
 }
 
 app.on('window-all-closed', () => {})
 
-app
-  .whenReady()
-  .then(async () => {
-    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'okay-karaoke-video-smoke-'))
-    const audioPath = path.join(directory, 'silence.wav')
-    const outputPath = path.join(directory, 'smoke.mp4')
-
-    try {
-      // One second of audio exercises FFmpeg's silence padding against a
-      // two-second lyric/video timeline.
-      await fs.writeFile(audioPath, silentWav(1))
-      const ffmpegPath = await findFfmpeg()
-      const project = JSON.parse(
-        await fs.readFile(
-          path.join(__dirname, '..', 'tests', 'fixtures', 'current-project-v0.json'),
-          'utf8',
-        ),
-      )
-      Object.assign(project, {
-        id: 'video-export-smoke',
-        title: 'Video export smoke test',
-        artist: 'Okay Karaoke Studio',
-        audioPath,
-        durationMs: 2_000,
-        offsetMs: 0,
-      })
-      Object.assign(project.stageStyle.background, {
-        mode: 'gradient',
-        imagePath: null,
-      })
-      Object.assign(project.tracks[0], {
-        id: 'smoke-track',
-        lines: [
-          {
-            id: 'smoke-line',
-            text: 'Smoke test',
-            startMs: 500,
-            endMs: 1_500,
-            words: [
-              // These exact 30/60 fps boundaries make the first post-boundary
-              // frame visibly different, so a stale or one-frame-late capture
-              // fails the decoded-output assertions below.
-              { id: 'smoke-word-1', text: 'Smoke', startMs: 500, endMs: 700 },
-              { id: 'smoke-word-2', text: 'test', startMs: 700, endMs: 900 },
-            ],
-          },
-        ],
-      })
-      const result = await exportKaraokeVideo({
-        BrowserWindow,
-        projectJson: JSON.stringify(project),
-        durationMs: 2_000,
-        audioPath,
-        outputPath,
-        ffmpegPath,
-        resolution: '240p',
-        fps: 30,
-      })
-      const probe = spawnSync(
-        probeExecutable(ffmpegPath),
-        [
-          '-v',
-          'error',
-          '-show_entries',
-          'format=duration,start_time:stream=codec_name,width,height,r_frame_rate,avg_frame_rate,duration,start_time',
-          '-of',
-          'json',
-          outputPath,
-        ],
-        { encoding: 'utf8' },
-      )
-      if (probe.status !== 0) throw new Error(probe.stderr || 'FFprobe failed')
-      const report = JSON.parse(probe.stdout)
-      const video = report.streams.find((stream) => stream.codec_name === 'h264')
-      const audio = report.streams.find((stream) => stream.codec_name === 'aac')
-      const duration = Number(report.format.duration)
-      const videoStartSeconds = Number(video?.start_time)
-      const audioStartSeconds = Number(audio?.start_time)
-      if (
-        !video ||
-        video.width !== 426 ||
-        video.height !== 240 ||
-        Math.abs(rationalValue(video.r_frame_rate) - 30) > 0.001 ||
-        !audio
-      ) {
-        throw new Error(`Unexpected video streams: ${probe.stdout}`)
-      }
-      if (Math.abs(videoStartSeconds - audioStartSeconds) > 0.001) {
-        throw new Error(
-          `Expected synchronized audio/video starts, received video=${videoStartSeconds}, audio=${audioStartSeconds}`,
-        )
-      }
-      if (Math.abs(duration - 2) > 0.05) {
-        throw new Error(`Expected a 2-second video, received ${duration} seconds`)
-      }
-      const highlightTransitions30 = [
-        assertHighlightStartsOnPlannedFrame({
-          ffmpegPath,
-          videoPath: outputPath,
-          width: 426,
-          height: 240,
-          fps: 30,
-          startMs: 500,
-          label: 'First word',
-        }),
-        assertHighlightStartsOnPlannedFrame({
-          ffmpegPath,
-          videoPath: outputPath,
-          width: 426,
-          height: 240,
-          fps: 30,
-          startMs: 700,
-          label: 'Second word',
-        }),
-      ]
-
-      const output60Path = path.join(directory, 'smoke-60fps.mp4')
-      const result60 = await exportKaraokeVideo({
-        BrowserWindow,
-        projectJson: JSON.stringify(project),
-        durationMs: 2_000,
-        audioPath,
-        outputPath: output60Path,
-        ffmpegPath,
-        resolution: '360p',
-        fps: 60,
-      })
-      const probe60 = spawnSync(
-        probeExecutable(ffmpegPath),
-        [
-          '-v',
-          'error',
-          '-show_entries',
-          'format=duration,start_time:stream=codec_name,width,height,r_frame_rate,start_time',
-          '-of',
-          'json',
-          output60Path,
-        ],
-        { encoding: 'utf8' },
-      )
-      if (probe60.status !== 0) throw new Error(probe60.stderr || '60 fps FFprobe failed')
-      const report60 = JSON.parse(probe60.stdout)
-      const video60 = report60.streams.find((stream) => stream.codec_name === 'h264')
-      const audio60 = report60.streams.find((stream) => stream.codec_name === 'aac')
-      if (
-        !video60 ||
-        video60.width !== 640 ||
-        video60.height !== 360 ||
-        Math.abs(rationalValue(video60.r_frame_rate) - 60) > 0.001 ||
-        !audio60 ||
-        Math.abs(Number(video60.start_time) - Number(audio60.start_time)) > 0.001 ||
-        Math.abs(Number(report60.format.duration) - 2) > 0.05
-      ) {
-        throw new Error(`Unexpected 60 fps video streams: ${probe60.stdout}`)
-      }
-      const highlightTransitions60 = [
-        assertHighlightStartsOnPlannedFrame({
-          ffmpegPath,
-          videoPath: output60Path,
-          width: 640,
-          height: 360,
-          fps: 60,
-          startMs: 500,
-          label: 'First word',
-        }),
-        assertHighlightStartsOnPlannedFrame({
-          ffmpegPath,
-          videoPath: output60Path,
-          width: 640,
-          height: 360,
-          fps: 60,
-          startMs: 700,
-          label: 'Second word',
-        }),
-      ]
-
-      const canceledPath = path.join(directory, 'canceled.mp4')
-      const controller = new AbortController()
-      let cancellationObserved = false
-      let cancellationScheduled = false
-      try {
-        await exportKaraokeVideo({
-          BrowserWindow,
-          projectJson: JSON.stringify(project),
-          durationMs: 2_000,
-          audioPath,
-          outputPath: canceledPath,
-          ffmpegPath,
-          resolution: '240p',
-          fps: 30,
-          signal: controller.signal,
-          onProgress: (progress) => {
-            if (progress.phase === 'frames' && progress.completed >= 15 && !cancellationScheduled) {
-              cancellationScheduled = true
-              setImmediate(() => controller.abort())
-            }
-          },
-        })
-      } catch (error) {
-        if (error?.name !== 'AbortError') throw error
-        cancellationObserved = true
-      }
-      const canceledDestinationExists = await fs.stat(canceledPath).then(
-        () => true,
-        () => false,
-      )
-      const partialPattern =
-        /^canceled\.partial-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.mp4$/iu
-      const directoryEntries = await fs.readdir(directory)
-      const partialCancellationFiles = directoryEntries.filter((fileName) =>
-        partialPattern.test(fileName),
-      )
-      if (
-        !cancellationObserved ||
-        canceledDestinationExists ||
-        partialCancellationFiles.length !== 1
-      ) {
-        throw new Error(
-          `Canceled video export did not preserve exactly one partial output: ${JSON.stringify(directoryEntries)}`,
-        )
-      }
-
-      console.log(
-        JSON.stringify({
-          ...result,
-          sixtyFpsFrameCount: result60.frameCount,
-          codecs: ['h264', 'aac'],
-          resolution: '426x240',
-          fps: 30,
-          verified60FpsResolution: '640x360',
-          probedDurationSeconds: duration,
-          videoStartSeconds,
-          audioStartSeconds,
-          paddedAudio: true,
-          highlightTransitions30,
-          highlightTransitions60,
-          cancellationPartialPreserved: true,
-        }),
-      )
-    } finally {
-      await fs.rm(directory, { recursive: true, force: true })
-      app.quit()
+app.whenReady().then(async () => {
+  const root = process.env[ROOT_ENVIRONMENT_KEY]
+  try {
+    if (!root || !path.isAbsolute(root)) throw failCase(null, 'setup', new Error('invalid root'))
+    const audioPath = path.join(root, 'silence.wav')
+    await fs.writeFile(audioPath, silentWav(AUDIO_DURATION_SECONDS), { flag: 'wx' })
+    const ffmpegPath = await findFfmpeg()
+    const fixture = JSON.parse(
+      await fs.readFile(path.join(__dirname, '..', 'tests', 'fixtures', 'current-project-v0.json')),
+    )
+    const context = {
+      root,
+      audioPath,
+      ffmpegPath,
+      projectJson: JSON.stringify(projectFixture(fixture, audioPath)),
     }
-  })
-  .catch((error) => {
-    console.error(error)
-    app.exit(1)
-  })
+    const cases = []
+    for (const entry of MATRIX) cases.push(await exportCase(entry, context))
+    const cancellation = await verifyCancellation(context)
+    await writeJson(root, 'result.json', {
+      ok: true,
+      fixture: { audioSeconds: AUDIO_DURATION_SECONDS, videoSeconds: FIXTURE_DURATION_MS / 1_000 },
+      cases,
+      ...cancellation,
+    })
+  } catch (error) {
+    try {
+      await writeJson(root, 'failure.json', {
+        ok: false,
+        code: 'VIDEO_SMOKE_CHILD_FAILED',
+        case: error?.case || { ordinal: 0, preset: 'setup', fps: 0, phase: 'setup' },
+        diagnostic: sanitizedDiagnostic(error?.message, root || ''),
+      })
+    } catch {}
+    process.exitCode = 1
+  } finally {
+    app.exit(process.exitCode || 0)
+  }
+})

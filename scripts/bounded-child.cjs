@@ -12,6 +12,13 @@ const PUBLIC_CODES = new Set([
   'FONT_SMOKE_TERMINATION_UNCONFIRMED',
   'FONT_SMOKE_TIMEOUT',
   'SMOKE_LAUNCHER_FAILED',
+  'VIDEO_SMOKE_CHILD_FAILED',
+  'VIDEO_SMOKE_CHILD_SIGNAL',
+  'VIDEO_SMOKE_CLEANUP_FAILED',
+  'VIDEO_SMOKE_LAUNCHER_FAILED',
+  'VIDEO_SMOKE_START_FAILED',
+  'VIDEO_SMOKE_TERMINATION_UNCONFIRMED',
+  'VIDEO_SMOKE_TIMEOUT',
   'VISUAL_SMOKE_CHILD_FAILED',
   'VISUAL_SMOKE_CHILD_SIGNAL',
   'VISUAL_SMOKE_LAUNCHER_FAILED',
@@ -349,7 +356,7 @@ function runBoundedChild(options) {
 }
 
 function publicChildOutcomeCode(prefix, outcome) {
-  if (prefix !== 'FONT_SMOKE' && prefix !== 'VISUAL_SMOKE') {
+  if (prefix !== 'FONT_SMOKE' && prefix !== 'VIDEO_SMOKE' && prefix !== 'VISUAL_SMOKE') {
     return 'SMOKE_LAUNCHER_FAILED'
   }
   if (outcome.startFailed) return `${prefix}_START_FAILED`

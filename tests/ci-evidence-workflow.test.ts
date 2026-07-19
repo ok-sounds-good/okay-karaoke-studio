@@ -316,7 +316,7 @@ describe('hosted CI contract', () => {
     expect(sdlc).toContain("use only CircleCI's **Rerun workflow\nfrom failed** action")
   })
 
-  it('limits native jobs to the required native image, lifecycle, and atomic-write evidence', async () => {
+  it('keeps required native checks and adds the external-codec export matrix', async () => {
     const workflow = await repositoryFile(ACTIVE_WORKFLOW)
     for (const platform of ['macOS', 'Windows'] as const) {
       const job = jobBlock(workflow, platform)
@@ -330,6 +330,11 @@ describe('hosted CI contract', () => {
       expect(job).toContain(`bun run test -- ${LIVE_ELECTRON_TEST}`)
       expect(job).toContain('name: Verify style template atomic replacement')
       expect(job).toContain('bun run test -- tests/style-template-store.test.ts')
+      expect(job).toContain('name: Install and verify external H.264/AAC tools')
+      expect(job).toContain('ffprobe -version')
+      expect(job).toContain('libx264')
+      expect(job).toContain('name: Smoke production-path H.264/AAC export matrix')
+      expect(job).toContain('bun run test:video')
       expect(job).not.toContain('FORMAT_DEFAULT_BRANCH')
       expect(job).not.toContain('bun run format:check')
       expect(job).not.toContain('bun run build')
@@ -340,11 +345,14 @@ describe('hosted CI contract', () => {
 
     const packageJson = JSON.parse(await repositoryFile('package.json'))
     expect(packageJson.scripts['test:visual']).toBe('node scripts/video-style-visual-smoke.cjs')
+    expect(packageJson.scripts['test:video']).toBe('node scripts/video-export-smoke-launcher.cjs')
     expect(packageJson.scripts['dist:dir']).toBe('bun run build && electron-builder --dir')
     expect(workflow).not.toContain('OKS_VISUAL_EVIDENCE_DIR')
     expect(workflow).not.toContain('.ci-artifacts')
     expect(workflow).not.toContain('store_artifacts')
     expect(workflow).not.toContain('bun run test:visual')
+    expect(jobBlock(workflow, 'macOS')).toContain('brew install ffmpeg')
+    expect(jobBlock(workflow, 'Windows')).toContain('choco install ffmpeg --yes --no-progress')
     expect(workflow).not.toContain('electron-builder')
   })
 })

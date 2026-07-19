@@ -361,7 +361,7 @@ describe('bounded child lifecycle', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
-  it.each(['FONT_SMOKE', 'VISUAL_SMOKE'])(
+  it.each(['FONT_SMOKE', 'VIDEO_SMOKE', 'VISUAL_SMOKE'])(
     'maps secret-bearing %s start failures to fixed public output',
     async (prefix) => {
       const parent = new EventEmitter()
