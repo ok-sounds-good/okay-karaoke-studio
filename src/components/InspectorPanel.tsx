@@ -11,7 +11,10 @@ interface InspectorPanelProps {
   activeTrackId: string
   onSelectTrack: (trackId: string) => void
   onUpdateProject: (patch: Partial<Pick<KaraokeProject, 'title' | 'artist' | 'offsetMs'>>) => void
-  onUpdateTrack: (trackId: string, patch: Partial<Pick<VocalTrack, 'name' | 'vocalStyle' | 'muted' | 'solo'>>) => void
+  onUpdateTrack: (
+    trackId: string,
+    patch: Partial<Pick<VocalTrack, 'name' | 'vocalStyle' | 'muted' | 'solo'>>,
+  ) => void
   onImportAudio: () => void
   onImportLrc: () => void
 }
@@ -26,13 +29,22 @@ export const InspectorPanel = memo(function InspectorPanel({
   onImportLrc,
 }: InspectorPanelProps) {
   const allWords = useMemo(() => flattenProject(project), [project.tracks])
-  const trackStats = useMemo(() => new Map(project.tracks.map((track) => {
-    const words = flattenTrack(track)
-    return [track.id, {
-      total: words.length,
-      complete: words.filter(({ word }) => word.startMs !== null).length,
-    }]
-  })), [project.tracks])
+  const trackStats = useMemo(
+    () =>
+      new Map(
+        project.tracks.map((track) => {
+          const words = flattenTrack(track)
+          return [
+            track.id,
+            {
+              total: words.length,
+              complete: words.filter(({ word }) => word.startMs !== null).length,
+            },
+          ]
+        }),
+      ),
+    [project.tracks],
+  )
   const untimed = allWords.filter(({ word }) => word.startMs === null).length
   return (
     <aside className="inspector panel" aria-label="Project inspector">
@@ -77,11 +89,21 @@ export const InspectorPanel = memo(function InspectorPanel({
             <span>Backing track</span>
             <FileAudio2 size={13} />
           </div>
-          <button className="audio-source" title="Attach or replace the project audio file" onClick={onImportAudio}>
-            <span className="audio-source__icon"><FileAudio2 size={18} /></span>
+          <button
+            className="audio-source"
+            title="Attach or replace the project audio file"
+            onClick={onImportAudio}
+          >
+            <span className="audio-source__icon">
+              <FileAudio2 size={18} />
+            </span>
             <span>
               <strong>{project.audioPath?.split('/').pop() ?? 'Attach an audio file'}</strong>
-              <small>{project.audioPath ? `${formatTime(effectiveDuration(project))} · Linked file` : 'MP3, WAV, M4A, FLAC or OGG'}</small>
+              <small>
+                {project.audioPath
+                  ? `${formatTime(effectiveDuration(project))} · Linked file`
+                  : 'MP3, WAV, M4A, FLAC or OGG'}
+              </small>
             </span>
             <Import size={14} />
           </button>
@@ -185,24 +207,37 @@ export const InspectorPanel = memo(function InspectorPanel({
             <SlidersHorizontal size={13} />
           </div>
           <div className="stacked-actions">
-            <Button size="sm" variant="secondary" title="Import timed lyrics into the active track" onClick={onImportLrc}>
+            <Button
+              size="sm"
+              variant="secondary"
+              title="Import timed lyrics into the active track"
+              onClick={onImportLrc}
+            >
               <Import size={14} /> Import LRC lyrics
             </Button>
           </div>
         </section>
 
-        <section className={`project-health ${untimed ? 'project-health--warning' : 'project-health--good'}`}>
+        <section
+          className={`project-health ${untimed ? 'project-health--warning' : 'project-health--good'}`}
+        >
           <div className="project-health__score">
-            <strong>{allWords.length ? Math.round(((allWords.length - untimed) / allWords.length) * 100) : 0}</strong>
+            <strong>
+              {allWords.length
+                ? Math.round(((allWords.length - untimed) / allWords.length) * 100)
+                : 0}
+            </strong>
             <span>%</span>
           </div>
           <div>
             <span className="eyebrow">Timing coverage</span>
-            <strong>{allWords.length === 0
-              ? 'Add lyrics to begin'
-              : untimed
-                ? `${untimed} words still need timing`
-                : 'Timing complete'}</strong>
+            <strong>
+              {allWords.length === 0
+                ? 'Add lyrics to begin'
+                : untimed
+                  ? `${untimed} words still need timing`
+                  : 'Timing complete'}
+            </strong>
           </div>
         </section>
       </div>

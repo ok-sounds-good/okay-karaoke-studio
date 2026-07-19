@@ -239,15 +239,15 @@ it without pre-v1 compatibility scaffolding.
 ## Design acceptance and review status
 
 - [x] The user accepted the application-header entry and compact typography
-  direction represented here.
+      direction represented here.
 - [x] An adversarial UI/UX reviewer verifies this document and both mockups.
 - [ ] The Style action and inspector hierarchy are verified at 1280 × 720.
 - [ ] Keyboard-only combobox, face, size, color, Cancel, and Apply flows pass.
 - [ ] A large installed catalog remains responsive and font-rendered options are
-  legible while loading incrementally.
+      legible while loading incrementally.
 - [ ] Design mode shows accurate stage-relative scale through one mixed lyric
-  line, with no typeface-name anchor or separate specimen.
+      line, with no typeface-name anchor or separate specimen.
 - [ ] Permission denial and missing-font recovery preserve the request and name
-  the shared Preview/MP4 fallback.
+      the shared Preview/MP4 fallback.
 - [ ] Each Behavior slice includes production before/after evidence on the
-  protected macOS and Windows jobs before merge.
+      protected macOS and Windows jobs before merge.

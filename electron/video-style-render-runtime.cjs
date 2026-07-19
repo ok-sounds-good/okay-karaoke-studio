@@ -39,7 +39,8 @@ function installKaraokeRuntime() {
     return 0
   }
 
-  const compareFontFaces = (left, right) => compareOrdinal(left.style, right.style) ||
+  const compareFontFaces = (left, right) =>
+    compareOrdinal(left.style, right.style) ||
     compareOrdinal(left.fullName, right.fullName) ||
     compareOrdinal(String(left.postscriptName), String(right.postscriptName))
 
@@ -49,11 +50,8 @@ function installKaraokeRuntime() {
     if (typeof value !== 'string' || value.length < 1 || value.length > 63) return false
     for (const character of value) {
       const codePoint = character.codePointAt(0) || 0
-      if (
-        codePoint < 0x21 ||
-        codePoint > 0x7e ||
-        forbiddenPostscriptCharacters.has(character)
-      ) return false
+      if (codePoint < 0x21 || codePoint > 0x7e || forbiddenPostscriptCharacters.has(character))
+        return false
     }
     return true
   }
@@ -65,13 +63,8 @@ function installKaraokeRuntime() {
     return `local("${escapeCssString(postscriptName)}")`
   }
 
-  const fontFaceKey = (face) => JSON.stringify([
-    face.postscriptName,
-    face.fullName,
-    face.style,
-    face.weight,
-    face.slant,
-  ])
+  const fontFaceKey = (face) =>
+    JSON.stringify([face.postscriptName, face.fullName, face.style, face.weight, face.slant])
 
   const allocateFontAlias = () => {
     const alias = `OKSLocalFont${nextFontAlias.toString(36)}`
@@ -84,15 +77,18 @@ function installKaraokeRuntime() {
       ? typeface.faces.find((face) => face.postscriptName === requested.postscriptName)
       : null
     if (exactPostscript) return exactPostscript
-    const exactStyle = typeface.faces.filter((face) => (
-      face.style.toLowerCase() === requested.style.toLowerCase() &&
-      face.weight === requested.weight &&
-      face.slant === requested.slant
-    )).sort(compareFontFaces)[0]
+    const exactStyle = typeface.faces
+      .filter(
+        (face) =>
+          face.style.toLowerCase() === requested.style.toLowerCase() &&
+          face.weight === requested.weight &&
+          face.slant === requested.slant,
+      )
+      .sort(compareFontFaces)[0]
     if (exactStyle) return exactStyle
     return [...typeface.faces].sort((left, right) => {
-      const score = (face) => Math.abs(face.weight - requested.weight) +
-        (face.slant === requested.slant ? 0 : 1_000)
+      const score = (face) =>
+        Math.abs(face.weight - requested.weight) + (face.slant === requested.slant ? 0 : 1_000)
       return score(left) - score(right) || compareFontFaces(left, right)
     })[0]
   }
@@ -105,8 +101,10 @@ function installKaraokeRuntime() {
       return 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
     }
     if (aliases.has(face.postscriptName)) {
-      return `"${aliases.get(face.postscriptName)}", system-ui, -apple-system, ` +
+      return (
+        `"${aliases.get(face.postscriptName)}", system-ui, -apple-system, ` +
         'BlinkMacSystemFont, "Segoe UI", sans-serif'
+      )
     }
     return 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
   }
@@ -127,7 +125,8 @@ function installKaraokeRuntime() {
     const totalSeconds = Math.floor(absolute / 1000)
     const seconds = String(totalSeconds % 60).padStart(2, '0')
     const totalMinutes = Math.floor(totalSeconds / 60)
-    if (totalMinutes < 60) return `${String(totalMinutes).padStart(2, '0')}:${seconds}.${milliseconds}`
+    if (totalMinutes < 60)
+      return `${String(totalMinutes).padStart(2, '0')}:${seconds}.${milliseconds}`
     const minutes = String(totalMinutes % 60).padStart(2, '0')
     return `${Math.floor(totalMinutes / 60)}:${minutes}:${seconds}.${milliseconds}`
   }
@@ -314,7 +313,7 @@ function installKaraokeRuntime() {
     const textRect = lineTextNodes.get(entry.lineKey)?.getBoundingClientRect()
     if (!textRect || sceneRect.width <= 0) return
     const stageWidth = window.stageLayout.stage.widthPx
-    const leadingEdgePx = (textRect.left - sceneRect.left) * stageWidth / sceneRect.width
+    const leadingEdgePx = ((textRect.left - sceneRect.left) * stageWidth) / sceneRect.width
     const endLeftPx = leadingEdgePx - geometry.gapPx - geometry.cueWidthPx
     const startLeftPx = Math.min(
       -geometry.cueWidthPx - geometry.gapPx,
@@ -326,9 +325,7 @@ function installKaraokeRuntime() {
     entry.indicator.style.width = `${geometry.cueWidthPx}px`
     entry.indicator.style.left = `${reduced ? endLeftPx : startLeftPx}px`
     entry.indicator.style.opacity = String(reduced ? syncBrightness(normalized) : 1)
-    entry.indicator.style.transform = reduced
-      ? 'none'
-      : `translateX(${normalized * travelPx}px)`
+    entry.indicator.style.transform = reduced ? 'none' : `translateX(${normalized * travelPx}px)`
   }
 
   const appendSyncAids = (syncLayer, syncAids) => {
@@ -348,19 +345,20 @@ function installKaraokeRuntime() {
     }
   }
 
-  const nextLayoutKey = (state) => state.showTitle
-    ? `title:${state.title}|${state.artist}|${JSON.stringify(state.stageStyle.titleCard)}`
-    : `lines:${JSON.stringify(state.lines.map((line) => [
-        line.id,
-        line.trackId,
-        line.text,
-        line.style,
-        line.words.map((word) => word.text),
-      ]))}|sync:${JSON.stringify(state.syncAids.map((aid) => [
-        aid.trackId,
-        aid.lineId,
-        aid.style,
-      ]))}`
+  const nextLayoutKey = (state) =>
+    state.showTitle
+      ? `title:${state.title}|${state.artist}|${JSON.stringify(state.stageStyle.titleCard)}`
+      : `lines:${JSON.stringify(
+          state.lines.map((line) => [
+            line.id,
+            line.trackId,
+            line.text,
+            line.style,
+            line.words.map((word) => word.text),
+          ]),
+        )}|sync:${JSON.stringify(
+          state.syncAids.map((aid) => [aid.trackId, aid.lineId, aid.style]),
+        )}`
 
   const rebuildLayout = (state) => {
     const content = byId('content')

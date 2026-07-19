@@ -84,11 +84,7 @@ function parity(json: string, accepted: boolean) {
       }
     }
   })
-  expect(outcomes.map(({ accepted: result }) => result)).toEqual([
-    accepted,
-    accepted,
-    accepted,
-  ])
+  expect(outcomes.map(({ accepted: result }) => result)).toEqual([accepted, accepted, accepted])
   return outcomes
 }
 
@@ -111,16 +107,20 @@ describe('current project schema parity', () => {
 
     const localFontProject = clone()
     const localFace = {
-      fullName: 'Fixture Local Regular', style: 'Regular',
-      postscriptName: 'FixtureLocal-Regular', weight: 400, slant: 'normal',
+      fullName: 'Fixture Local Regular',
+      style: 'Regular',
+      postscriptName: 'FixtureLocal-Regular',
+      weight: 400,
+      slant: 'normal',
     }
     const localVocal = objectAt(localFontProject, ['tracks', 0, 'vocalStyle'])
     localVocal.typeface = { kind: 'local', family: 'Fixture Local', faces: [localFace] }
     localVocal.fontStyle = localFace
     const localOutcomes = parity(JSON.stringify(localFontProject), true)
     localOutcomes.forEach(({ value }) => expect(value).toStrictEqual(localFontProject))
-    expect(JSON.parse(serializeProject(localOutcomes[0].value as KaraokeProject)))
-      .toStrictEqual(localFontProject)
+    expect(JSON.parse(serializeProject(localOutcomes[0].value as KaraokeProject))).toStrictEqual(
+      localFontProject,
+    )
   })
 
   it('requires exact keys at every persisted project boundary', () => {
@@ -175,10 +175,11 @@ describe('current project schema parity', () => {
 
     const tooManyTracks = clone()
     const track = objectAt(tooManyTracks, ['tracks', 0])
-    tooManyTracks.tracks = Array.from(
-      { length: MAX_PROJECT_TRACKS + 1 },
-      (_, index) => ({ ...structuredClone(track), id: `track-${index}`, lines: [] }),
-    )
+    tooManyTracks.tracks = Array.from({ length: MAX_PROJECT_TRACKS + 1 }, (_, index) => ({
+      ...structuredClone(track),
+      id: `track-${index}`,
+      lines: [],
+    }))
 
     const incomplete = clone()
     objectAt(incomplete, ['tracks', 0, 'lines', 0, 'words', 0]).endMs = null
@@ -198,19 +199,24 @@ describe('current project schema parity', () => {
       duplicate,
       outsideLine,
       badDisplay,
-    ]) parity(JSON.stringify(invalid), false)
+    ])
+      parity(JSON.stringify(invalid), false)
   })
 
   it('guards main-process open/save effects behind successful parsing', () => {
     let effects = 0
     const invalid = clone()
     invalid.schemaVersion = 1
-    expect(() => projectSchema.withParsedProject(JSON.stringify(invalid), () => {
-      effects += 1
-    })).toThrow(UNSUPPORTED_PROJECT_FORMAT_ERROR)
+    expect(() =>
+      projectSchema.withParsedProject(JSON.stringify(invalid), () => {
+        effects += 1
+      }),
+    ).toThrow(UNSUPPORTED_PROJECT_FORMAT_ERROR)
     expect(effects).toBe(0)
 
-    projectSchema.withParsedProject(GOLDEN_JSON, () => { effects += 1 })
+    projectSchema.withParsedProject(GOLDEN_JSON, () => {
+      effects += 1
+    })
     expect(effects).toBe(1)
     const mainSource = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf8')
     const projectOpenSource = readFileSync(
@@ -227,10 +233,11 @@ describe('current project schema parity', () => {
   it('gates editable-project export effects behind strict project parsing', () => {
     let effects = 0
     representativeRejectedProjectJson().forEach((projectJson) => {
-      expect(() => projectSchema.withParsedProject(
-        projectJson,
-        () => { effects += 1 },
-      )).toThrow()
+      expect(() =>
+        projectSchema.withParsedProject(projectJson, () => {
+          effects += 1
+        }),
+      ).toThrow()
     })
     expect(effects).toBe(0)
 

@@ -45,7 +45,9 @@ async function readPngMetadata(filePath: string) {
     const upperLeftDistance = Math.abs(estimate - upperLeft)
     return leftDistance <= upDistance && leftDistance <= upperLeftDistance
       ? left
-      : upDistance <= upperLeftDistance ? up : upperLeft
+      : upDistance <= upperLeftDistance
+        ? up
+        : upperLeft
   }
 
   for (let y = 0; y < height; y += 1) {
@@ -58,11 +60,16 @@ async function readPngMetadata(filePath: string) {
       const left = index >= bytesPerPixel ? row[index - bytesPerPixel] : 0
       const up = previous[index]
       const upperLeft = index >= bytesPerPixel ? previous[index - bytesPerPixel] : 0
-      const predictor = filter === 0 ? 0
-        : filter === 1 ? left
-          : filter === 2 ? up
-            : filter === 3 ? Math.floor((left + up) / 2)
-              : paeth(left, up, upperLeft)
+      const predictor =
+        filter === 0
+          ? 0
+          : filter === 1
+            ? left
+            : filter === 2
+              ? up
+              : filter === 3
+                ? Math.floor((left + up) / 2)
+                : paeth(left, up, upperLeft)
       row[index] = (raw + predictor) & 0xff
     }
     cursor += stride
@@ -89,7 +96,9 @@ describe('generated app icon assets', () => {
     const generator = path.join(root, 'scripts', 'generate-icon-assets.cjs')
     const packaged = path.join(root, 'build', 'icon.png')
     const renderer = path.join(root, 'public', 'app-icon.png')
-    const manifest = JSON.parse(await readFile(path.join(root, 'build', 'icon-assets.json'), 'utf8'))
+    const manifest = JSON.parse(
+      await readFile(path.join(root, 'build', 'icon-assets.json'), 'utf8'),
+    )
 
     expect(manifest).toMatchObject({
       version: 1,

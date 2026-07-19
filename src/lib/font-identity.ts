@@ -29,11 +29,8 @@ export function isValidPostScriptName(value: unknown): value is string {
   if (typeof value !== 'string' || value.length < 1 || value.length > 63) return false
   for (const character of value) {
     const codePoint = character.codePointAt(0) ?? 0
-    if (
-      codePoint < 0x21 ||
-      codePoint > 0x7e ||
-      FORBIDDEN_POSTSCRIPT_CHARACTERS.has(character)
-    ) return false
+    if (codePoint < 0x21 || codePoint > 0x7e || FORBIDDEN_POSTSCRIPT_CHARACTERS.has(character))
+      return false
   }
   return true
 }
@@ -96,10 +93,7 @@ export function fontStyleFromDescriptor(font: FontFaceIdentity): FontIdentitySla
   return font.slant
 }
 
-export function deterministicFontFamily(
-  typeface: FontTypefaceIdentity,
-  alias?: string,
-): string {
+export function deterministicFontFamily(typeface: FontTypefaceIdentity, alias?: string): string {
   if (typeface.kind === 'system-monospace') return SYSTEM_MONOSPACE_FONT_STACK
   if (typeface.kind === 'system-ui') return SYSTEM_UI_FONT_STACK
   return alias && SAFE_FONT_ALIAS.test(alias)
@@ -108,13 +102,7 @@ export function deterministicFontFamily(
 }
 
 function faceIdentityTuple(face: FontFaceIdentity) {
-  return [
-    face.postscriptName,
-    face.fullName,
-    face.style,
-    face.weight,
-    face.slant,
-  ] as const
+  return [face.postscriptName, face.fullName, face.style, face.weight, face.slant] as const
 }
 
 export function fontFaceKey(face: FontFaceIdentity): string {
@@ -122,12 +110,10 @@ export function fontFaceKey(face: FontFaceIdentity): string {
 }
 
 export function fontTypefaceKey(typeface: FontTypefaceIdentity): string {
-  const faces = typeface.faces
-    .map(faceIdentityTuple)
-    .sort((left, right) => {
-      const leftKey = JSON.stringify(left)
-      const rightKey = JSON.stringify(right)
-      return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0
-    })
+  const faces = typeface.faces.map(faceIdentityTuple).sort((left, right) => {
+    const leftKey = JSON.stringify(left)
+    const rightKey = JSON.stringify(right)
+    return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0
+  })
   return JSON.stringify([typeface.kind, typeface.family, faces])
 }

@@ -1,6 +1,6 @@
 name: Feature proposal
 description: Propose a scoped editor or distribution improvement.
-title: "[Feature]: "
+title: '[Feature]: '
 labels:
   - enhancement
 body:

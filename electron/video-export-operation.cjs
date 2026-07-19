@@ -27,7 +27,9 @@ function createVideoExportOperation({
       ownerId,
       controller: new AbortController(),
       commitState: createCommitState(),
-      finished: new Promise((resolve) => { resolveFinished = resolve }),
+      finished: new Promise((resolve) => {
+        resolveFinished = resolve
+      }),
       resolveFinished,
     }
     activeExport = operation
@@ -60,13 +62,18 @@ function createVideoExportOperation({
       throwIfCanceled(operation.controller.signal)
 
       const preparation = await prepareExport({
-        owner, request, signal: operation.controller.signal,
+        owner,
+        request,
+        signal: operation.controller.signal,
       })
       if (!preparation) return null
       throwIfCanceled(operation.controller.signal)
 
       const destination = await selectDestination({
-        owner, request, preparation, signal: operation.controller.signal,
+        owner,
+        request,
+        preparation,
+        signal: operation.controller.signal,
       })
       if (!destination) return null
       throwIfCanceled(operation.controller.signal)
@@ -106,6 +113,11 @@ function createVideoExportOperation({
     await operation.finished
   }
 
-  return { abortActiveExport, activeExportForOwner, hasActiveExport: () => activeExport !== null, run }
+  return {
+    abortActiveExport,
+    activeExportForOwner,
+    hasActiveExport: () => activeExport !== null,
+    run,
+  }
 }
 module.exports = { createVideoExportOperation }

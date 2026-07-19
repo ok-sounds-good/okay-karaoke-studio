@@ -38,22 +38,35 @@ function artifactError(code) {
 
 function windowsNamespacePath(rawPath) {
   const value = rawPath.normalize('NFKC').replaceAll('/', '\\').toUpperCase()
-  return value.startsWith('\\\\?\\') || value.startsWith('\\\\.\\') ||
-    value.startsWith('\\??\\') || value.startsWith('\\\\??\\') ||
-    value.startsWith('\\DEVICE\\') || value.startsWith('\\GLOBAL??\\') ||
+  return (
+    value.startsWith('\\\\?\\') ||
+    value.startsWith('\\\\.\\') ||
+    value.startsWith('\\??\\') ||
+    value.startsWith('\\\\??\\') ||
+    value.startsWith('\\DEVICE\\') ||
+    value.startsWith('\\GLOBAL??\\') ||
     value.startsWith('\\\\GLOBAL??\\')
+  )
 }
 
 function windowsReservedLeaf(rawLeaf) {
   const leaf = rawLeaf.normalize('NFKC')
-  const stem = leaf.split('.')[0].replace(/[ .]+$/u, '').toUpperCase()
+  const stem = leaf
+    .split('.')[0]
+    .replace(/[ .]+$/u, '')
+    .toUpperCase()
   return WINDOWS_DEVICE.test(stem)
 }
 
 function invalidWindowsComponent(component) {
   const value = component.normalize('NFKC')
-  return !value || value.endsWith('.') || value.endsWith(' ') ||
-    WINDOWS_ILLEGAL_LEAF.test(value) || windowsReservedLeaf(value)
+  return (
+    !value ||
+    value.endsWith('.') ||
+    value.endsWith(' ') ||
+    WINDOWS_ILLEGAL_LEAF.test(value) ||
+    windowsReservedLeaf(value)
+  )
 }
 
 function invalidWindowsPath(rawPath) {
@@ -63,9 +76,15 @@ function invalidWindowsPath(rawPath) {
   const invalidColon = driveAbsolute ? value.indexOf(':', 2) !== -1 : value.includes(':')
   const components = driveAbsolute
     ? value.slice(3).split('\\')
-    : uncAbsolute ? value.slice(2).split('\\') : []
-  return windowsNamespacePath(rawPath) || invalidColon ||
-    (!driveAbsolute && !uncAbsolute) || components.some(invalidWindowsComponent)
+    : uncAbsolute
+      ? value.slice(2).split('\\')
+      : []
+  return (
+    windowsNamespacePath(rawPath) ||
+    invalidColon ||
+    (!driveAbsolute && !uncAbsolute) ||
+    components.some(invalidWindowsComponent)
+  )
 }
 
 function validateFreshOutputPath(rawPath, pathApi = path) {
@@ -77,11 +96,17 @@ function validateFreshOutputPath(rawPath, pathApi = path) {
     const leaf = pathApi.basename(resolved)
     const windowsPath = pathApi === path.win32 || pathApi.sep === '\\'
     if (
-      rawPath.includes('\0') || resolved !== rawPath ||
-      resolved === pathApi.parse(resolved).root || leaf === '.' || leaf === '..' ||
-      leaf.normalize('NFKC').endsWith('.') || leaf.normalize('NFKC').endsWith(' ') ||
-      windowsReservedLeaf(leaf) || (windowsPath && invalidWindowsPath(rawPath))
-    ) throw artifactError('VISUAL_OUTPUT_INVALID')
+      rawPath.includes('\0') ||
+      resolved !== rawPath ||
+      resolved === pathApi.parse(resolved).root ||
+      leaf === '.' ||
+      leaf === '..' ||
+      leaf.normalize('NFKC').endsWith('.') ||
+      leaf.normalize('NFKC').endsWith(' ') ||
+      windowsReservedLeaf(leaf) ||
+      (windowsPath && invalidWindowsPath(rawPath))
+    )
+      throw artifactError('VISUAL_OUTPUT_INVALID')
     return resolved
   } catch (error) {
     if (error?.code === 'VISUAL_OUTPUT_INVALID') throw error
@@ -124,19 +149,26 @@ async function outputState(rawOutput, fsApi = fs) {
 
 function validateArtifactName(name) {
   return Boolean(
-    typeof name === 'string' && name.length <= ARTIFACT_LIMITS.maxNameLength &&
-    ARTIFACT_NAME.test(name) && !windowsReservedLeaf(name) &&
-    path.basename(name) === name && !name.includes('/') && !name.includes('\\'),
+    typeof name === 'string' &&
+    name.length <= ARTIFACT_LIMITS.maxNameLength &&
+    ARTIFACT_NAME.test(name) &&
+    !windowsReservedLeaf(name) &&
+    path.basename(name) === name &&
+    !name.includes('/') &&
+    !name.includes('\\'),
   )
 }
 
 function artifactFields(value) {
   try {
     if (
-      !value || typeof value !== 'object' || Array.isArray(value) ||
+      !value ||
+      typeof value !== 'object' ||
+      Array.isArray(value) ||
       Object.getPrototypeOf(value) !== Object.prototype ||
       Object.keys(value).sort().join(',') !== 'bytes,name'
-    ) throw artifactError('VISUAL_ARTIFACTS_INVALID')
+    )
+      throw artifactError('VISUAL_ARTIFACTS_INVALID')
     const descriptors = Object.getOwnPropertyDescriptors(value)
     if (!('value' in descriptors.bytes) || !('value' in descriptors.name)) {
       throw artifactError('VISUAL_ARTIFACTS_INVALID')
@@ -150,9 +182,11 @@ function artifactFields(value) {
 
 function normalizeArtifactBuffers(artifacts) {
   if (
-    !Array.isArray(artifacts) || artifacts.length < 1 ||
+    !Array.isArray(artifacts) ||
+    artifacts.length < 1 ||
     artifacts.length > ARTIFACT_LIMITS.maxArtifacts
-  ) throw artifactError('VISUAL_ARTIFACTS_INVALID')
+  )
+    throw artifactError('VISUAL_ARTIFACTS_INVALID')
 
   const names = new Set()
   let totalBytes = 0
@@ -160,10 +194,13 @@ function normalizeArtifactBuffers(artifacts) {
   for (const artifact of artifacts) {
     const fields = artifactFields(artifact)
     if (
-      !validateArtifactName(fields.name) || names.has(fields.name) ||
-      !Buffer.isBuffer(fields.bytes) || fields.bytes.length < 1 ||
+      !validateArtifactName(fields.name) ||
+      names.has(fields.name) ||
+      !Buffer.isBuffer(fields.bytes) ||
+      fields.bytes.length < 1 ||
       fields.bytes.length > ARTIFACT_LIMITS.maxArtifactBytes
-    ) throw artifactError('VISUAL_ARTIFACTS_INVALID')
+    )
+      throw artifactError('VISUAL_ARTIFACTS_INVALID')
     checked.push(fields)
     names.add(fields.name)
     totalBytes += fields.bytes.length
@@ -184,15 +221,21 @@ function normalizeArtifactBuffers(artifacts) {
 function normalizeLauncherFailure(failure) {
   try {
     if (
-      !failure || typeof failure !== 'object' || Array.isArray(failure) ||
+      !failure ||
+      typeof failure !== 'object' ||
+      Array.isArray(failure) ||
       Object.getPrototypeOf(failure) !== Object.prototype ||
       Object.keys(failure).sort().join(',') !== 'code,ok'
-    ) throw artifactError('VISUAL_FAILURE_INVALID')
+    )
+      throw artifactError('VISUAL_FAILURE_INVALID')
     const descriptors = Object.getOwnPropertyDescriptors(failure)
     if (
-      !('value' in descriptors.code) || !('value' in descriptors.ok) ||
-      descriptors.ok.value !== false || !FAILURE_CODES.has(descriptors.code.value)
-    ) throw artifactError('VISUAL_FAILURE_INVALID')
+      !('value' in descriptors.code) ||
+      !('value' in descriptors.ok) ||
+      descriptors.ok.value !== false ||
+      !FAILURE_CODES.has(descriptors.code.value)
+    )
+      throw artifactError('VISUAL_FAILURE_INVALID')
     return Object.freeze({ code: descriptors.code.value, ok: false })
   } catch (error) {
     if (error?.code === 'VISUAL_FAILURE_INVALID') throw error
@@ -205,9 +248,12 @@ async function assertClaimedDirectory(claim, fsApi) {
     const stats = await fsApi.lstat(claim.output, { bigint: true })
     const realPath = await fsApi.realpath(claim.output)
     if (
-      !stats.isDirectory() || stats.isSymbolicLink() ||
-      !sameIdentity(statIdentity(stats), claim) || realPath !== claim.realPath
-    ) throw artifactError('VISUAL_OUTPUT_RACE')
+      !stats.isDirectory() ||
+      stats.isSymbolicLink() ||
+      !sameIdentity(statIdentity(stats), claim) ||
+      realPath !== claim.realPath
+    )
+      throw artifactError('VISUAL_OUTPUT_RACE')
   } catch (error) {
     if (error?.code === 'VISUAL_OUTPUT_RACE') throw error
     throw artifactError('VISUAL_OUTPUT_RACE')
@@ -217,10 +263,8 @@ async function assertClaimedDirectory(claim, fsApi) {
 async function assertOwnedRegularFile(filePath, identity, fsApi) {
   try {
     const stats = await fsApi.lstat(filePath, { bigint: true })
-    if (
-      !stats.isFile() || stats.isSymbolicLink() ||
-      !sameIdentity(statIdentity(stats), identity)
-    ) throw artifactError('VISUAL_OUTPUT_RACE')
+    if (!stats.isFile() || stats.isSymbolicLink() || !sameIdentity(statIdentity(stats), identity))
+      throw artifactError('VISUAL_OUTPUT_RACE')
     return stats
   } catch (error) {
     if (error?.code === 'VISUAL_OUTPUT_RACE') throw error
@@ -283,9 +327,12 @@ async function writeExclusiveArtifact(claim, artifact, options, fsApi) {
   await assertClaimedDirectory(claim, fsApi)
   const linkedStats = await lstatOrNull(filePath, fsApi)
   if (
-    !linkedStats || !linkedStats.isFile() || linkedStats.isSymbolicLink() ||
+    !linkedStats ||
+    !linkedStats.isFile() ||
+    linkedStats.isSymbolicLink() ||
     !sameIdentity(statIdentity(linkedStats), handleIdentity)
-  ) throw artifactError('VISUAL_OUTPUT_RACE')
+  )
+    throw artifactError('VISUAL_OUTPUT_RACE')
   await assertClaimedDirectory(claim, fsApi)
 }
 
@@ -298,7 +345,7 @@ async function unlinkOwnedTemporary(claim, tempPath, identity, fsApi) {
     // path-based unlink. Any observed mismatch is retained rather than removed.
     await fsApi.unlink(tempPath)
     await assertClaimedDirectory(claim, fsApi)
-    return await lstatOrNull(tempPath, fsApi) === null
+    return (await lstatOrNull(tempPath, fsApi)) === null
   } catch {
     return false
   }
@@ -356,7 +403,7 @@ async function writeCompletionMarker(claim, artifact, options, fsApi) {
     await assertOwnedRegularFile(tempPath, tempIdentity, fsApi)
     await assertOwnedRegularFile(markerPath, tempIdentity, fsApi)
     await options.beforeMarkerCleanup?.(claim.output, tempName, artifact.name)
-    if (!await unlinkOwnedTemporary(claim, tempPath, tempIdentity, fsApi)) {
+    if (!(await unlinkOwnedTemporary(claim, tempPath, tempIdentity, fsApi))) {
       throw artifactError('VISUAL_OUTPUT_RACE')
     }
     await assertClaimedDirectory(claim, fsApi)
@@ -389,10 +436,16 @@ async function writeFreshLauncherFailure(rawOutput, failure, options = {}) {
   const fsApi = options.fsApi || fs
   const { output, state } = await outputState(rawOutput, fsApi)
   if (state !== 'absent') throw artifactError('VISUAL_OUTPUT_EXISTS')
-  await publishArtifactBuffers(output, [{
-    bytes: Buffer.from(`${JSON.stringify(safeFailure)}\n`, 'utf8'),
-    name: 'failure.json',
-  }], options)
+  await publishArtifactBuffers(
+    output,
+    [
+      {
+        bytes: Buffer.from(`${JSON.stringify(safeFailure)}\n`, 'utf8'),
+        name: 'failure.json',
+      },
+    ],
+    options,
+  )
   return 'created'
 }
 

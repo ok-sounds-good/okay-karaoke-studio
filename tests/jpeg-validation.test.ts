@@ -71,24 +71,28 @@ describe('bounded JPEG container validation', () => {
     // A fixed 1x1 white baseline JPEG encoded by libjpeg-turbo's cjpeg.
     const golden = Buffer.from(
       '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoH' +
-      'BwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/2wBDAQME' +
-      'BAUEBQkFBQkUDQsNFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQU' +
-      'FBQUFBQUFBQUFBQUFBT/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEA' +
-      'AAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIh' +
-      'MUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6' +
-      'Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZ' +
-      'mqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx' +
-      '8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREA' +
-      'AgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAV' +
-      'YnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hp' +
-      'anN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPE' +
-      'xcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD9' +
-      'U6KKKAP/2Q==',
+        'BwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/2wBDAQME' +
+        'BAUEBQkFBQkUDQsNFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQU' +
+        'FBQUFBQUFBQUFBQUFBT/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEA' +
+        'AAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIh' +
+        'MUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6' +
+        'Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZ' +
+        'mqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx' +
+        '8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREA' +
+        'AgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAV' +
+        'YnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hp' +
+        'anN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPE' +
+        'xcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD9' +
+        'U6KKKAP/2Q==',
       'base64',
     )
     const result = jpeg.parseBoundedJpegContainer(golden)
     expect(result).toMatchObject({
-      format: 'jpeg', height: 1, progressive: false, rasterDecoded: false, width: 1,
+      format: 'jpeg',
+      height: 1,
+      progressive: false,
+      rasterDecoded: false,
+      width: 1,
     })
     expect(result.scanSemanticsValidated).toBe(false)
     expect(Object.isFrozen(result)).toBe(true)
@@ -108,8 +112,9 @@ describe('bounded JPEG container validation', () => {
       segmentCount: 2,
       width: 1280,
     })
-    expect(jpeg.parseBoundedJpegContainer(baselineJpeg({ frameMarker: 0xc1 })))
-      .toMatchObject({ progressive: false })
+    expect(jpeg.parseBoundedJpegContainer(baselineJpeg({ frameMarker: 0xc1 }))).toMatchObject({
+      progressive: false,
+    })
   })
 
   it('accepts progressive multi-scan framing and treats stuffed marker bytes as entropy', () => {
@@ -135,17 +140,14 @@ describe('bounded JPEG container validation', () => {
   })
 
   it('handles FF fill before real markers but rejects malformed stuffing and dangling fill', () => {
-    const filledEoi = jpegFromParts([
-      jpegFrame(),
-      Buffer.concat([Buffer.from([0xff]), jpegScan()]),
-      Buffer.from([0x11]),
-    ], jpegMarker(0xd9, 2))
+    const filledEoi = jpegFromParts(
+      [jpegFrame(), Buffer.concat([Buffer.from([0xff]), jpegScan()]), Buffer.from([0x11])],
+      jpegMarker(0xd9, 2),
+    )
     expect(jpeg.parseBoundedJpegContainer(filledEoi)).toMatchObject({ markerCount: 4 })
 
     expectInvalid(baselineJpeg({ entropy: Buffer.from([0x11, 0xff, 0xff, 0x00]) }))
-    expectInvalid(Buffer.concat([
-      JPEG_SOI, jpegFrame(), jpegScan(), Buffer.from([0x11, 0xff]),
-    ]))
+    expectInvalid(Buffer.concat([JPEG_SOI, jpegFrame(), jpegScan(), Buffer.from([0x11, 0xff])]))
   })
 
   it('accepts ordered DRI restarts, marker fill, and restart reset for each scan', () => {
@@ -172,11 +174,14 @@ describe('bounded JPEG container validation', () => {
       jpegFromParts([frame, jpegRestartInterval(0), scan, Buffer.from([0xff, 0xd0])]),
       jpegFromParts([frame, jpegRestartInterval(1), scan, Buffer.from([0xff, 0xd1])]),
       jpegFromParts([
-        frame, jpegRestartInterval(1), scan,
+        frame,
+        jpegRestartInterval(1),
+        scan,
         Buffer.from([0xff, 0xd0, 0x11, 0xff, 0xd2]),
       ]),
       jpegFromParts([frame, jpegMarker(0xd0), scan, Buffer.from([0x11])]),
-    ]) expectInvalid(bytes)
+    ])
+      expectInvalid(bytes)
   })
 
   it('rejects malformed framing, ordering, lengths, and terminal bytes', () => {
@@ -189,9 +194,7 @@ describe('bounded JPEG container validation', () => {
       jpegFromParts([JPEG_SOI, jpegFrame(), scan, Buffer.from([1])]),
       jpegFromParts([scan, Buffer.from([1]), jpegFrame()]),
       jpegFromParts([jpegFrame(), jpegFrame(), scan, Buffer.from([1])]),
-      jpegFromParts([
-        jpegFrame(), scan, Buffer.from([1]), jpegFrame(), scan, Buffer.from([1]),
-      ]),
+      jpegFromParts([jpegFrame(), scan, Buffer.from([1]), jpegFrame(), scan, Buffer.from([1])]),
       jpegFromParts([jpegFrame()]),
       valid.subarray(0, -2),
       Buffer.concat([valid, Buffer.from([0])]),
@@ -201,29 +204,36 @@ describe('bounded JPEG container validation', () => {
       Buffer.concat([JPEG_SOI, Buffer.from([0xff, 0xe0, 0x00, 0x08, 1, 2])]),
       Buffer.concat([JPEG_SOI, Buffer.from([0x12]), JPEG_EOI]),
       Buffer.concat([JPEG_SOI, Buffer.from([0xff, 0x00]), JPEG_EOI]),
-    ]) expectInvalid(bytes)
+    ])
+      expectInvalid(bytes)
   })
 
   it('allows atomic APP payload bytes and rejects only APP2 beginning with MPF NUL', () => {
     const embeddedMarkers = Buffer.concat([
-      Buffer.from([1, 0xff, 0xd8, 0xff, 0xd9, 2]), Buffer.from('MPF\0'),
+      Buffer.from([1, 0xff, 0xd8, 0xff, 0xd9, 2]),
+      Buffer.from('MPF\0'),
     ])
-    expect(jpeg.parseBoundedJpegContainer(baselineJpeg({
-      beforeFrame: [
-        jpegSegment(0xe1, embeddedMarkers),
-        jpegSegment(0xe2, Buffer.from('xMPF\0')),
-        jpegSegment(0xe2, Buffer.from('ICC_PROFILE\0')),
-      ],
-    }))).toMatchObject({ width: 1280 })
-    expectInvalid(baselineJpeg({
-      beforeFrame: [jpegSegment(0xe2, Buffer.from('MPF\0payload'))],
-    }))
+    expect(
+      jpeg.parseBoundedJpegContainer(
+        baselineJpeg({
+          beforeFrame: [
+            jpegSegment(0xe1, embeddedMarkers),
+            jpegSegment(0xe2, Buffer.from('xMPF\0')),
+            jpegSegment(0xe2, Buffer.from('ICC_PROFILE\0')),
+          ],
+        }),
+      ),
+    ).toMatchObject({ width: 1280 })
+    expectInvalid(
+      baselineJpeg({
+        beforeFrame: [jpegSegment(0xe2, Buffer.from('MPF\0payload'))],
+      }),
+    )
   })
 
   it('rejects unsupported frame modes and standalone or hierarchical controls', () => {
-    for (const marker of [
-      0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf,
-    ]) expectInvalid(baselineJpeg({ frameMarker: marker }))
+    for (const marker of [0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf])
+      expectInvalid(baselineJpeg({ frameMarker: marker }))
     expectInvalid(baselineJpeg({ beforeFrame: [jpegMarker(0x01)] }))
     for (const marker of [0xcc, 0xdc, 0xde, 0xdf, 0xf0]) {
       expectInvalid(baselineJpeg({ beforeFrame: [jpegSegment(marker)] }))
@@ -247,14 +257,21 @@ describe('bounded JPEG container validation', () => {
       expectInvalid(jpegFromParts([frame, jpegScan({ componentIds: [1] }), Buffer.from([1])]))
     }
     for (const [width, height] of [
-      [0, 1], [1, 0], [jpeg.JPEG_LIMITS.maxWidth + 1, 1],
+      [0, 1],
+      [1, 0],
+      [jpeg.JPEG_LIMITS.maxWidth + 1, 1],
       [1, jpeg.JPEG_LIMITS.maxHeight + 1],
-    ]) expectInvalid(baselineJpeg({ height, width }))
+    ])
+      expectInvalid(baselineJpeg({ height, width }))
 
-    expect(jpeg.parseBoundedJpegContainer(baselineJpeg({
-      height: jpeg.JPEG_LIMITS.maxHeight,
-      width: jpeg.JPEG_LIMITS.maxWidth,
-    }))).toMatchObject({ height: 4096, width: 4096 })
+    expect(
+      jpeg.parseBoundedJpegContainer(
+        baselineJpeg({
+          height: jpeg.JPEG_LIMITS.maxHeight,
+          width: jpeg.JPEG_LIMITS.maxWidth,
+        }),
+      ),
+    ).toMatchObject({ height: 4096, width: 4096 })
   })
 
   it('validates exact SOS shape, selectors, and sequential/progressive parameters', () => {
@@ -269,9 +286,7 @@ describe('bounded JPEG container validation', () => {
       withByte(oneScan, 8, 0),
     ]
     for (const scan of invalidSequentialScans) {
-      expectInvalid(jpegFromParts([
-        jpegFrame({ componentIds: [1, 2] }), scan, Buffer.from([1]),
-      ]))
+      expectInvalid(jpegFromParts([jpegFrame({ componentIds: [1, 2] }), scan, Buffer.from([1])]))
     }
 
     const progressiveFrame = jpegFrame({ componentIds: [1, 2], marker: 0xc2 })
@@ -280,63 +295,84 @@ describe('bounded JPEG container validation', () => {
       jpegScan({ componentIds: [1], spectralEnd: 1 }),
       jpegScan({ componentIds: [1], spectralEnd: 4, spectralStart: 5 }),
       jpegScan({ approximation: 0xee, componentIds: [1], spectralEnd: 0 }),
-    ]) expectInvalid(jpegFromParts([progressiveFrame, scan, Buffer.from([1])]))
+    ])
+      expectInvalid(jpegFromParts([progressiveFrame, scan, Buffer.from([1])]))
   })
 
   it('enforces scan profile selectors, frame order, and interleaved sampling limits', () => {
-    expectInvalid(jpegFromParts([
-      jpegFrame({ componentIds: [1] }),
-      jpegScan({
-        componentIds: [1],
-        tableSelectors: [{ ac: 2, dc: 2 }],
-      }),
-      Buffer.from([1]),
-    ]))
-    expectInvalid(jpegFromParts([
-      jpegFrame({ componentIds: [1, 2, 3] }),
-      jpegScan({ componentIds: [3, 2, 1] }),
-      Buffer.from([1]),
-    ]))
-    expectInvalid(jpegFromParts([
-      jpegFrame({
-        componentIds: [1, 2, 3],
-        samplingFactors: [
-          { horizontal: 2, vertical: 2 },
-          { horizontal: 2, vertical: 2 },
-          { horizontal: 2, vertical: 2 },
-        ],
-      }),
-      jpegScan({ componentIds: [1, 2, 3] }),
-      Buffer.from([1]),
-    ]))
+    expectInvalid(
+      jpegFromParts([
+        jpegFrame({ componentIds: [1] }),
+        jpegScan({
+          componentIds: [1],
+          tableSelectors: [{ ac: 2, dc: 2 }],
+        }),
+        Buffer.from([1]),
+      ]),
+    )
+    expectInvalid(
+      jpegFromParts([
+        jpegFrame({ componentIds: [1, 2, 3] }),
+        jpegScan({ componentIds: [3, 2, 1] }),
+        Buffer.from([1]),
+      ]),
+    )
+    expectInvalid(
+      jpegFromParts([
+        jpegFrame({
+          componentIds: [1, 2, 3],
+          samplingFactors: [
+            { horizontal: 2, vertical: 2 },
+            { horizontal: 2, vertical: 2 },
+            { horizontal: 2, vertical: 2 },
+          ],
+        }),
+        jpegScan({ componentIds: [1, 2, 3] }),
+        Buffer.from([1]),
+      ]),
+    )
 
     const asciiIds = [...Buffer.from('RGB', 'ascii')]
-    expect(jpeg.parseBoundedJpegContainer(jpegFromParts([
-      jpegFrame({
-        componentIds: asciiIds,
-        samplingFactors: [
-          { horizontal: 2, vertical: 2 },
-          { horizontal: 2, vertical: 2 },
-          { horizontal: 1, vertical: 2 },
-        ],
-      }),
-      jpegScan({ componentIds: asciiIds }),
-      Buffer.from([1]),
-    ]))).toMatchObject({ width: 1280 })
+    expect(
+      jpeg.parseBoundedJpegContainer(
+        jpegFromParts([
+          jpegFrame({
+            componentIds: asciiIds,
+            samplingFactors: [
+              { horizontal: 2, vertical: 2 },
+              { horizontal: 2, vertical: 2 },
+              { horizontal: 1, vertical: 2 },
+            ],
+          }),
+          jpegScan({ componentIds: asciiIds }),
+          Buffer.from([1]),
+        ]),
+      ),
+    ).toMatchObject({ width: 1280 })
 
     const selectorThree = [{ ac: 3, dc: 3 }]
-    expect(jpeg.parseBoundedJpegContainer(jpegFromParts([
-      jpegFrame({ componentIds: [0x52], marker: 0xc1 }),
-      jpegScan({ componentIds: [0x52], tableSelectors: selectorThree }),
-      Buffer.from([1]),
-    ]))).toMatchObject({ progressive: false })
-    expect(jpeg.parseBoundedJpegContainer(jpegFromParts([
-      jpegFrame({ componentIds: [0x52], marker: 0xc2 }),
-      jpegScan({
-        componentIds: [0x52], spectralEnd: 0, tableSelectors: selectorThree,
-      }),
-      Buffer.from([1]),
-    ]))).toMatchObject({ progressive: true })
+    expect(
+      jpeg.parseBoundedJpegContainer(
+        jpegFromParts([
+          jpegFrame({ componentIds: [0x52], marker: 0xc1 }),
+          jpegScan({ componentIds: [0x52], tableSelectors: selectorThree }),
+          Buffer.from([1]),
+        ]),
+      ),
+    ).toMatchObject({ progressive: false })
+    expect(
+      jpeg.parseBoundedJpegContainer(
+        jpegFromParts([
+          jpegFrame({ componentIds: [0x52], marker: 0xc2 }),
+          jpegScan({
+            componentIds: [0x52],
+            spectralEnd: 0,
+            tableSelectors: selectorThree,
+          }),
+          Buffer.from([1]),
+        ]),
+      ),
+    ).toMatchObject({ progressive: true })
   })
 
   it('enforces exact byte, segment-size, structural-marker, scan, and restart caps', () => {
@@ -346,49 +382,61 @@ describe('bounded JPEG container validation', () => {
     })
     expect(exactBytes).toHaveLength(jpeg.JPEG_LIMITS.maxBytes)
     expect(jpeg.parseBoundedJpegContainer(exactBytes)).toMatchObject({ width: 1280 })
-    expectInvalid(baselineJpeg({
-      entropy: Buffer.alloc(jpeg.JPEG_LIMITS.maxBytes - empty.length + 1, 0x11),
-    }))
-
-    expect(jpeg.parseBoundedJpegContainer(baselineJpeg({
-      beforeFrame: [jpegSegment(0xe1, Buffer.alloc(jpeg.JPEG_LIMITS.maxSegmentBytes))],
-    }))).toMatchObject({ width: 1280 })
-
-    const markerFillers = Array.from(
-      { length: jpeg.JPEG_LIMITS.maxMarkers - 4 },
-      () => jpegSegment(0xe1),
+    expectInvalid(
+      baselineJpeg({
+        entropy: Buffer.alloc(jpeg.JPEG_LIMITS.maxBytes - empty.length + 1, 0x11),
+      }),
     )
-    expect(jpeg.parseBoundedJpegContainer(baselineJpeg({ beforeFrame: markerFillers })))
-      .toMatchObject({ markerCount: jpeg.JPEG_LIMITS.maxMarkers })
+
+    expect(
+      jpeg.parseBoundedJpegContainer(
+        baselineJpeg({
+          beforeFrame: [jpegSegment(0xe1, Buffer.alloc(jpeg.JPEG_LIMITS.maxSegmentBytes))],
+        }),
+      ),
+    ).toMatchObject({ width: 1280 })
+
+    const markerFillers = Array.from({ length: jpeg.JPEG_LIMITS.maxMarkers - 4 }, () =>
+      jpegSegment(0xe1),
+    )
+    expect(
+      jpeg.parseBoundedJpegContainer(baselineJpeg({ beforeFrame: markerFillers })),
+    ).toMatchObject({ markerCount: jpeg.JPEG_LIMITS.maxMarkers })
     expectInvalid(baselineJpeg({ beforeFrame: [...markerFillers, jpegSegment(0xe1)] }))
 
-    const scans = Array.from(
-      { length: jpeg.JPEG_LIMITS.maxScans },
-      () => [jpegScan({ componentIds: [1] }), Buffer.from([0x11])],
-    ).flat()
-    expect(jpeg.parseBoundedJpegContainer(jpegFromParts([
-      jpegFrame({ componentIds: [1], marker: 0xc1 }), ...scans,
-    ]))).toMatchObject({ scanCount: jpeg.JPEG_LIMITS.maxScans })
-    expectInvalid(jpegFromParts([
-      jpegFrame({ componentIds: [1], marker: 0xc1 }),
-      ...scans,
+    const scans = Array.from({ length: jpeg.JPEG_LIMITS.maxScans }, () => [
       jpegScan({ componentIds: [1] }),
       Buffer.from([0x11]),
-    ]))
+    ]).flat()
+    expect(
+      jpeg.parseBoundedJpegContainer(
+        jpegFromParts([jpegFrame({ componentIds: [1], marker: 0xc1 }), ...scans]),
+      ),
+    ).toMatchObject({ scanCount: jpeg.JPEG_LIMITS.maxScans })
+    expectInvalid(
+      jpegFromParts([
+        jpegFrame({ componentIds: [1], marker: 0xc1 }),
+        ...scans,
+        jpegScan({ componentIds: [1] }),
+        Buffer.from([0x11]),
+      ]),
+    )
 
     const restartPrefix = [
       jpegFrame({ componentIds: [1] }),
       jpegRestartInterval(1),
       jpegScan({ componentIds: [1] }),
     ]
-    expect(jpeg.parseBoundedJpegContainer(jpegFromParts([
-      ...restartPrefix, restartEntropy(jpeg.JPEG_LIMITS.maxRestartMarkers),
-    ]))).toMatchObject({
+    expect(
+      jpeg.parseBoundedJpegContainer(
+        jpegFromParts([...restartPrefix, restartEntropy(jpeg.JPEG_LIMITS.maxRestartMarkers)]),
+      ),
+    ).toMatchObject({
       markerCount: 5,
       restartMarkerCount: jpeg.JPEG_LIMITS.maxRestartMarkers,
     })
-    expectInvalid(jpegFromParts([
-      ...restartPrefix, restartEntropy(jpeg.JPEG_LIMITS.maxRestartMarkers + 1),
-    ]))
+    expectInvalid(
+      jpegFromParts([...restartPrefix, restartEntropy(jpeg.JPEG_LIMITS.maxRestartMarkers + 1)]),
+    )
   })
 })

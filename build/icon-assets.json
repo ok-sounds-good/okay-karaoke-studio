@@ -6,7 +6,7 @@
   },
   "generator": {
     "path": "scripts/generate-icon-assets.cjs",
-    "sha256": "088a3aae60820d931a473ce19cdf23320efc93429657bf730796985c008a0081"
+    "sha256": "e15f8300ab48d4ee29782c3bb26ca9adab0f1224c75651f41b8dafb852f88f25"
   },
   "configuration": {
     "sourceInsetRatio": 0.08293460925039872,

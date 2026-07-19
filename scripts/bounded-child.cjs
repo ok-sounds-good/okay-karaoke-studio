@@ -32,8 +32,8 @@ function childHasExited(child) {
 function ignoredStdioOptions(spawnOptions) {
   if (!spawnOptions || typeof spawnOptions !== 'object' || Array.isArray(spawnOptions)) return null
   const stdio = spawnOptions.stdio
-  const ignoredArray = Array.isArray(stdio) && stdio.length >= 3 &&
-    stdio.every((entry) => entry === 'ignore')
+  const ignoredArray =
+    Array.isArray(stdio) && stdio.length >= 3 && stdio.every((entry) => entry === 'ignore')
   if (stdio !== undefined && stdio !== 'ignore' && !ignoredArray) return null
   return { ...spawnOptions, stdio: ignoredArray ? [...stdio] : 'ignore' }
 }
@@ -143,9 +143,12 @@ function runBoundedChild(options) {
       ? null
       : ignoredStdioOptions(spawnOptions)
   if (
-    !safeSpawnOptions || !validDuration(timeoutMs) ||
-    !validDuration(killGraceMs) || !validDuration(forceSettleMs)
-  ) return Promise.resolve(startFailure())
+    !safeSpawnOptions ||
+    !validDuration(timeoutMs) ||
+    !validDuration(killGraceMs) ||
+    !validDuration(forceSettleMs)
+  )
+    return Promise.resolve(startFailure())
 
   return new Promise((resolve) => {
     let child = null
@@ -248,8 +251,12 @@ function runBoundedChild(options) {
       forwardedSignal = signal
       requestTermination(signal)
     }
-    function onInterrupt() { forward('SIGINT') }
-    function onTermination() { forward('SIGTERM') }
+    function onInterrupt() {
+      forward('SIGINT')
+    }
+    function onTermination() {
+      forward('SIGTERM')
+    }
 
     processLike.on('SIGINT', onInterrupt)
     processLike.on('SIGTERM', onTermination)

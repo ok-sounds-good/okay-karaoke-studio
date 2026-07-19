@@ -91,8 +91,8 @@ in-app first-project guide.
 
 ## Keyboard controls
 
-| Key | Action |
-|---|---|
+| Key                      | Action                                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------------- |
 | Space                    | Start the current word during synchronization; hold the final word of a line through its sung duration. |
 | Shift + Space            | Play or pause.                                                                                          |
 | Escape                   | Exit synchronization or cancel an open Style edit.                                                      |

@@ -36,7 +36,7 @@ const DEFAULT_VIDEO_FPS = 30
 // remain the authored 30 or 60 fps selected above.
 const OFFSCREEN_CAPTURE_FPS = 240
 const MAX_VIDEO_DURATION_MS = 30 * 60 * 1000
-const MAX_VIDEO_FRAMES = Math.ceil(MAX_VIDEO_DURATION_MS * Math.max(...VIDEO_FRAME_RATES) / 1_000)
+const MAX_VIDEO_FRAMES = Math.ceil((MAX_VIDEO_DURATION_MS * Math.max(...VIDEO_FRAME_RATES)) / 1_000)
 function normalizeVideoSettings(value = {}) {
   if (!isRecord(value)) throw new TypeError('Video settings must be an object')
   const resolution = value.resolution ?? DEFAULT_VIDEO_RESOLUTION
@@ -45,7 +45,8 @@ function normalizeVideoSettings(value = {}) {
     throw new RangeError('Video resolution preset is not supported')
   }
   const dimensions = VIDEO_RESOLUTION_PRESETS[resolution]
-  if (!VIDEO_FRAME_RATES.includes(fps)) throw new RangeError('Video frame rate must be 30 or 60 fps')
+  if (!VIDEO_FRAME_RATES.includes(fps))
+    throw new RangeError('Video frame rate must be 30 or 60 fps')
   return { resolution, fps, ...dimensions }
 }
 
@@ -113,7 +114,10 @@ function effectiveVideoDurationForProject(project, requestedDurationMs) {
 }
 
 function effectiveVideoDuration(projectValue, requestedDurationMs) {
-  return effectiveVideoDurationForProject(normalizeProjectForVideo(projectValue), requestedDurationMs)
+  return effectiveVideoDurationForProject(
+    normalizeProjectForVideo(projectValue),
+    requestedDurationMs,
+  )
 }
 
 function createTrackDisplayIndex(track, offsetMs) {
@@ -148,9 +152,7 @@ function createVideoIndex(project) {
     createTrackDisplayIndex(track, project.offsetMs),
   )
   const upcomingLines = tracks
-    .flatMap(({ track, adjustedLines }) =>
-      adjustedLines.map((entry) => ({ ...entry, track })),
-    )
+    .flatMap(({ track, adjustedLines }) => adjustedLines.map((entry) => ({ ...entry, track })))
     .sort((left, right) => left.range.startMs - right.range.startMs)
   return {
     project,
@@ -165,13 +167,12 @@ function buildFrameTimelineForProject(project, requestedDurationMs, fps = DEFAUL
     throw new RangeError('Video frame rate must be 30 or 60 fps')
   }
   const durationMs = effectiveVideoDurationForProject(project, requestedDurationMs)
-  const frameCount = Math.ceil(durationMs * fps / 1_000)
+  const frameCount = Math.ceil((durationMs * fps) / 1_000)
   if (frameCount > MAX_VIDEO_FRAMES) {
     throw new RangeError(`Video export would require more than ${MAX_VIDEO_FRAMES} lyric frames`)
   }
-  const times = Array.from(
-    { length: frameCount },
-    (_unused, index) => Math.round(index * 1_000 / fps),
+  const times = Array.from({ length: frameCount }, (_unused, index) =>
+    Math.round((index * 1_000) / fps),
   )
   return { project, durationMs, fps, times }
 }
@@ -205,22 +206,22 @@ function createFrameCursor(index) {
 function plannedTrackLines(trackIndex, lyricMs, settings, cursorPosition) {
   let position = cursorPosition
   if (position === undefined) {
-    position = trackIndex.timedPositions.findIndex(
-      (entry) => lyricMs < entry.rawRange.endMs,
-    )
+    position = trackIndex.timedPositions.findIndex((entry) => lyricMs < entry.rawRange.endMs)
   }
   const target = position >= 0 ? trackIndex.timedPositions[position]?.position : undefined
   if (!target) return []
-  const startIndex = settings.advanceMode === 'scroll'
-    ? Math.min(target.lineIndex, Math.max(0, target.section.length - settings.lineCount))
-    : Math.floor(target.lineIndex / settings.lineCount) * settings.lineCount
+  const startIndex =
+    settings.advanceMode === 'scroll'
+      ? Math.min(target.lineIndex, Math.max(0, target.section.length - settings.lineCount))
+      : Math.floor(target.lineIndex / settings.lineCount) * settings.lineCount
   return target.section.slice(startIndex, startIndex + settings.lineCount)
 }
 
 function frameStateAtIndex(index, playbackMs, cursor) {
   const { project } = index
   const lyricMs = playbackMs - project.offsetMs
-  const showTitle = !Number.isFinite(index.firstStart) || playbackMs < Math.max(0, index.firstStart - 1_500)
+  const showTitle =
+    !Number.isFinite(index.firstStart) || playbackMs < Math.max(0, index.firstStart - 1_500)
   const lines = []
 
   const trackWindows = index.tracks.map((trackIndex, trackPosition) => {
@@ -318,11 +319,11 @@ function createVideoExportCommitState() {
   }
 }
 
-async function promoteVideoOutput(partialPath, outputPath, {
-  renameFile = fs.rename,
-  onPromotionStart,
-  onPromotionComplete,
-} = {}) {
+async function promoteVideoOutput(
+  partialPath,
+  outputPath,
+  { renameFile = fs.rename, onPromotionStart, onPromotionComplete } = {},
+) {
   if (onPromotionStart?.() === false) throw createAbortError()
   await renameFile(partialPath, outputPath)
   onPromotionComplete?.()
@@ -330,9 +331,10 @@ async function promoteVideoOutput(partialPath, outputPath, {
 
 function encodeJpegFrame(image, settings) {
   const size = image.getSize()
-  const frame = size.width === settings.width && size.height === settings.height
-    ? image
-    : image.resize({ width: settings.width, height: settings.height, quality: 'best' })
+  const frame =
+    size.width === settings.width && size.height === settings.height
+      ? image
+      : image.resize({ width: settings.width, height: settings.height, quality: 'best' })
   return frame.toJPEG(95)
 }
 
@@ -385,7 +387,7 @@ function presentRequestedFrame(contents, update, settings, signal) {
     }
     signal?.addEventListener('abort', onAbort, { once: true })
     Promise.resolve()
-      .then(() => settled ? undefined : update())
+      .then(() => (settled ? undefined : update()))
       .then(() => {
         if (settled) return
         try {
@@ -462,7 +464,12 @@ function runProcess(executable, args, { signal, inputWriter } = {}) {
       else if (writerError?.name === 'AbortError' || signal?.aborted) reject(createAbortError())
       else if (code === 0 && !writerError) resolve()
       else if (code === 0) reject(writerError)
-      else reject(new Error(`FFmpeg failed${terminationSignal ? ` (${terminationSignal})` : ''}: ${stderr.trim() || `exit code ${code}`}`))
+      else
+        reject(
+          new Error(
+            `FFmpeg failed${terminationSignal ? ` (${terminationSignal})` : ''}: ${stderr.trim() || `exit code ${code}`}`,
+          ),
+        )
     })
 
     if (inputWriter) {
@@ -509,10 +516,14 @@ function projectFonts(project) {
     stage.stageFrame.footer,
     ...project.tracks.map((track) => resolveVocalStyle(stage.lyrics, track.vocalStyle)),
   ]
-  return [...new Map(fonts.map(({ typeface, fontStyle }) => [
-    JSON.stringify([typeface, fontStyle]),
-    { typeface, fontStyle },
-  ])).values()]
+  return [
+    ...new Map(
+      fonts.map(({ typeface, fontStyle }) => [
+        JSON.stringify([typeface, fontStyle]),
+        { typeface, fontStyle },
+      ]),
+    ).values(),
+  ]
 }
 
 async function prepareStyleRuntime(project, backgroundImage) {
@@ -589,9 +600,12 @@ async function renderVideoFrames(
       throwIfAborted(signal)
       const currentMs = timeline.times[frameIndex]
       const state = planFrame(currentMs)
-      const frame = await presentRequestedFrame(window.webContents, () =>
-        window.webContents.executeJavaScript(frameInvocation(state, frameIndex)),
-      settings, signal)
+      const frame = await presentRequestedFrame(
+        window.webContents,
+        () => window.webContents.executeJavaScript(frameInvocation(state, frameIndex)),
+        settings,
+        signal,
+      )
       await writeJpegFrame(stream, frame, signal)
       if (
         frameIndex === 0 ||
@@ -614,26 +628,46 @@ function buildFfmpegArguments(audioPath, outputPath, durationMs, settings = {}) 
   return [
     '-y',
     '-hide_banner',
-    '-loglevel', 'error',
-    '-probesize', '32768',
-    '-analyzeduration', '0',
-    '-f', 'image2pipe',
-    '-framerate', String(fps),
-    '-vcodec', 'mjpeg',
-    '-i', 'pipe:0',
-    '-i', audioPath,
-    '-map', '0:v:0',
-    '-map', '1:a:0',
-    '-vf', 'format=yuv420p',
-    '-c:v', 'libx264',
-    '-preset', 'veryfast',
-    '-bf', '0',
-    '-crf', '20',
-    '-c:a', 'aac',
-    '-b:a', '192k',
-    '-af', 'apad',
-    '-t', (durationMs / 1000).toFixed(3),
-    '-movflags', '+faststart',
+    '-loglevel',
+    'error',
+    '-probesize',
+    '32768',
+    '-analyzeduration',
+    '0',
+    '-f',
+    'image2pipe',
+    '-framerate',
+    String(fps),
+    '-vcodec',
+    'mjpeg',
+    '-i',
+    'pipe:0',
+    '-i',
+    audioPath,
+    '-map',
+    '0:v:0',
+    '-map',
+    '1:a:0',
+    '-vf',
+    'format=yuv420p',
+    '-c:v',
+    'libx264',
+    '-preset',
+    'veryfast',
+    '-bf',
+    '0',
+    '-crf',
+    '20',
+    '-c:a',
+    'aac',
+    '-b:a',
+    '192k',
+    '-af',
+    'apad',
+    '-t',
+    (durationMs / 1000).toFixed(3),
+    '-movflags',
+    '+faststart',
     outputPath,
   ]
 }
@@ -658,7 +692,8 @@ async function exportKaraokeVideo({
   const project = parseProjectForVideo(projectJson)
   const requestedAudioPath = limitedText(audioPath || project.audioPath, '', 8_192).trim()
   const requestedOutputPath = limitedText(outputPath, '', 8_192).trim()
-  if (!requestedAudioPath || !requestedOutputPath) throw new TypeError('Audio and output paths are required')
+  if (!requestedAudioPath || !requestedOutputPath)
+    throw new TypeError('Audio and output paths are required')
   const resolvedAudioPath = path.resolve(requestedAudioPath)
   const resolvedOutputPath = path.resolve(requestedOutputPath)
   const settings = normalizeVideoSettings({ resolution, fps })
@@ -669,7 +704,7 @@ async function exportKaraokeVideo({
   throwIfAborted(signal)
   const runtime = await prepareStyleRuntime(project, backgroundImage)
   throwIfAborted(signal)
-  const executable = ffmpegPath || await findFfmpeg(undefined, signal)
+  const executable = ffmpegPath || (await findFfmpeg(undefined, signal))
   const parsedOutput = path.parse(resolvedOutputPath)
   const partialPath = path.join(
     parsedOutput.dir,
@@ -681,29 +716,28 @@ async function exportKaraokeVideo({
   try {
     throwIfAborted(signal)
     onProgress?.({ phase: 'preparing', completed: 0, total: 1 })
-    await runProcess(executable, buildFfmpegArguments(
-      resolvedAudioPath,
-      partialPath,
-      timeline.durationMs,
-      settings,
-    ), {
-      signal,
-      inputWriter: async (stream) => {
-        const assets = await renderVideoFrames(
-          BrowserWindow,
-          project,
-          timeline,
-          stream,
-          settings,
-          runtime,
-          onProgress,
-          signal,
-        )
-        fontFallbacks = Array.isArray(assets?.fontFallbacks) ? assets.fontFallbacks : []
-        throwIfAborted(signal)
-        onProgress?.({ phase: 'encoding', completed: 0, total: 1 })
+    await runProcess(
+      executable,
+      buildFfmpegArguments(resolvedAudioPath, partialPath, timeline.durationMs, settings),
+      {
+        signal,
+        inputWriter: async (stream) => {
+          const assets = await renderVideoFrames(
+            BrowserWindow,
+            project,
+            timeline,
+            stream,
+            settings,
+            runtime,
+            onProgress,
+            signal,
+          )
+          fontFallbacks = Array.isArray(assets?.fontFallbacks) ? assets.fontFallbacks : []
+          throwIfAborted(signal)
+          onProgress?.({ phase: 'encoding', completed: 0, total: 1 })
+        },
       },
-    })
+    )
     throwIfAborted(signal)
     await promoteVideoOutput(partialPath, resolvedOutputPath, {
       onPromotionStart,

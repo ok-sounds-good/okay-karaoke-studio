@@ -1,5 +1,26 @@
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
-import { AudioWaveform, ChevronLeft, ChevronRight, Minus, Plus, RotateCcw, SkipBack, TimerReset, Zap, ZoomIn } from 'lucide-react'
+import {
+  Fragment,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
+import {
+  AudioWaveform,
+  ChevronLeft,
+  ChevronRight,
+  Minus,
+  Plus,
+  RotateCcw,
+  SkipBack,
+  TimerReset,
+  Zap,
+  ZoomIn,
+} from 'lucide-react'
 import type { KaraokeProject, LyricLine, LyricWord, VocalTrack } from '../lib/model'
 import { formatTime } from '../lib/model'
 import { resolveVocalSungColor } from '../lib/video-style'
@@ -162,56 +183,64 @@ export function buildTimelineTrackLayout(
   pixelsPerSecond: number,
   timingDraft: ProjectTimingDraft | null = null,
 ): TimelineTrackLayout {
-  const candidates = track.lines.flatMap((line, lineIndex) => {
-    const wordsWithoutTop = line.words.flatMap((word, wordIndex) => {
-      if (word.startMs === null) return []
-      const endMs = word.endMs ?? word.startMs + 360
-      const draftTiming = timingDraft?.get(word.id)
-      const adjustedStart = timelineTime(draftTiming?.startMs ?? word.startMs, offsetMs)
-      const adjustedEnd = timelineTime(draftTiming?.endMs ?? endMs, offsetMs)
-      if (adjustedEnd <= 0) return []
-      const visibleStart = Math.max(0, adjustedStart)
-      const left = (visibleStart / 1000) * pixelsPerSecond
-      const timingWidth = Math.max(0, ((adjustedEnd - visibleStart) / 1000) * pixelsPerSecond)
-      return [{
-        word,
-        wordIndex,
-        left,
-        width: Math.max(1, timingWidth),
-        labelWidth: timelineLabelWidth(word),
-        collisionEnd: left + timingWidth,
-      }]
-    })
-    if (!wordsWithoutTop.length) return []
+  const candidates = track.lines
+    .flatMap((line, lineIndex) => {
+      const wordsWithoutTop = line.words.flatMap((word, wordIndex) => {
+        if (word.startMs === null) return []
+        const endMs = word.endMs ?? word.startMs + 360
+        const draftTiming = timingDraft?.get(word.id)
+        const adjustedStart = timelineTime(draftTiming?.startMs ?? word.startMs, offsetMs)
+        const adjustedEnd = timelineTime(draftTiming?.endMs ?? endMs, offsetMs)
+        if (adjustedEnd <= 0) return []
+        const visibleStart = Math.max(0, adjustedStart)
+        const left = (visibleStart / 1000) * pixelsPerSecond
+        const timingWidth = Math.max(0, ((adjustedEnd - visibleStart) / 1000) * pixelsPerSecond)
+        return [
+          {
+            word,
+            wordIndex,
+            left,
+            width: Math.max(1, timingWidth),
+            labelWidth: timelineLabelWidth(word),
+            collisionEnd: left + timingWidth,
+          },
+        ]
+      })
+      if (!wordsWithoutTop.length) return []
 
-    let labelLeft = Number.POSITIVE_INFINITY
-    let labelWidth = Math.max(0, wordsWithoutTop.length - 1) * TIMELINE_LABEL_GAP_PX
-    wordsWithoutTop.forEach((word) => {
-      labelLeft = Math.min(labelLeft, word.left)
-      labelWidth += word.labelWidth
+      let labelLeft = Number.POSITIVE_INFINITY
+      let labelWidth = Math.max(0, wordsWithoutTop.length - 1) * TIMELINE_LABEL_GAP_PX
+      wordsWithoutTop.forEach((word) => {
+        labelLeft = Math.min(labelLeft, word.left)
+        labelWidth += word.labelWidth
+      })
+      const intervalStart = labelLeft
+      const intervalEnd = labelLeft + labelWidth
+      return [
+        {
+          line,
+          lineIndex,
+          lane: 0,
+          top: 0,
+          height: TIMELINE_LABEL_ROW_HEIGHT_PX,
+          labelLeft,
+          labelWidth,
+          intervalStart,
+          intervalEnd,
+          words: wordsWithoutTop.map((word) => ({
+            ...word,
+            top: 0,
+          })),
+        },
+      ]
     })
-    const intervalStart = labelLeft
-    const intervalEnd = labelLeft + labelWidth
-    return [{
-      line,
-      lineIndex,
-      lane: 0,
-      top: 0,
-      height: TIMELINE_LABEL_ROW_HEIGHT_PX,
-      labelLeft,
-      labelWidth,
-      intervalStart,
-      intervalEnd,
-      words: wordsWithoutTop.map((word) => ({
-        ...word,
-        top: 0,
-      })),
-    }]
-  }).sort((a, b) => a.intervalStart - b.intervalStart || a.lineIndex - b.lineIndex)
+    .sort((a, b) => a.intervalStart - b.intervalStart || a.lineIndex - b.lineIndex)
 
   const laneEnds: number[] = []
   candidates.forEach((line) => {
-    const availableLane = laneEnds.findIndex((end) => end + TIMELINE_LABEL_GAP_PX <= line.intervalStart)
+    const availableLane = laneEnds.findIndex(
+      (end) => end + TIMELINE_LABEL_GAP_PX <= line.intervalStart,
+    )
     line.lane = availableLane >= 0 ? availableLane : laneEnds.length
     laneEnds[line.lane] = line.intervalEnd
   })
@@ -230,27 +259,33 @@ export function buildTimelineTrackLayout(
     line.top = laneTops[line.lane] ?? 2
     line.words = line.words.map((word) => ({
       ...word,
-      top: wordZoneTop
-        + (rows.get(word.word.id) ?? 0) * (TIMELINE_WORD_HEIGHT_PX + TIMELINE_WORD_ROW_GAP_PX),
+      top:
+        wordZoneTop +
+        (rows.get(word.word.id) ?? 0) * (TIMELINE_WORD_HEIGHT_PX + TIMELINE_WORD_ROW_GAP_PX),
     }))
   })
 
-  const trackHeight = wordZoneTop
-    + rowCount * TIMELINE_WORD_HEIGHT_PX
-    + Math.max(0, rowCount - 1) * TIMELINE_WORD_ROW_GAP_PX
-    + 6
+  const trackHeight =
+    wordZoneTop +
+    rowCount * TIMELINE_WORD_HEIGHT_PX +
+    Math.max(0, rowCount - 1) * TIMELINE_WORD_ROW_GAP_PX +
+    6
 
   return {
     trackId: track.id,
     height: Math.max(TIMELINE_MIN_TRACK_HEIGHT_PX, trackHeight),
-    maxRight: candidates.reduce((maximum, line) => Math.max(
-      maximum,
-      line.intervalEnd,
-      line.words.reduce(
-        (wordMaximum, word) => Math.max(wordMaximum, word.left + word.width),
-        0,
-      ),
-    ), 0),
+    maxRight: candidates.reduce(
+      (maximum, line) =>
+        Math.max(
+          maximum,
+          line.intervalEnd,
+          line.words.reduce(
+            (wordMaximum, word) => Math.max(wordMaximum, word.left + word.width),
+            0,
+          ),
+        ),
+      0,
+    ),
     lines: candidates.sort((a, b) => a.lineIndex - b.lineIndex),
   }
 }
@@ -268,7 +303,8 @@ export function timelineWordIdsInRect(layout: TimelineTrackLayout, rect: Timelin
         word.left + word.width >= left &&
         word.top <= bottom &&
         word.top + TIMELINE_WORD_HEIGHT_PX >= top
-      ) selected.add(word.word.id)
+      )
+        selected.add(word.word.id)
     })
   })
   return selected
@@ -333,9 +369,7 @@ export function timingDraftForGesture(
   return timingDraft
 }
 
-export function createTimelineGestureSession(
-  getContext: () => TimelineGestureContext,
-) {
+export function createTimelineGestureSession(getContext: () => TimelineGestureContext) {
   let active: TimelinePointerGesture | null = null
   let activeProject: KaraokeProject | null = null
   let affectedTimingSnapshot = new Map<string, { startMs: number; endMs: number | null }>()
@@ -357,17 +391,15 @@ export function createTimelineGestureSession(
   }
 
   const affectedTimingsUnchanged = (project: KaraokeProject) => {
-    if (!activeProject || project.id !== activeProject.id || affectedTimingSnapshot.size === 0) return false
+    if (!activeProject || project.id !== activeProject.id || affectedTimingSnapshot.size === 0)
+      return false
     const remaining = new Map(affectedTimingSnapshot)
     project.tracks.forEach((track) => {
       track.lines.forEach((line) => {
         line.words.forEach((word) => {
           const timing = remaining.get(word.id)
-          if (
-            timing &&
-            word.startMs === timing.startMs &&
-            word.endMs === timing.endMs
-          ) remaining.delete(word.id)
+          if (timing && word.startMs === timing.startMs && word.endMs === timing.endMs)
+            remaining.delete(word.id)
         })
       })
     })
@@ -461,7 +493,8 @@ export function createTimelineGestureSession(
     },
     captureLost(pointerId: number, eventTarget: EventTarget | null) {
       if (active?.pointerId !== pointerId) return false
-      const targetDisconnected = active.captureTarget instanceof Node && !active.captureTarget.isConnected
+      const targetDisconnected =
+        active.captureTarget instanceof Node && !active.captureTarget.isConnected
       if (eventTarget !== active.captureTarget && !targetDisconnected) return false
       return clear(pointerId, active.captureTarget) !== null
     },

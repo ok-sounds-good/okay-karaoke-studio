@@ -136,17 +136,24 @@ export function usePlayback({
 
   const getCurrentMs = useCallback(() => {
     const audio = audioRef.current
-    const liveMs = audio && Number.isFinite(audio.currentTime)
-      ? Math.round(audio.currentTime * 1000)
-      : currentMsRef.current
+    const liveMs =
+      audio && Number.isFinite(audio.currentTime)
+        ? Math.round(audio.currentTime * 1000)
+        : currentMsRef.current
     return Math.max(0, Math.min(audioDurationMs ?? durationMs, liveMs))
   }, [audioDurationMs, durationMs])
 
   const play = useCallback(() => setIsPlaying(true), [])
   const pause = useCallback(() => setIsPlaying(false), [])
   const toggle = useCallback(() => setIsPlaying((value) => !value), [])
-  const setRate = useCallback((value: number) => setRateState(Math.max(0.5, Math.min(1.5, value))), [])
-  const setVolume = useCallback((value: number) => setVolumeState(Math.max(0, Math.min(1, value))), [])
+  const setRate = useCallback(
+    (value: number) => setRateState(Math.max(0.5, Math.min(1.5, value))),
+    [],
+  )
+  const setVolume = useCallback(
+    (value: number) => setVolumeState(Math.max(0, Math.min(1, value))),
+    [],
+  )
 
   return {
     currentMs,

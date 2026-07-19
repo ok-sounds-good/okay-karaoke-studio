@@ -20,9 +20,10 @@ const fontAccess = require('../electron/local-font-access.cjs') as {
 
 function fixture(trustedOrigin = 'studio-app://app') {
   const webContents = {
-    getURL: () => trustedOrigin === 'studio-app://app'
-      ? 'studio-app://app/index.html'
-      : `${trustedOrigin}/index.html`,
+    getURL: () =>
+      trustedOrigin === 'studio-app://app'
+        ? 'studio-app://app/index.html'
+        : `${trustedOrigin}/index.html`,
   }
   const mainWindow = { isDestroyed: () => false, webContents }
   const policy = fontAccess.createLocalFontPermissionPolicy({
@@ -39,17 +40,15 @@ describe('local font permission policy', () => {
     (trustedOrigin) => {
       const { policy, requestingUrl, webContents } = fixture(trustedOrigin)
 
-      expect(policy.check(
-        webContents,
-        'local-fonts',
-        trustedOrigin,
-        { isMainFrame: true, requestingUrl },
-      )).toBe(true)
-      expect(policy.request(
-        webContents,
-        'local-fonts',
-        { isMainFrame: true, requestingUrl },
-      )).toBe(true)
+      expect(
+        policy.check(webContents, 'local-fonts', trustedOrigin, {
+          isMainFrame: true,
+          requestingUrl,
+        }),
+      ).toBe(true)
+      expect(policy.request(webContents, 'local-fonts', { isMainFrame: true, requestingUrl })).toBe(
+        true,
+      )
     },
   )
 
@@ -63,34 +62,38 @@ describe('local font permission policy', () => {
     ) => policy.check(contents, permission, origin, details)
 
     expect(check(webContents, 'camera')).toBe(false)
-    expect(check(webContents, 'local-fonts', trustedOrigin, {
-      isMainFrame: false,
-      requestingUrl,
-    })).toBe(false)
+    expect(
+      check(webContents, 'local-fonts', trustedOrigin, {
+        isMainFrame: false,
+        requestingUrl,
+      }),
+    ).toBe(false)
     expect(check(null)).toBe(false)
     expect(check({ getURL: () => requestingUrl })).toBe(false)
     expect(check(webContents, 'local-fonts', 'null')).toBe(false)
     expect(check(webContents, 'local-fonts', 'studio-app://attacker')).toBe(false)
-    expect(check(webContents, 'local-fonts', trustedOrigin, {
-      isMainFrame: true,
-      requestingUrl: 'studio-app://attacker/index.html',
-    })).toBe(false)
-    expect(policy.request(webContents, 'local-fonts', {
-      isMainFrame: true,
-    })).toBe(false)
+    expect(
+      check(webContents, 'local-fonts', trustedOrigin, {
+        isMainFrame: true,
+        requestingUrl: 'studio-app://attacker/index.html',
+      }),
+    ).toBe(false)
+    expect(
+      policy.request(webContents, 'local-fonts', {
+        isMainFrame: true,
+      }),
+    ).toBe(false)
     mainWindow.isDestroyed = () => true
     expect(check()).toBe(false)
   })
 
   it('matches registered origins without accepting credentials, ports, or lookalikes', () => {
-    expect(fontAccess.sameRegisteredRenderer(
-      'studio-app://app/index.html',
-      'studio-app://app',
-    )).toBe(true)
-    expect(fontAccess.sameRegisteredRenderer(
-      'http://127.0.0.1:5173/editor',
-      'http://127.0.0.1:5173',
-    )).toBe(true)
+    expect(
+      fontAccess.sameRegisteredRenderer('studio-app://app/index.html', 'studio-app://app'),
+    ).toBe(true)
+    expect(
+      fontAccess.sameRegisteredRenderer('http://127.0.0.1:5173/editor', 'http://127.0.0.1:5173'),
+    ).toBe(true)
     for (const value of [
       'studio-app://app.evil/index.html',
       'studio-app://user@app/index.html',

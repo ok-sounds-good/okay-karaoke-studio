@@ -4,10 +4,7 @@ const { performance } = require('node:perf_hooks')
 
 const DEFAULT_ERROR_CODE = 'FONT_ACCESS_SMOKE_FOCUS_FAILED'
 const DEADLINE_REACHED = Symbol('deadline reached')
-const ERROR_CODES = new Set([
-  DEFAULT_ERROR_CODE,
-  'VISUAL_SMOKE_FOCUS_FAILED',
-])
+const ERROR_CODES = new Set([DEFAULT_ERROR_CODE, 'VISUAL_SMOKE_FOCUS_FAILED'])
 
 function focusError(code) {
   const publicCode = ERROR_CODES.has(code) ? code : DEFAULT_ERROR_CODE
@@ -23,9 +20,12 @@ function validMilliseconds(value, positive) {
 function destroyedState(window) {
   try {
     if (
-      !window || typeof window.isDestroyed !== 'function' ||
-      !window.webContents || typeof window.webContents.isDestroyed !== 'function'
-    ) return 'unknown'
+      !window ||
+      typeof window.isDestroyed !== 'function' ||
+      !window.webContents ||
+      typeof window.webContents.isDestroyed !== 'function'
+    )
+      return 'unknown'
     return window.isDestroyed() === true || window.webContents.isDestroyed() === true
       ? 'destroyed'
       : 'alive'
@@ -73,7 +73,9 @@ async function focusSmokeWindow({
   }
   const remainingTime = monotonicClock(now, timeoutMs, code)
   let rejectDeadline
-  const deadline = new Promise((_, reject) => { rejectDeadline = reject })
+  const deadline = new Promise((_, reject) => {
+    rejectDeadline = reject
+  })
   let deadlineTimer
   try {
     deadlineTimer = setTimeoutImpl(() => rejectDeadline(DEADLINE_REACHED), timeoutMs)
@@ -94,9 +96,9 @@ async function focusSmokeWindow({
           await awaitOperation(() => window.show())
           await awaitOperation(() => window.focus())
           await awaitOperation(() => window.webContents.focus())
-          const rendererFocused = await awaitOperation(() => (
-            window.webContents.executeJavaScript('document.hasFocus() === true', true)
-          ))
+          const rendererFocused = await awaitOperation(() =>
+            window.webContents.executeJavaScript('document.hasFocus() === true', true),
+          )
           const finalState = destroyedState(window)
           if (finalState === 'alive' && window.isFocused() === true && rendererFocused === true) {
             return true

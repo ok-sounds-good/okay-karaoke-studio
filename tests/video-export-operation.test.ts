@@ -12,7 +12,9 @@ const GOLDEN_JSON = readFileSync(
   'utf8',
 ).trim()
 const REQUEST = {
-  projectJson: changedProject((project) => { (project.stageStyle as { background: { mode: string } }).background.mode = 'gradient' }),
+  projectJson: changedProject((project) => {
+    ;(project.stageStyle as { background: { mode: string } }).background.mode = 'gradient'
+  }),
   audioPath: '/fixtures/backing-track.wav',
   durationMs: 12_000,
   resolution: '720p',
@@ -49,7 +51,9 @@ const parseVideoExportProject = (json: string) => {
 }
 function deferred<T>() {
   let resolve = (_value: T) => {}
-  const promise = new Promise<T>((done) => { resolve = done })
+  const promise = new Promise<T>((done) => {
+    resolve = done
+  })
   return { promise, resolve }
 }
 
@@ -125,9 +129,24 @@ function expectClean(fixture: ReturnType<typeof harness>, sender: FakeSender) {
 describe('video export operation preflight and lifecycle', () => {
   it.each([
     ['malformed JSON', '{oops'],
-    ['nonzero schema', changedProject((project) => { project.schemaVersion = 1 })],
-    ['nonnumeric schema', changedProject((project) => { project.schemaVersion = '0' })],
-    ['malformed current project', changedProject((project) => { project.title = 42 })],
+    [
+      'nonzero schema',
+      changedProject((project) => {
+        project.schemaVersion = 1
+      }),
+    ],
+    [
+      'nonnumeric schema',
+      changedProject((project) => {
+        project.schemaVersion = '0'
+      }),
+    ],
+    [
+      'malformed current project',
+      changedProject((project) => {
+        project.title = 42
+      }),
+    ],
   ])('rejects %s before any export effect or lifecycle mutation', async (_label, projectJson) => {
     const fixture = harness()
     const sender = new FakeSender(7)
@@ -136,9 +155,13 @@ describe('video export operation preflight and lifecycle', () => {
 
     expect(fixture.events).toEqual(['parse'])
     for (const effect of [
-      fixture.createCommitState, fixture.prepareExport, fixture.selectDestination,
-      fixture.executeExport, fixture.sendProgress,
-    ]) expect(effect).not.toHaveBeenCalled()
+      fixture.createCommitState,
+      fixture.prepareExport,
+      fixture.selectDestination,
+      fixture.executeExport,
+      fixture.sendProgress,
+    ])
+      expect(effect).not.toHaveBeenCalled()
     expectClean(fixture, sender)
   })
 
@@ -249,9 +272,14 @@ describe('video export operation preflight and lifecycle', () => {
       'progress',
     ])
     for (const effect of [
-      fixture.createCommitState, fixture.prepareExport, fixture.selectDestination,
-      fixture.executeExport, fixture.sendProgress, sender.send,
-    ]) expect(effect).toHaveBeenCalledOnce()
+      fixture.createCommitState,
+      fixture.prepareExport,
+      fixture.selectDestination,
+      fixture.executeExport,
+      fixture.sendProgress,
+      sender.send,
+    ])
+      expect(effect).toHaveBeenCalledOnce()
     expect(fixture.latestCommitState().state).toBe('committed')
     expect(fixture.executeExport.mock.calls[0][0]).toMatchObject({
       authorization: { backgroundImage: null },
@@ -298,8 +326,9 @@ describe('video export operation preflight and lifecycle', () => {
     expect(operation.commitState.tryBeginCancellation()).toBe(true)
     operation.controller.abort()
     let lifecycleFinished = false
-    const lifecycleCancellation = fixture.coordinator.abortActiveExport()
-      .then(() => { lifecycleFinished = true })
+    const lifecycleCancellation = fixture.coordinator.abortActiveExport().then(() => {
+      lifecycleFinished = true
+    })
     await Promise.resolve()
     expect(lifecycleFinished).toBe(false)
     preparation.resolve('/tools/ffmpeg')

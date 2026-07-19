@@ -216,8 +216,10 @@ function renderDocument(options) {
   positiveDimension(height, 'Render height')
   const scaleX = width / STAGE_LAYOUT.stage.widthPx
   const scaleY = height / STAGE_LAYOUT.stage.heightPx
-  const runtimeSource = `(${installKaraokeRuntime.toString()})()`
-    .replace(/<\/script/giu, '<\\/script')
+  const runtimeSource = `(${installKaraokeRuntime.toString()})()`.replace(
+    /<\/script/giu,
+    '<\\/script',
+  )
   return `<!doctype html>
 <html>
   <head>
@@ -267,8 +269,10 @@ function frameInvocation(state, sequence) {
   }
   const payload = encodeJavaScriptValue(state, 'Frame state')
   const render = `window.renderKaraokeFrame(${decodedValueExpression(payload)},${sequence})`
-  return `(async()=>{const result=${render};await new Promise(resolve=>requestAnimationFrame(` +
+  return (
+    `(async()=>{const result=${render};await new Promise(resolve=>requestAnimationFrame(` +
     `()=>requestAnimationFrame(resolve)));return result})()`
+  )
 }
 
 function assetInvocation(runtime) {

@@ -1,13 +1,5 @@
 import { createRequire } from 'node:module'
-import {
-  mkdir,
-  mkdtemp,
-  readFile,
-  rename,
-  rm,
-  symlink,
-  writeFile,
-} from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, win32 } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -15,10 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 const require = createRequire(import.meta.url)
 const profiles = require('../electron/smoke-profile.cjs') as {
   OWNER_FILE: string
-  createOwnedSmokeProfile(
-    prefix: string,
-    options?: Record<string, unknown>,
-  ): Promise<SmokeProfile>
+  createOwnedSmokeProfile(prefix: string, options?: Record<string, unknown>): Promise<SmokeProfile>
   decodeProfileIdentity(identity: string, code: string): SmokeProfile['identity']
   pathsAreSeparate(left: string, right: string, pathApi?: typeof win32): boolean
   validateOwnedSmokeProfile(
@@ -42,9 +31,11 @@ interface SmokeProfile {
 const temporaryDirectories: string[] = []
 
 afterEach(async () => {
-  await Promise.all(temporaryDirectories.splice(0).map((directory) => (
-    rm(directory, { recursive: true, force: true })
-  )))
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
+  )
 })
 
 async function temporaryRoot(prefix: string) {
@@ -96,10 +87,9 @@ describe('smoke profile identity', () => {
       dev: '9007199254740993',
       ino: '18014398509481987',
     })
-    expect(profiles.decodeProfileIdentity(
-      profile.serializedIdentity,
-      'PROFILE_INVALID',
-    )).toEqual(profile.identity)
+    expect(profiles.decodeProfileIdentity(profile.serializedIdentity, 'PROFILE_INVALID')).toEqual(
+      profile.identity,
+    )
   })
 
   it('validates the exact mkdtemp identity and deliberately retains it', async () => {
@@ -107,12 +97,14 @@ describe('smoke profile identity', () => {
     const defaultProfile = await temporaryRoot('oks-default-profile-')
     const profile = await profiles.createOwnedSmokeProfile('owned-', { temporaryRoot: root })
 
-    expect(profiles.validateOwnedSmokeProfile(
-      profile.path,
-      defaultProfile,
-      profile.serializedIdentity,
-      'PROFILE_INVALID',
-    )).toBe(profile.path)
+    expect(
+      profiles.validateOwnedSmokeProfile(
+        profile.path,
+        defaultProfile,
+        profile.serializedIdentity,
+        'PROFILE_INVALID',
+      ),
+    ).toBe(profile.path)
     await expect(profiles.verifyRetainedSmokeProfile(profile)).resolves.toEqual({ retained: true })
     expect(await readFile(join(profile.path, profiles.OWNER_FILE), 'utf8')).toContain(
       profile.identity.token,
@@ -125,12 +117,14 @@ describe('smoke profile identity', () => {
       temporaryRoot: defaultProfile,
     })
 
-    expect(() => profiles.validateOwnedSmokeProfile(
-      profile.path,
-      defaultProfile,
-      profile.serializedIdentity,
-      'PROFILE_INVALID',
-    )).toThrow('PROFILE_INVALID')
+    expect(() =>
+      profiles.validateOwnedSmokeProfile(
+        profile.path,
+        defaultProfile,
+        profile.serializedIdentity,
+        'PROFILE_INVALID',
+      ),
+    ).toThrow('PROFILE_INVALID')
   })
 
   it('rejects a symlink or junction even when it reaches the original identity', async () => {
@@ -141,12 +135,14 @@ describe('smoke profile identity', () => {
     await rename(profile.path, displaced)
     await symlink(displaced, profile.path, process.platform === 'win32' ? 'junction' : 'dir')
 
-    expect(() => profiles.validateOwnedSmokeProfile(
-      profile.path,
-      defaultProfile,
-      profile.serializedIdentity,
-      'PROFILE_INVALID',
-    )).toThrow('PROFILE_INVALID')
+    expect(() =>
+      profiles.validateOwnedSmokeProfile(
+        profile.path,
+        defaultProfile,
+        profile.serializedIdentity,
+        'PROFILE_INVALID',
+      ),
+    ).toThrow('PROFILE_INVALID')
   })
 
   it('rejects a replacement directory that copied the private owner token', async () => {
@@ -161,12 +157,14 @@ describe('smoke profile identity', () => {
       `${JSON.stringify({ token: profile.identity.token })}\n`,
     )
 
-    expect(() => profiles.validateOwnedSmokeProfile(
-      profile.path,
-      defaultProfile,
-      profile.serializedIdentity,
-      'PROFILE_INVALID',
-    )).toThrow('PROFILE_INVALID')
+    expect(() =>
+      profiles.validateOwnedSmokeProfile(
+        profile.path,
+        defaultProfile,
+        profile.serializedIdentity,
+        'PROFILE_INVALID',
+      ),
+    ).toThrow('PROFILE_INVALID')
   })
 
   it('never removes a directory or symlink swapped in before retention verification', async () => {
@@ -174,13 +172,15 @@ describe('smoke profile identity', () => {
     const profile = await profiles.createOwnedSmokeProfile('owned-', { temporaryRoot: root })
     const displaced = join(root, 'displaced')
 
-    await expect(profiles.verifyRetainedSmokeProfile(profile, {
-      beforeIdentityCheck: async () => {
-        await rename(profile.path, displaced)
-        await mkdir(profile.path)
-        await writeFile(join(profile.path, 'racer-sentinel'), 'preserve racer')
-      },
-    })).rejects.toThrow('SMOKE_PROFILE_IDENTITY_MISMATCH')
+    await expect(
+      profiles.verifyRetainedSmokeProfile(profile, {
+        beforeIdentityCheck: async () => {
+          await rename(profile.path, displaced)
+          await mkdir(profile.path)
+          await writeFile(join(profile.path, 'racer-sentinel'), 'preserve racer')
+        },
+      }),
+    ).rejects.toThrow('SMOKE_PROFILE_IDENTITY_MISMATCH')
     expect(await readFile(join(profile.path, 'racer-sentinel'), 'utf8')).toBe('preserve racer')
     expect(await readFile(join(displaced, profiles.OWNER_FILE), 'utf8')).toContain(
       profile.identity.token,

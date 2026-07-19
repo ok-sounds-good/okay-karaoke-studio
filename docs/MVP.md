@@ -375,86 +375,86 @@ Karaoke Studio identity.
 
 - [ ] The user makes and accepts a karaoke video for a new song using the Studio.
 - [x] Launch and **New Project** start with a clean slate; the development demo is
-  never introduced implicitly.
+      never introduced implicitly.
 - [x] The primary journey can be completed without leaving the main window; the
-  Sync Focus replaces Live Preview only while synchronization is armed.
+      Sync Focus replaces Live Preview only while synchronization is armed.
 - [x] The main workspace has no persistent Word Map or lyric list; its single
-  **Edit text** action lives in Live Preview (or its Sync Focus replacement),
-  not in Lyric Timing, and transactionally applies or cancels lyric edits.
+      **Edit text** action lives in Live Preview (or its Sync Focus replacement),
+      not in Lyric Timing, and transactionally applies or cancels lyric edits.
 - [x] The current v0 project format round trips every project field and linked
-  path without loss, while every nonzero or nonnumeric `schemaVersion` fails
-  with the generic unsupported-format error and no partial load state.
+      path without loss, while every nonzero or nonnumeric `schemaVersion` fails
+      with the generic unsupported-format error and no partial load state.
 - [x] Lyric Timing start, clear-all, and clear-after-cursor actions operate on
-  the active track without deleting lyrics.
+      the active track without deleting lyrics.
 - [x] Bare Space times words only while synchronization is armed; Shift+Space
-  controls playback.
+      controls playback.
 - [x] Space onsets backfill preceding same-line word ends, holding the final word
-  extends that line's final duration, and taps before lyric time `0:00` are
-  ignored.
+      extends that line's final duration, and taps before lyric time `0:00` are
+      ignored.
 - [x] One synchronization session is one undoable history step; Lyric Timing
-  selection and correction behaviors remain available afterward.
+      selection and correction behaviors remain available afterward.
 - [x] Command/Ctrl+A and marquee selection select the intended active-track words
-  without selecting page text.
+      without selecting page text.
 - [x] Non-overlapping lead-track timing blocks share one chronological baseline;
-  label lanes may stagger while full word labels remain readable.
+      label lanes may stagger while full word labels remain readable.
 - [x] Sync capture, block movement, and edge resizing cannot cross the preceding
-  or following timed word in lyric order, including across line boundaries.
+      or following timed word in lyric order, including across line boundaries.
 - [x] Timeline navigation, transport Stop, and hover help are discoverable and
-  behave as labeled.
+      behave as labeled.
 - [x] Live Preview and MP4 show the persisted 1-to-5 line count with matching
-  Clear/Scroll behavior, no miniature upcoming line, and no blending across
-  blank-row section boundaries.
+      Clear/Scroll behavior, no miniature upcoming line, and no blending across
+      blank-row section boundaries.
 - [x] Live Preview and MP4 use the same per-word timing, show no repeated singer
-  or track label above lyric lines, and add no automatic Instrumental treatment
-  between sections.
+      or track label above lyric lines, and add no automatic Instrumental treatment
+      between sections.
 - [ ] The project can choose a solid, gradient, or linked-image background and
-  can configure or disable the Stage frame, while title-card, footer, and frame
-  typography remain independently configurable.
+      can configure or disable the Stage frame, while title-card, footer, and frame
+      typography remain independently configurable.
 - [ ] The searchable font combobox reliably lists installed typefaces on each
-  supported system, renders visible options in their own fonts, exposes only
-  supported face traits plus an enumerated size list, and remains usable with a
-  large catalog by loading visible choices incrementally.
+      supported system, renders visible options in their own fonts, exposes only
+      supported face traits plus an enumerated size list, and remains usable with a
+      large catalog by loading visible choices incrementally.
 - [ ] Font editing switches Live Preview into a target-aware fixed-stage design
-  mode that shows the selected face, traits, and size relative to the video
-  frame, and produces the same resolved font or visible fallback warning in MP4
-  output without a separate oversized control-panel specimen.
+      mode that shows the selected face, traits, and size relative to the video
+      frame, and produces the same resolved font or visible fallback warning in MP4
+      output without a separate oversized control-panel specimen.
 - [ ] Project lyric defaults and vocal overrides produce matching typeface,
-  style, size, unsung color, sung color, and horizontal alignment in Live
-  Preview and MP4 output.
+      style, size, unsung color, sung color, and horizontal alignment in Live
+      Preview and MP4 output.
 - [ ] Preview time controls line eligibility, and the built-in sync aid appears
-  only on the first line of a blank-row-separated section when at least its
-  configured minimum lead time is available.
+      only on the first line of a blank-row-separated section when at least its
+      configured minimum lead time is available.
 - [ ] Named style templates preserve every supported creator preference,
-  including the linked background-image path, and applying one leaves title,
-  artist, audio, lyrics, section separators, word timing, global offset, and
-  vocal-track identity unchanged.
+      including the linked background-image path, and applying one leaves title,
+      artist, audio, lyrics, section separators, word timing, global offset, and
+      vocal-track identity unchanged.
 - [ ] Style-template create, apply, rename, and delete behavior persists across
-  application restarts; missing linked images remain explicit and block MP4
-  export, while missing fonts remain explicit and use the same deterministic
-  Preview/MP4 fallback as project-loaded settings.
+      application restarts; missing linked images remain explicit and block MP4
+      export, while missing fonts remain explicit and use the same deterministic
+      Preview/MP4 fallback as project-loaded settings.
 - [x] Timeline movement and resize operations immediately affect the Live Preview
-  when it is mounted outside armed synchronization.
+      when it is mounted outside armed synchronization.
 - [x] LRC and ASS exports contain monotonic, non-negative timing.
 - [x] Undo and redo cover lyric replacement, timing edits, and timing clears.
 - [ ] Required tests, builds, packages, and platform CI are green for the final
-  acceptance candidate.
+      acceptance candidate.
 - [ ] A separately initiated Windows x64 acceptance run produces an unsigned
       NSIS installer and unpacked app, launch-smokes the packaged app, and passes
       the applicable font, visual, project, and H.264/AAC media gates without
       bundling FFmpeg by default.
 - [ ] The inspector has no decorative **Document / Project** header row, and
-  **Style** is available beside the Okay Karaoke Studio identity in the
-  application header.
+      **Style** is available beside the Okay Karaoke Studio identity in the
+      application header.
 - [x] The repository's public-distribution license is GNU GPL v3.0 or later
       (`GPL-3.0-or-later`).
 - [ ] The user decides whether FFmpeg remains externally installed or is
       redistributed with a documented compatible build and compliance plan.
 - [ ] A linked-audio project renders synchronized H.264/AAC MP4 lyric frames at
-  every supported resolution and at 30 or 60 fps; a new export defaults to
-  720p/30.
+      every supported resolution and at 30 or 60 fps; a new export defaults to
+      720p/30.
 - [x] Cancelling an active MP4 export from its dialog, application close, or quit
-  requires confirmation and preserves a UUID-named partial file beside the
-  chosen destination, while an ordinary export failure leaves the destination
-  safe.
+      requires confirmation and preserves a UUID-named partial file beside the
+      chosen destination, while an ordinary export failure leaves the destination
+      safe.
 - [ ] The final UI is visually checked at the working desktop size and the minimum
-  supported 1280 × 720 window.
+      supported 1280 × 720 window.

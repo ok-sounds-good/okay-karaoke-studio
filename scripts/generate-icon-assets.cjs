@@ -65,7 +65,8 @@ function renderIcon(sourceUrl, size, sourceInsetRatio, cornerRadiusRatio) {
       context.drawImage(image, inset, inset, sourceSize, sourceSize, 0, 0, size, size)
 
       const cornerAlpha = context.getImageData(0, 0, 1, 1).data[3]
-      const centerAlpha = context.getImageData(Math.floor(size / 2), Math.floor(size / 2), 1, 1).data[3]
+      const centerAlpha = context.getImageData(Math.floor(size / 2), Math.floor(size / 2), 1, 1)
+        .data[3]
       if (cornerAlpha !== 0 || centerAlpha !== 255) {
         reject(new Error(`Invalid icon alpha coverage at ${size}px.`))
         return
@@ -143,7 +144,8 @@ async function main() {
   }
 }
 
-app.whenReady()
+app
+  .whenReady()
   .then(main)
   .then(() => app.quit())
   .catch((error) => {

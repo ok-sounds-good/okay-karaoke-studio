@@ -74,9 +74,14 @@ function findAction(root: ReactNode, label: string): ReactElement<ActionElementP
 
 function cssContrast(foreground: string, background: string) {
   const luminance = (value: string) => {
-    const normalized = value.length === 4
-      ? value.slice(1).split('').map((digit) => digit.repeat(2)).join('')
-      : value.slice(1)
+    const normalized =
+      value.length === 4
+        ? value
+            .slice(1)
+            .split('')
+            .map((digit) => digit.repeat(2))
+            .join('')
+        : value.slice(1)
     const [red, green, blue] = normalized.match(/.{2}/g)!.map((channel) => {
       const srgb = Number.parseInt(channel, 16) / 255
       return srgb <= 0.04045 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4
@@ -98,7 +103,10 @@ describe('offset-aware renderer state', () => {
 
   it('uses lyric time for preview progress while retaining the playback clock', () => {
     const project = offsetProject()
-    Object.assign(project.stageStyle.background, { mode: 'image', imagePath: '/fixtures/background.png' })
+    Object.assign(project.stageStyle.background, {
+      mode: 'image',
+      imagePath: '/fixtures/background.png',
+    })
     const markup = renderToStaticMarkup(
       <KaraokePreview
         project={project}
@@ -150,17 +158,19 @@ describe('offset-aware renderer state', () => {
 
   it('renders the lyric editor safely when a valid project has no vocal tracks', () => {
     const project = createProject({ tracks: [] })
-    const markup = renderToStaticMarkup(<LyricsPanel
-      tracks={project.tracks}
-      stageStyle={project.stageStyle}
-      activeTrackId=""
-      lyricMs={0}
-      selectedWordIds={new Set()}
-      syncWordId={null}
-      onSelectTrack={() => undefined}
-      onSelectWord={() => undefined}
-      onEditLyrics={() => undefined}
-    />)
+    const markup = renderToStaticMarkup(
+      <LyricsPanel
+        tracks={project.tracks}
+        stageStyle={project.stageStyle}
+        activeTrackId=""
+        lyricMs={0}
+        selectedWordIds={new Set()}
+        syncWordId={null}
+        onSelectTrack={() => undefined}
+        onSelectWord={() => undefined}
+        onEditLyrics={() => undefined}
+      />,
+    )
 
     expect(markup).toBe('')
   })
@@ -247,9 +257,7 @@ describe('Lyric Timing layout and selection geometry', () => {
     const firstLayout = layout.lines.find((line) => line.line.id === 'first-line')!
     const secondLayout = layout.lines.find((line) => line.line.id === 'second-line')!
     const longLabel = firstLayout.words.find((word) => word.word.id === 'long-label')!
-    const overlappingBlock = firstLayout.words.find(
-      (word) => word.word.id === 'overlapping-block',
-    )!
+    const overlappingBlock = firstLayout.words.find((word) => word.word.id === 'overlapping-block')!
 
     expect(longLabel.width).toBe(5)
     expect(longLabel.labelWidth).toBeGreaterThan(longLabel.width)
@@ -270,14 +278,8 @@ describe('Lyric Timing layout and selection geometry', () => {
         createLyricWord('Four', { id: 'true-overlap', startMs: 14_800, endMs: 14_929 }),
       ],
     })
-    const layout = buildTimelineTrackLayout(
-      createVocalTrack({ id: 'lead', lines: [line] }),
-      0,
-      72,
-    )
-    const words = Object.fromEntries(
-      layout.lines[0].words.map((word) => [word.word.id, word]),
-    )
+    const layout = buildTimelineTrackLayout(createVocalTrack({ id: 'lead', lines: [line] }), 0, 72)
+    const words = Object.fromEntries(layout.lines[0].words.map((word) => [word.word.id, word]))
 
     expect(words['edge-first'].top).toBe(words['edge-second'].top)
     expect(words['edge-second'].top).toBe(words['edge-third'].top)
@@ -302,7 +304,9 @@ describe('Lyric Timing layout and selection geometry', () => {
     const identity = readFileSync(new URL('../src/identity.css', import.meta.url), 'utf8')
     const colorFor = (selector: string) => {
       const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      const match = identity.match(new RegExp(`${escaped}\\s*\\{[^}]*color:\\s*(#[\\da-f]{3,6})`, 'i'))
+      const match = identity.match(
+        new RegExp(`${escaped}\\s*\\{[^}]*color:\\s*(#[\\da-f]{3,6})`, 'i'),
+      )
       expect(match, `Missing explicit color for ${selector}`).not.toBeNull()
       return match![1]
     }
@@ -342,12 +346,14 @@ describe('Lyric Timing layout and selection geometry', () => {
     )
     const first = layout.lines[0].words[0]
 
-    expect(timelineWordIdsInRect(layout, {
-      left: first.left + 8,
-      top: first.top + 8,
-      right: first.left + 2,
-      bottom: first.top + 2,
-    })).toEqual(new Set(['first']))
+    expect(
+      timelineWordIdsInRect(layout, {
+        left: first.left + 8,
+        top: first.top + 8,
+        right: first.left + 2,
+        bottom: first.top + 2,
+      }),
+    ).toEqual(new Set(['first']))
   })
 })
 
@@ -413,11 +419,14 @@ describe('active-track timing clearing', () => {
     expect(cleared.lines[1]).toMatchObject({ startMs: 4_500, endMs: 5_500 })
     expect(cleared.lines[2]).toMatchObject({ startMs: null, endMs: null })
     expect(cleared.lines[3]).toMatchObject({ startMs: null, endMs: 6_500 })
-    expect(clearTrackTimingFrom(track, -500).lines.every((line) => (
-      line.startMs === null && line.endMs === null && line.words.every((word) => (
-        word.startMs === null && word.endMs === null
-      ))
-    ))).toBe(true)
+    expect(
+      clearTrackTimingFrom(track, -500).lines.every(
+        (line) =>
+          line.startMs === null &&
+          line.endMs === null &&
+          line.words.every((word) => word.startMs === null && word.endMs === null),
+      ),
+    ).toBe(true)
   })
 })
 
@@ -431,10 +440,12 @@ describe('tap-sync cursor selection', () => {
 
     expect(syncWordIndexFromLyricTime(words, 5_000)).toBe(1)
     expect(syncWordIndexFromLyricTime(words, 12_000)).toBe(-1)
-    expect(syncWordIndexFromLyricTime(
-      [...words, createLyricWord('Tail', { startMs: null, endMs: null })],
-      12_000,
-    )).toBe(3)
+    expect(
+      syncWordIndexFromLyricTime(
+        [...words, createLyricWord('Tail', { startMs: null, endMs: null })],
+        12_000,
+      ),
+    ).toBe(3)
   })
 })
 
@@ -463,7 +474,9 @@ describe('first-time workflow', () => {
     expect(markup).toContain('Correct timing in the Lyric Timing area')
     expect(markup).toContain('Verify in Live Preview')
     expect(markup).toContain('Save and export')
-    expect(markup).toContain('system file pickers only appear when you choose a file or destination')
+    expect(markup).toContain(
+      'system file pickers only appear when you choose a file or destination',
+    )
   })
 
   it('routes every guide button to its assigned interaction handler', () => {
@@ -650,29 +663,31 @@ describe('live timeline timing drafts', () => {
   function neighborBoundProject() {
     return createProject({
       durationMs: 10_000,
-      tracks: [createVocalTrack({
-        id: 'lead',
-        lines: [
-          createLyricLine('Before Moving', {
-            id: 'first-line',
-            startMs: 1_000,
-            endMs: 2_200,
-            words: [
-              createLyricWord('Before', { id: 'before', startMs: 1_000, endMs: 1_500 }),
-              createLyricWord('Moving', { id: 'moving', startMs: 2_000, endMs: 2_200 }),
-            ],
-          }),
-          createLyricLine('Together After', {
-            id: 'second-line',
-            startMs: 2_400,
-            endMs: 2_900,
-            words: [
-              createLyricWord('Together', { id: 'together', startMs: 2_400, endMs: 2_600 }),
-              createLyricWord('After', { id: 'after', startMs: 2_700, endMs: 2_900 }),
-            ],
-          }),
-        ],
-      })],
+      tracks: [
+        createVocalTrack({
+          id: 'lead',
+          lines: [
+            createLyricLine('Before Moving', {
+              id: 'first-line',
+              startMs: 1_000,
+              endMs: 2_200,
+              words: [
+                createLyricWord('Before', { id: 'before', startMs: 1_000, endMs: 1_500 }),
+                createLyricWord('Moving', { id: 'moving', startMs: 2_000, endMs: 2_200 }),
+              ],
+            }),
+            createLyricLine('Together After', {
+              id: 'second-line',
+              startMs: 2_400,
+              endMs: 2_900,
+              words: [
+                createLyricWord('Together', { id: 'together', startMs: 2_400, endMs: 2_600 }),
+                createLyricWord('After', { id: 'after', startMs: 2_700, endMs: 2_900 }),
+              ],
+            }),
+          ],
+        }),
+      ],
     })
   }
 
@@ -743,23 +758,30 @@ describe('live timeline timing drafts', () => {
   })
 
   it('applies positive and negative offsets to the project-duration move ceiling', () => {
-    const projectAtOffset = (offsetMs: number) => createProject({
-      durationMs: 1_000,
-      offsetMs,
-      tracks: [createVocalTrack({
-        id: `lead-${offsetMs}`,
-        lines: [createLyricLine('Bounded', {
-          id: `line-${offsetMs}`,
-          startMs: 0,
-          endMs: 100,
-          words: [createLyricWord('Bounded', {
-            id: `word-${offsetMs}`,
-            startMs: 0,
-            endMs: 100,
-          })],
-        })],
-      })],
-    })
+    const projectAtOffset = (offsetMs: number) =>
+      createProject({
+        durationMs: 1_000,
+        offsetMs,
+        tracks: [
+          createVocalTrack({
+            id: `lead-${offsetMs}`,
+            lines: [
+              createLyricLine('Bounded', {
+                id: `line-${offsetMs}`,
+                startMs: 0,
+                endMs: 100,
+                words: [
+                  createLyricWord('Bounded', {
+                    id: `word-${offsetMs}`,
+                    startMs: 0,
+                    endMs: 100,
+                  }),
+                ],
+              }),
+            ],
+          }),
+        ],
+      })
 
     const positive = projectAtOffset(100)
     const negative = projectAtOffset(-100)
@@ -792,12 +814,8 @@ describe('live timeline timing drafts', () => {
     }
     const movePreview = applyTimingDraft(project, timingDraftForGesture(project, moveGesture))
     const moveCommit = shiftWords(project, moveGesture.ids, moveGesture.deltaMs)
-    expect(movePreview.tracks[0].lines[0].words[1]).toEqual(
-      moveCommit.tracks[0].lines[0].words[1],
-    )
-    expect(movePreview.tracks[0].lines[1].words[0]).toEqual(
-      moveCommit.tracks[0].lines[1].words[0],
-    )
+    expect(movePreview.tracks[0].lines[0].words[1]).toEqual(moveCommit.tracks[0].lines[0].words[1])
+    expect(movePreview.tracks[0].lines[1].words[0]).toEqual(moveCommit.tracks[0].lines[1].words[0])
 
     const resizeGesture = {
       wordId: 'together',
@@ -833,17 +851,19 @@ describe('live timeline timing drafts', () => {
     }
     const session = createTimelineGestureSession(() => context)
     const captureTarget = new EventTarget()
-    expect(session.begin({
-      wordId: 'move',
-      mode: 'move',
-      originalStart: 1_000,
-      originalEnd: 2_000,
-      ids: new Set(['move', 'resize']),
-      deltaMs: 0,
-      clientX: 100,
-      pointerId: 41,
-      captureTarget,
-    })).toBe(true)
+    expect(
+      session.begin({
+        wordId: 'move',
+        mode: 'move',
+        originalStart: 1_000,
+        originalEnd: 2_000,
+        ids: new Set(['move', 'resize']),
+        deltaMs: 0,
+        clientX: 100,
+        pointerId: 41,
+        captureTarget,
+      }),
+    ).toBe(true)
     expect(session.move(41, captureTarget, 600)).toBe(true)
 
     const previewProject = projectForTimingPreview(project, 7, activeDraft)
@@ -885,40 +905,47 @@ describe('live timeline timing drafts', () => {
     const context = {
       project,
       pixelsPerSecond: 1_000,
-      onTimingDraftChange: (draft: ReturnType<typeof timingDraftForGesture> | null) => { currentDraft = draft },
+      onTimingDraftChange: (draft: ReturnType<typeof timingDraftForGesture> | null) => {
+        currentDraft = draft
+      },
       onShiftWords: () => undefined,
-      onResizeWord: (_wordId: string, startMs: number, endMs: number) => resizeCommits.push({ startMs, endMs }),
+      onResizeWord: (_wordId: string, startMs: number, endMs: number) =>
+        resizeCommits.push({ startMs, endMs }),
     }
     const session = createTimelineGestureSession(() => context)
     const startTarget = new EventTarget()
-    expect(session.begin({
-      wordId: 'move',
-      mode: 'start',
-      originalStart: 1_000,
-      originalEnd: 2_000,
-      ids: new Set(['move']),
-      deltaMs: 0,
-      clientX: 100,
-      pointerId: 51,
-      captureTarget: startTarget,
-    })).toBe(true)
+    expect(
+      session.begin({
+        wordId: 'move',
+        mode: 'start',
+        originalStart: 1_000,
+        originalEnd: 2_000,
+        ids: new Set(['move']),
+        deltaMs: 0,
+        clientX: 100,
+        pointerId: 51,
+        captureTarget: startTarget,
+      }),
+    ).toBe(true)
     expect(session.move(51, startTarget, 2_100)).toBe(true)
     expect(currentDraft!.get('move')).toEqual({ startMs: 1_920, endMs: 2_000 })
     expect(applyTimingDraft(project, currentDraft!).tracks[0].lines[0].startMs).toBe(1_920)
     expect(session.finish(51, startTarget)).toBe(true)
 
     const endTarget = new EventTarget()
-    expect(session.begin({
-      wordId: 'move',
-      mode: 'end',
-      originalStart: 1_000,
-      originalEnd: 2_000,
-      ids: new Set(['move']),
-      deltaMs: 0,
-      clientX: 2_100,
-      pointerId: 52,
-      captureTarget: endTarget,
-    })).toBe(true)
+    expect(
+      session.begin({
+        wordId: 'move',
+        mode: 'end',
+        originalStart: 1_000,
+        originalEnd: 2_000,
+        ids: new Set(['move']),
+        deltaMs: 0,
+        clientX: 2_100,
+        pointerId: 52,
+        captureTarget: endTarget,
+      }),
+    ).toBe(true)
     expect(session.move(52, endTarget, 100)).toBe(true)
     expect(currentDraft!.get('move')).toEqual({ startMs: 1_000, endMs: 1_080 })
     expect(session.finish(52, endTarget)).toBe(true)
@@ -971,7 +998,8 @@ describe('live timeline timing drafts', () => {
     const context = {
       project,
       pixelsPerSecond: 1_000,
-      onTimingDraftChange: (draft: ReturnType<typeof timingDraftForGesture> | null) => draftEvents.push(draft),
+      onTimingDraftChange: (draft: ReturnType<typeof timingDraftForGesture> | null) =>
+        draftEvents.push(draft),
       onShiftWords: (_ids: Set<string>, deltaMs: number) => shifts.push(deltaMs),
       onResizeWord: () => undefined,
     }
@@ -1025,17 +1053,19 @@ describe('live timeline timing drafts', () => {
     expect(patchWord(project, word.id, { startMs: word.startMs, endMs: word.endMs })).toBe(project)
     expect(patchWord(project, 'missing', { startMs: 100, endMs: 200 })).toBe(project)
     expect(project.tracks[0].lines[0]).toBe(line)
-    expect(session.begin({
-      wordId: word.id,
-      mode: 'start',
-      originalStart: word.startMs!,
-      originalEnd: word.endMs!,
-      ids: new Set([word.id]),
-      deltaMs: 0,
-      clientX: 100,
-      pointerId: 12,
-      captureTarget,
-    })).toBe(true)
+    expect(
+      session.begin({
+        wordId: word.id,
+        mode: 'start',
+        originalStart: word.startMs!,
+        originalEnd: word.endMs!,
+        ids: new Set([word.id]),
+        deltaMs: 0,
+        clientX: 100,
+        pointerId: 12,
+        captureTarget,
+      }),
+    ).toBe(true)
     expect(session.finish(12, captureTarget)).toBe(true)
     expect(resizeCommits).toEqual([])
   })

@@ -188,21 +188,23 @@ function PreviewLine({
 
 function SyncAidCue({ line, progress }: { line: StageFrameLine; progress: number }) {
   const cueRef = useRef<HTMLDivElement>(null)
-  const fallback = line.style.alignment === 'left' ? 128 : line.style.alignment === 'center' ? 960 : 1_792
+  const fallback =
+    line.style.alignment === 'left' ? 128 : line.style.alignment === 'center' ? 960 : 1_792
   const [leadingEdgePx, setLeadingEdgePx] = useState(fallback)
   const key = lineKey(line.trackId, line.id)
 
   useLayoutEffect(() => {
     const cue = cueRef.current
     const stage = cue?.closest<HTMLElement>('.karaoke-stage')
-    const text = [...(stage?.querySelectorAll<HTMLElement>('.stage-line__text') ?? [])]
-      .find((element) => element.dataset.syncLine === key)
+    const text = [...(stage?.querySelectorAll<HTMLElement>('.stage-line__text') ?? [])].find(
+      (element) => element.dataset.syncLine === key,
+    )
     if (!stage || !text) return
     const measure = () => {
       const stageRect = stage.getBoundingClientRect()
       const textRect = text.getBoundingClientRect()
       if (stageRect.width > 0) {
-        setLeadingEdgePx((textRect.left - stageRect.left) * 1_920 / stageRect.width)
+        setLeadingEdgePx(((textRect.left - stageRect.left) * 1_920) / stageRect.width)
       }
     }
     setLeadingEdgePx(fallback)
@@ -220,15 +222,25 @@ function SyncAidCue({ line, progress }: { line: StageFrameLine; progress: number
   }, [fallback, key])
 
   const position = syncAidPosition(leadingEdgePx)
-  return <div ref={cueRef} className="sync-aid" style={{
-    '--sync-brightness': syncAidBrightness(progress),
-    '--sync-color': line.style.sungColor,
-    '--sync-end': logicalStagePx(position.endLeftPx),
-    '--sync-progress': progress,
-    '--sync-start': logicalStagePx(position.startLeftPx),
-    '--sync-travel': logicalStagePx(position.travelPx),
-    '--sync-width': logicalStagePx(SYNC_AID_GEOMETRY.cueWidthPx),
-  } as CSSProperties}><i /></div>
+  return (
+    <div
+      ref={cueRef}
+      className="sync-aid"
+      style={
+        {
+          '--sync-brightness': syncAidBrightness(progress),
+          '--sync-color': line.style.sungColor,
+          '--sync-end': logicalStagePx(position.endLeftPx),
+          '--sync-progress': progress,
+          '--sync-start': logicalStagePx(position.startLeftPx),
+          '--sync-travel': logicalStagePx(position.travelPx),
+          '--sync-width': logicalStagePx(SYNC_AID_GEOMETRY.cueWidthPx),
+        } as CSSProperties
+      }
+    >
+      <i />
+    </div>
+  )
 }
 
 export function KaraokePreview({

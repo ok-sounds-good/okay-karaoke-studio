@@ -22,15 +22,14 @@
   --coral: #ff8a2b;
   --cyan: #9b78cf;
   --danger: #c8464d;
-  --shadow: 0 16px 38px rgba(76, 55, 101, .11);
+  --shadow: 0 16px 38px rgba(76, 55, 101, 0.11);
   --radius: 16px;
 }
 
 body {
   background:
-    radial-gradient(circle at 8% 0%, rgba(155, 120, 207, .14), transparent 27%),
-    radial-gradient(circle at 94% 100%, rgba(255, 138, 43, .1), transparent 24%),
-    var(--canvas);
+    radial-gradient(circle at 8% 0%, rgba(155, 120, 207, 0.14), transparent 27%),
+    radial-gradient(circle at 94% 100%, rgba(255, 138, 43, 0.1), transparent 24%), var(--canvas);
 }
 
 button:focus-visible,
@@ -53,14 +52,19 @@ select:focus-visible {
 .button,
 .icon-button {
   border-radius: 10px;
-  transition: border-color .15s ease, background .15s ease, color .15s ease, box-shadow .15s ease, transform .15s ease;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
 }
 
 .button--primary {
   border-color: var(--orange);
   background: var(--orange);
   color: #3c200e;
-  box-shadow: 0 7px 18px rgba(230, 111, 18, .18);
+  box-shadow: 0 7px 18px rgba(230, 111, 18, 0.18);
 }
 
 .button--primary:hover {
@@ -74,7 +78,7 @@ select:focus-visible {
   border-color: var(--line);
   background: #fff;
   color: var(--text-soft);
-  box-shadow: 0 2px 5px rgba(76, 55, 101, .05);
+  box-shadow: 0 2px 5px rgba(76, 55, 101, 0.05);
 }
 
 .button--secondary:hover,
@@ -99,7 +103,7 @@ select:focus-visible {
   place-items: center;
   border: 1px solid #d8c9e9;
   background: #aa8dde;
-  box-shadow: 0 7px 17px rgba(89, 62, 124, .18);
+  box-shadow: 0 7px 17px rgba(89, 62, 124, 0.18);
 }
 
 .logo-mark img {
@@ -111,8 +115,8 @@ select:focus-visible {
 
 .topbar {
   border-bottom-color: var(--line-soft);
-  background: rgba(255, 255, 255, .94);
-  box-shadow: 0 7px 22px rgba(76, 55, 101, .08);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 7px 22px rgba(76, 55, 101, 0.08);
   backdrop-filter: blur(14px);
 }
 
@@ -126,7 +130,7 @@ select:focus-visible {
 .topbar__document i,
 .status-pill--live i {
   background: var(--orange);
-  box-shadow: 0 0 0 3px rgba(255, 138, 43, .13);
+  box-shadow: 0 0 0 3px rgba(255, 138, 43, 0.13);
 }
 
 .validation-button {
@@ -148,8 +152,8 @@ select:focus-visible {
 
 .panel {
   border-color: var(--line-soft);
-  background: rgba(255, 255, 255, .96);
-  box-shadow: 0 9px 26px rgba(76, 55, 101, .08);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 9px 26px rgba(76, 55, 101, 0.08);
 }
 
 .panel-header {
@@ -161,7 +165,7 @@ select:focus-visible {
   border-color: #ded1ec;
   background: var(--purple-soft);
   color: var(--accent-soft);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .7);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7);
 }
 
 .panel-title h2 {
@@ -170,7 +174,7 @@ select:focus-visible {
 
 .inspector {
   background: #fbf9fc;
-  box-shadow: 10px 0 25px rgba(76, 55, 101, .06);
+  box-shadow: 10px 0 25px rgba(76, 55, 101, 0.06);
 }
 
 .inspector-section {
@@ -188,14 +192,14 @@ select:focus-visible {
   border-color: var(--control-line);
   background: #fff;
   color: var(--text);
-  box-shadow: inset 0 1px 2px rgba(76, 55, 101, .04);
+  box-shadow: inset 0 1px 2px rgba(76, 55, 101, 0.04);
 }
 
 .field input:focus,
 .raw-lyrics textarea:focus {
   border-color: var(--accent);
   background: #fff;
-  box-shadow: 0 0 0 3px rgba(155, 120, 207, .11);
+  box-shadow: 0 0 0 3px rgba(155, 120, 207, 0.11);
 }
 
 .field--inline em,
@@ -246,16 +250,18 @@ select:focus-visible {
 .vocal-track-card {
   border-color: #e1d7ea;
   background: #fff;
-  box-shadow: 0 2px 6px rgba(76, 55, 101, .035);
+  box-shadow: 0 2px 6px rgba(76, 55, 101, 0.035);
 }
 
 .vocal-track-card.is-active {
   border-color: #b89dd6;
   background: #f6f0fb;
-  box-shadow: inset 3px 0 0 var(--accent), 0 4px 12px rgba(86, 58, 119, .07);
+  box-shadow:
+    inset 3px 0 0 var(--accent),
+    0 4px 12px rgba(86, 58, 119, 0.07);
 }
 
-.vocal-track-card__top input[type="text"]:focus-visible,
+.vocal-track-card__top input[type='text']:focus-visible,
 .vocal-track-card__top input:not([type]):focus-visible {
   border-radius: 4px;
   outline: 2px solid var(--accent-soft);
@@ -286,8 +292,8 @@ select:focus-visible {
 
 .project-health,
 .export-readiness {
-  border-color: rgba(155, 120, 207, .28);
-  background: rgba(155, 120, 207, .08);
+  border-color: rgba(155, 120, 207, 0.28);
+  background: rgba(155, 120, 207, 0.08);
   color: var(--accent-soft);
 }
 
@@ -297,8 +303,8 @@ select:focus-visible {
 
 .project-health--warning,
 .export-readiness--warning {
-  border-color: rgba(255, 138, 43, .3);
-  background: rgba(255, 138, 43, .09);
+  border-color: rgba(255, 138, 43, 0.3);
+  background: rgba(255, 138, 43, 0.09);
 }
 
 .project-health--warning .project-health__score,
@@ -308,38 +314,35 @@ select:focus-visible {
 
 .unified-workspace {
   background:
-    linear-gradient(rgba(139, 112, 170, .055) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(139, 112, 170, .055) 1px, transparent 1px),
-    #f8f6fb;
+    linear-gradient(rgba(139, 112, 170, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(139, 112, 170, 0.055) 1px, transparent 1px), #f8f6fb;
   background-size: 24px 24px;
 }
 
 .karaoke-stage {
   --accent: #9b78cf;
   border-color: #6f5a86;
-  background:
-    linear-gradient(145deg, rgba(74, 48, 96, .42), rgba(24, 17, 32, .28)),
-    #21182d;
+  background: linear-gradient(145deg, rgba(74, 48, 96, 0.42), rgba(24, 17, 32, 0.28)), #21182d;
   box-shadow:
-    inset 0 0 70px rgba(12, 8, 17, .48),
-    0 4px 14px rgba(76, 55, 101, .12);
+    inset 0 0 70px rgba(12, 8, 17, 0.48),
+    0 4px 14px rgba(76, 55, 101, 0.12);
 }
 
 .karaoke-stage__glow--one {
-  background: radial-gradient(circle, rgba(155, 120, 207, .38), transparent 65%);
+  background: radial-gradient(circle, rgba(155, 120, 207, 0.38), transparent 65%);
 }
 
 .karaoke-stage__glow--two {
-  background: radial-gradient(circle, rgba(255, 138, 43, .22), transparent 65%);
+  background: radial-gradient(circle, rgba(255, 138, 43, 0.22), transparent 65%);
 }
 
 .karaoke-stage__safe-area {
-  border-color: rgba(235, 228, 242, .16);
+  border-color: rgba(235, 228, 242, 0.16);
 }
 
 .karaoke-stage__brand,
 .karaoke-stage__time {
-  color: rgba(248, 246, 251, .72);
+  color: rgba(248, 246, 251, 0.72);
 }
 
 .title-card > span {
@@ -351,7 +354,7 @@ select:focus-visible {
 }
 
 .title-card p {
-  color: rgba(235, 228, 242, .72);
+  color: rgba(235, 228, 242, 0.72);
 }
 
 .title-card i {
@@ -359,23 +362,23 @@ select:focus-visible {
 }
 
 .stage-word {
-  color: rgba(235, 228, 242, .38);
+  color: rgba(235, 228, 242, 0.38);
   background: linear-gradient(
     90deg,
     var(--track-color) var(--word-progress),
-    rgba(235, 228, 242, .38) var(--word-progress)
+    rgba(235, 228, 242, 0.38) var(--word-progress)
   );
   background-clip: text;
   -webkit-background-clip: text;
-  filter: drop-shadow(0 2px 7px rgba(12, 8, 17, .44));
+  filter: drop-shadow(0 2px 7px rgba(12, 8, 17, 0.44));
 }
 
 .karaoke-stage__footer {
-  color: rgba(248, 246, 251, .68);
+  color: rgba(248, 246, 251, 0.68);
 }
 
 .status-pill--live {
-  border-color: rgba(255, 138, 43, .32);
+  border-color: rgba(255, 138, 43, 0.32);
   background: var(--orange-soft);
   color: #a3470b;
 }
@@ -432,7 +435,7 @@ select:focus-visible {
 .sync-cue__line b.is-target.is-timed {
   border-color: #70469e;
   background: #70469e;
-  box-shadow: 0 0 0 3px rgba(112, 70, 158, .12);
+  box-shadow: 0 0 0 3px rgba(112, 70, 158, 0.12);
   color: #fff;
 }
 
@@ -474,8 +477,8 @@ select:focus-visible {
 }
 
 .lyric-line.is-active {
-  border-color: rgba(155, 120, 207, .3);
-  background: rgba(155, 120, 207, .08);
+  border-color: rgba(155, 120, 207, 0.3);
+  background: rgba(155, 120, 207, 0.08);
 }
 
 .lyric-line__meta > span:first-child,
@@ -507,7 +510,7 @@ select:focus-visible {
 
 .lyric-word.is-untimed {
   color: #a05f36;
-  text-decoration-color: rgba(255, 138, 43, .5);
+  text-decoration-color: rgba(255, 138, 43, 0.5);
 }
 
 .lyric-line__meta .untimed-label {
@@ -515,14 +518,14 @@ select:focus-visible {
 }
 
 .lyric-word.is-selected {
-  background: rgba(155, 120, 207, .13);
-  box-shadow: inset 0 0 0 1px rgba(155, 120, 207, .35);
+  background: rgba(155, 120, 207, 0.13);
+  box-shadow: inset 0 0 0 1px rgba(155, 120, 207, 0.35);
   color: var(--accent-soft);
 }
 
 .lyric-word.is-sync-target {
   background: var(--orange);
-  box-shadow: 0 0 0 3px rgba(255, 138, 43, .13);
+  box-shadow: 0 0 0 3px rgba(255, 138, 43, 0.13);
   color: #3c200e;
 }
 
@@ -543,7 +546,7 @@ select:focus-visible {
 .timeline-track-labels {
   border-right-color: #ddd2e8;
   background: #f6f2f9;
-  box-shadow: 7px 0 14px rgba(76, 55, 101, .05);
+  box-shadow: 7px 0 14px rgba(76, 55, 101, 0.05);
 }
 
 .timeline-label-spacer,
@@ -584,13 +587,15 @@ select:focus-visible {
 .timeline-waveform {
   border-bottom-color: #e1d8e9;
   background:
-    linear-gradient(90deg, rgba(137, 109, 171, .07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(137, 109, 171, 0.07) 1px, transparent 1px),
     linear-gradient(#faf8fc, #f3eef7);
-  background-size: 36px 100%, auto;
+  background-size:
+    36px 100%,
+    auto;
 }
 
 .timeline-waveform::after {
-  background: rgba(104, 80, 132, .12);
+  background: rgba(104, 80, 132, 0.12);
 }
 
 .timeline-waveform path {
@@ -598,23 +603,21 @@ select:focus-visible {
 }
 
 .waveform-played {
-  border-right-color: rgba(255, 138, 43, .65);
-  background: rgba(255, 138, 43, .08);
+  border-right-color: rgba(255, 138, 43, 0.65);
+  background: rgba(255, 138, 43, 0.08);
 }
 
 .timeline-lane,
 .timeline-lane.is-active {
   border-bottom-color: #e6deec;
-  background:
-    linear-gradient(90deg, rgba(137, 109, 171, .055) 1px, transparent 1px),
-    #fff;
-  background-size: 36px 100%, auto;
+  background: linear-gradient(90deg, rgba(137, 109, 171, 0.055) 1px, transparent 1px), #fff;
+  background-size:
+    36px 100%,
+    auto;
 }
 
 .timeline-lane.is-active {
-  background:
-    linear-gradient(90deg, rgba(137, 109, 171, .06) 1px, transparent 1px),
-    #faf6fd;
+  background: linear-gradient(90deg, rgba(137, 109, 171, 0.06) 1px, transparent 1px), #faf6fd;
 }
 
 .timeline-line-label {
@@ -634,7 +637,7 @@ select:focus-visible {
 .timeline-word {
   border-color: color-mix(in srgb, var(--track-color) 55%, #d4c8df);
   background: color-mix(in srgb, var(--track-color) 17%, white);
-  box-shadow: 0 3px 8px rgba(76, 55, 101, .1);
+  box-shadow: 0 3px 8px rgba(76, 55, 101, 0.1);
   color: var(--text);
 }
 
@@ -644,7 +647,9 @@ select:focus-visible {
 
 .timeline-word.is-selected {
   border-color: #fff;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--track-color) 38%, transparent), 0 5px 14px rgba(76, 55, 101, .14);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--track-color) 38%, transparent),
+    0 5px 14px rgba(76, 55, 101, 0.14);
 }
 
 .timeline-word__handle {
@@ -658,7 +663,9 @@ select:focus-visible {
 }
 
 @keyframes sync-pulse {
-  50% { box-shadow: 0 0 0 4px rgba(255, 138, 43, .13); }
+  50% {
+    box-shadow: 0 0 0 4px rgba(255, 138, 43, 0.13);
+  }
 }
 
 .timeline-playhead,
@@ -668,7 +675,7 @@ select:focus-visible {
 }
 
 .timeline-playhead {
-  box-shadow: 0 0 10px rgba(255, 138, 43, .35);
+  box-shadow: 0 0 10px rgba(255, 138, 43, 0.35);
 }
 
 .timeline-playhead > span {
@@ -687,7 +694,7 @@ select:focus-visible {
 }
 
 .untimed-tray button {
-  background: rgba(255, 255, 255, .72);
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .untimed-tray button.is-sync-target {
@@ -697,18 +704,18 @@ select:focus-visible {
 }
 
 .untimed-tray--empty {
-  background: rgba(155, 120, 207, .05);
+  background: rgba(155, 120, 207, 0.05);
 }
 
 .transport {
   border-top-color: #ddd2e8;
-  background: rgba(255, 255, 255, .97);
-  box-shadow: 0 -10px 25px rgba(76, 55, 101, .08);
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 -10px 25px rgba(76, 55, 101, 0.08);
 }
 
 .transport.is-syncing {
-  border-top-color: rgba(255, 138, 43, .44);
-  background: linear-gradient(90deg, rgba(255, 138, 43, .08), rgba(255, 255, 255, .98) 35%);
+  border-top-color: rgba(255, 138, 43, 0.44);
+  background: linear-gradient(90deg, rgba(255, 138, 43, 0.08), rgba(255, 255, 255, 0.98) 35%);
 }
 
 .sync-button {
@@ -724,7 +731,7 @@ select:focus-visible {
 .sync-button.is-active {
   border-color: var(--orange);
   background: var(--orange-soft);
-  box-shadow: 0 0 0 3px rgba(255, 138, 43, .1);
+  box-shadow: 0 0 0 3px rgba(255, 138, 43, 0.1);
 }
 
 .sync-button > span {
@@ -736,7 +743,7 @@ select:focus-visible {
   border-color: #cfc3d9;
   background: #fff;
   color: #6f6379;
-  box-shadow: 0 1px 0 rgba(76, 55, 101, .07);
+  box-shadow: 0 1px 0 rgba(76, 55, 101, 0.07);
 }
 
 .sync-button.is-active .keyboard-key {
@@ -757,7 +764,7 @@ select:focus-visible {
 .play-button {
   background: var(--orange);
   color: #3c200e;
-  box-shadow: 0 6px 17px rgba(230, 111, 18, .23);
+  box-shadow: 0 6px 17px rgba(230, 111, 18, 0.23);
 }
 
 .play-button:hover {
@@ -771,7 +778,7 @@ select:focus-visible {
 
 .transport-status i.is-linked {
   background: var(--accent);
-  box-shadow: 0 0 0 3px rgba(155, 120, 207, .11);
+  box-shadow: 0 0 0 3px rgba(155, 120, 207, 0.11);
 }
 
 .speed-control,
@@ -790,7 +797,7 @@ select:focus-visible {
   background: #fff;
   color: var(--text);
   color-scheme: light;
-  box-shadow: inset 0 1px 2px rgba(76, 55, 101, .04);
+  box-shadow: inset 0 1px 2px rgba(76, 55, 101, 0.04);
 }
 
 .preview-setting select:hover,
@@ -803,7 +810,7 @@ select:focus-visible {
 .speed-control select:focus,
 .video-export-settings select:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(155, 120, 207, .11);
+  box-shadow: 0 0 0 3px rgba(155, 120, 207, 0.11);
 }
 
 .preview-setting select option,
@@ -814,13 +821,13 @@ select:focus-visible {
 }
 
 .modal-backdrop {
-  background: rgba(48, 37, 60, .43);
+  background: rgba(48, 37, 60, 0.43);
 }
 
 .modal {
   border-color: #d7cae4;
   background: #fff;
-  box-shadow: 0 28px 90px rgba(52, 37, 68, .24);
+  box-shadow: 0 28px 90px rgba(52, 37, 68, 0.24);
 }
 
 .modal__footer {
@@ -837,7 +844,7 @@ select:focus-visible {
 .video-export-settings {
   border-color: #ded2e8;
   background: linear-gradient(180deg, #fbf9fd, #f7f3fa);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .85);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
 }
 
 .video-export-settings legend {
@@ -898,7 +905,7 @@ select:focus-visible {
 .export-options > button:hover {
   border-color: #b99fd5;
   background: #f5effa;
-  box-shadow: 0 4px 12px rgba(76, 55, 101, .08);
+  box-shadow: 0 4px 12px rgba(76, 55, 101, 0.08);
   transform: translateY(-1px);
 }
 
@@ -943,7 +950,7 @@ select:focus-visible {
 .toast {
   border-color: #d3c6df;
   background: #fff;
-  box-shadow: 0 15px 35px rgba(52, 37, 68, .17);
+  box-shadow: 0 15px 35px rgba(52, 37, 68, 0.17);
   color: var(--text-soft);
 }
 
@@ -953,12 +960,12 @@ select:focus-visible {
 
 .toast--success > span {
   background: var(--accent);
-  box-shadow: 0 0 0 3px rgba(155, 120, 207, .11);
+  box-shadow: 0 0 0 3px rgba(155, 120, 207, 0.11);
 }
 
 .toast--warning > span {
   background: var(--orange);
-  box-shadow: 0 0 0 3px rgba(255, 138, 43, .11);
+  box-shadow: 0 0 0 3px rgba(255, 138, 43, 0.11);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -966,8 +973,8 @@ select:focus-visible {
   *::before,
   *::after {
     scroll-behavior: auto !important;
-    transition-duration: .01ms !important;
-    animation-duration: .01ms !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }
 

@@ -50,28 +50,39 @@ function validateIhdr(data) {
   const bitDepth = data[8]
   const colorType = data[9]
   if (
-    width < 1 || height < 1 ||
-    width > PNG_LIMITS.maxWidth || height > PNG_LIMITS.maxHeight ||
+    width < 1 ||
+    height < 1 ||
+    width > PNG_LIMITS.maxWidth ||
+    height > PNG_LIMITS.maxHeight ||
     width * height > PNG_LIMITS.maxPixels ||
     !ALLOWED_DEPTHS[colorType]?.has(bitDepth) ||
-    data[10] !== 0 || data[11] !== 0 || ![0, 1].includes(data[12])
-  ) throw pngError()
+    data[10] !== 0 ||
+    data[11] !== 0 ||
+    ![0, 1].includes(data[12])
+  )
+    throw pngError()
   return { bitDepth, colorType, height, width }
 }
 
 function validatePalette(data, header) {
   const entries = data.length / 3
   if (
-    header.colorType === 0 || header.colorType === 4 ||
-    data.length < 3 || data.length > 768 || data.length % 3 !== 0 ||
+    header.colorType === 0 ||
+    header.colorType === 4 ||
+    data.length < 3 ||
+    data.length > 768 ||
+    data.length % 3 !== 0 ||
     (header.colorType === 3 && entries > 2 ** header.bitDepth)
-  ) throw pngError()
+  )
+    throw pngError()
 }
 
 function validChunkType(typeBytes) {
-  return typeBytes.every((byte) => (
-    (byte >= 65 && byte <= 90) || (byte >= 97 && byte <= 122)
-  )) && typeBytes[2] >= 65 && typeBytes[2] <= 90
+  return (
+    typeBytes.every((byte) => (byte >= 65 && byte <= 90) || (byte >= 97 && byte <= 122)) &&
+    typeBytes[2] >= 65 &&
+    typeBytes[2] <= 90
+  )
 }
 
 function consumeSequence(data, animation) {
@@ -84,19 +95,25 @@ function validateFrameControl(data, header, animation, beforeIdat) {
   if (
     (animation.controls > 0 && !animation.currentFrameHasData) ||
     (beforeIdat && animation.beforeIdatControls > 0)
-  ) throw pngError()
+  )
+    throw pngError()
   consumeSequence(data, animation)
   const width = data.readUInt32BE(4)
   const height = data.readUInt32BE(8)
   const x = data.readUInt32BE(12)
   const y = data.readUInt32BE(16)
   if (
-    width < 1 || height < 1 || x + width > header.width || y + height > header.height ||
-    data[24] > 2 || data[25] > 1 ||
-    (animation.controls === 0 && beforeIdat && (
-      width !== header.width || height !== header.height || x !== 0 || y !== 0
-    ))
-  ) throw pngError()
+    width < 1 ||
+    height < 1 ||
+    x + width > header.width ||
+    y + height > header.height ||
+    data[24] > 2 ||
+    data[25] > 1 ||
+    (animation.controls === 0 &&
+      beforeIdat &&
+      (width !== header.width || height !== header.height || x !== 0 || y !== 0))
+  )
+    throw pngError()
   if (beforeIdat) animation.beforeIdatControls += 1
   animation.currentFrameHasData = false
   animation.currentFrameUsesFdat = !beforeIdat
@@ -107,8 +124,10 @@ function finalAnimation(animation) {
   if (!animation) return null
   if (
     animation.controls !== animation.frames ||
-    animation.controls < 1 || !animation.currentFrameHasData
-  ) throw pngError()
+    animation.controls < 1 ||
+    !animation.currentFrameHasData
+  )
+    throw pngError()
   return Object.freeze({
     declaredFrames: animation.frames,
     frameControlChunks: animation.controls,
@@ -119,9 +138,12 @@ function finalAnimation(animation) {
 
 function parseBoundedPngContainer(bytes) {
   if (
-    !Buffer.isBuffer(bytes) || bytes.length < 57 || bytes.length > PNG_LIMITS.maxBytes ||
+    !Buffer.isBuffer(bytes) ||
+    bytes.length < 57 ||
+    bytes.length > PNG_LIMITS.maxBytes ||
     !bytes.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)
-  ) throw pngError()
+  )
+    throw pngError()
 
   let offset = PNG_SIGNATURE.length
   let chunks = 0
@@ -157,9 +179,8 @@ function parseBoundedPngContainer(bytes) {
     } else if (type === 'IDAT') {
       if (idatEnded || (header.colorType === 3 && !palette)) throw pngError()
       sawIdat = true
-      if (
-        animation?.beforeIdatControls === 1 && !animation.currentFrameUsesFdat
-      ) animation.currentFrameHasData = true
+      if (animation?.beforeIdatControls === 1 && !animation.currentFrameUsesFdat)
+        animation.currentFrameHasData = true
     } else if (type === 'IEND') {
       if (length !== 0 || !sawIdat || end !== bytes.length) throw pngError()
       sawIend = true
@@ -179,9 +200,7 @@ function parseBoundedPngContainer(bytes) {
       if (!animation) throw pngError()
       validateFrameControl(data, header, animation, !sawIdat)
     } else if (type === 'fdAT') {
-      if (
-        !animation || !sawIdat || !animation.currentFrameUsesFdat || length < 4
-      ) throw pngError()
+      if (!animation || !sawIdat || !animation.currentFrameUsesFdat || length < 4) throw pngError()
       consumeSequence(data, animation)
       animation.currentFrameHasData = true
       animation.frameDataChunks += 1

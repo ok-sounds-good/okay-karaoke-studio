@@ -56,13 +56,15 @@ describe('installed font catalog normalization', () => {
       {
         kind: 'local',
         family: 'Berkeley Mono',
-        faces: [{
-          fullName: 'Berkeley Mono Regular',
-          style: 'Regular',
-          postscriptName: 'BerkeleyMono-Regular',
-          weight: 400,
-          slant: 'normal',
-        }],
+        faces: [
+          {
+            fullName: 'Berkeley Mono Regular',
+            style: 'Regular',
+            postscriptName: 'BerkeleyMono-Regular',
+            weight: 400,
+            slant: 'normal',
+          },
+        ],
       },
     ])
     expect(JSON.stringify(forward)).not.toContain('/private/')
@@ -85,9 +87,9 @@ describe('installed font catalog normalization', () => {
     const faces = catalog.flatMap((typeface) => typeface.faces)
 
     expect(faces.filter((face) => face.postscriptName === 'AvenirNext-Bold')).toHaveLength(1)
-    expect(faces.every((face) => fonts.some(
-      (font) => font.postscriptName === face.postscriptName,
-    ))).toBe(true)
+    expect(
+      faces.every((face) => fonts.some((font) => font.postscriptName === face.postscriptName)),
+    ).toBe(true)
     expect(catalog.every((typeface) => typeface.kind === 'local')).toBe(true)
     expect(catalog.every(validTypefaceDescriptor)).toBe(true)
   })

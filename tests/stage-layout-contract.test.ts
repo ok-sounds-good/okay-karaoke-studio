@@ -8,11 +8,7 @@ import {
   lyricGapPx,
   previewStageLayoutVariables,
 } from '../src/lib/stage-layout'
-import {
-  SYNC_AID_GEOMETRY,
-  syncAidBrightness,
-  syncAidPosition,
-} from '../src/lib/sync-aid-geometry'
+import { SYNC_AID_GEOMETRY, syncAidBrightness, syncAidPosition } from '../src/lib/sync-aid-geometry'
 
 describe('shared stage geometry', () => {
   it('uses one deeply frozen 1920 by 1080 contract at every scale', () => {

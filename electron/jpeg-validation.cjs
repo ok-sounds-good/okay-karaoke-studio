@@ -13,8 +13,7 @@ const JPEG_LIMITS = Object.freeze({
 })
 
 const SOF_MARKERS = new Set([
-  0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7,
-  0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf,
+  0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf,
 ])
 const SUPPORTED_SOF_MARKERS = new Set([0xc0, 0xc1, 0xc2])
 
@@ -40,8 +39,12 @@ function readMarker(bytes, offset) {
 function isLengthBearingMarker(code) {
   return (
     SOF_MARKERS.has(code) ||
-    code === 0xc4 || code === 0xda || code === 0xdb || code === 0xdd ||
-    (code >= 0xe0 && code <= 0xef) || code === 0xfe
+    code === 0xc4 ||
+    code === 0xda ||
+    code === 0xdb ||
+    code === 0xdd ||
+    (code >= 0xe0 && code <= 0xef) ||
+    code === 0xfe
   )
 }
 
@@ -69,12 +72,16 @@ function parseFrame(payload, marker) {
   const componentCount = payload[5]
   if (
     (marker === 0xc0 ? precision !== 8 : ![8, 12].includes(precision)) ||
-    componentCount < 1 || componentCount > 4 ||
+    componentCount < 1 ||
+    componentCount > 4 ||
     payload.length !== 6 + componentCount * 3 ||
-    width < 1 || height < 1 ||
-    width > JPEG_LIMITS.maxWidth || height > JPEG_LIMITS.maxHeight ||
+    width < 1 ||
+    height < 1 ||
+    width > JPEG_LIMITS.maxWidth ||
+    height > JPEG_LIMITS.maxHeight ||
     width * height > JPEG_LIMITS.maxPixels
-  ) throw jpegError()
+  )
+    throw jpegError()
 
   const components = []
   for (let index = 0; index < componentCount; index += 1) {
@@ -85,9 +92,13 @@ function parseFrame(payload, marker) {
     const verticalSampling = sampling & 0x0f
     if (
       components.some((component) => component.id === id) ||
-      horizontalSampling < 1 || horizontalSampling > 4 ||
-      verticalSampling < 1 || verticalSampling > 4 || payload[offset + 2] > 3
-    ) throw jpegError()
+      horizontalSampling < 1 ||
+      horizontalSampling > 4 ||
+      verticalSampling < 1 ||
+      verticalSampling > 4 ||
+      payload[offset + 2] > 3
+    )
+      throw jpegError()
     components.push({ horizontalSampling, id, verticalSampling })
   }
   return {
@@ -103,9 +114,11 @@ function validateScan(payload, frame) {
   if (payload.length < 6) throw jpegError()
   const componentCount = payload[0]
   if (
-    componentCount < 1 || componentCount > frame.components.length ||
+    componentCount < 1 ||
+    componentCount > frame.components.length ||
     payload.length !== 4 + componentCount * 2
-  ) throw jpegError()
+  )
+    throw jpegError()
 
   const maxTableSelector = frame.marker === 0xc0 ? 1 : 3
   let previousFrameIndex = -1
@@ -117,8 +130,10 @@ function validateScan(payload, frame) {
     const frameIndex = frame.components.findIndex((component) => component.id === id)
     if (
       frameIndex <= previousFrameIndex ||
-      (tables >>> 4) > maxTableSelector || (tables & 0x0f) > maxTableSelector
-    ) throw jpegError()
+      tables >>> 4 > maxTableSelector ||
+      (tables & 0x0f) > maxTableSelector
+    )
+      throw jpegError()
     const component = frame.components[frameIndex]
     samplingUnits += component.horizontalSampling * component.verticalSampling
     previousFrameIndex = frameIndex
@@ -135,11 +150,14 @@ function validateScan(payload, frame) {
   const highApproximation = approximation >>> 4
   const lowApproximation = approximation & 0x0f
   if (
-    spectralStart > spectralEnd || spectralEnd > 63 ||
+    spectralStart > spectralEnd ||
+    spectralEnd > 63 ||
     (spectralStart === 0 && spectralEnd !== 0) ||
     (spectralStart > 0 && componentCount !== 1) ||
-    highApproximation > 13 || lowApproximation > 13
-  ) throw jpegError()
+    highApproximation > 13 ||
+    lowApproximation > 13
+  )
+    throw jpegError()
 }
 
 function consumeEntropy(bytes, offset, state, restartInterval) {
@@ -164,8 +182,10 @@ function consumeEntropy(bytes, offset, state, restartInterval) {
     state.restartMarkerCount += 1
     if (
       state.restartMarkerCount > JPEG_LIMITS.maxRestartMarkers ||
-      restartInterval === 0 || code !== 0xd0 + expectedRestart
-    ) throw jpegError()
+      restartInterval === 0 ||
+      code !== 0xd0 + expectedRestart
+    )
+      throw jpegError()
     expectedRestart = (expectedRestart + 1) & 7
     offset = codeOffset + 1
   }
@@ -189,9 +209,13 @@ function metadata(frame, state) {
 
 function parseBoundedJpegContainer(bytes) {
   if (
-    !Buffer.isBuffer(bytes) || bytes.length < 4 || bytes.length > JPEG_LIMITS.maxBytes ||
-    bytes[0] !== 0xff || bytes[1] !== 0xd8
-  ) throw jpegError()
+    !Buffer.isBuffer(bytes) ||
+    bytes.length < 4 ||
+    bytes.length > JPEG_LIMITS.maxBytes ||
+    bytes[0] !== 0xff ||
+    bytes[1] !== 0xd8
+  )
+    throw jpegError()
 
   const state = {
     markerCount: 1,
@@ -236,7 +260,8 @@ function parseBoundedJpegContainer(bytes) {
       if (segment.payload.length !== 2) throw jpegError()
       restartInterval = segment.payload.readUInt16BE(0)
     } else if (
-      marker.code === 0xe2 && segment.payload.length >= 4 &&
+      marker.code === 0xe2 &&
+      segment.payload.length >= 4 &&
       segment.payload.subarray(0, 4).equals(Buffer.from('MPF\0', 'ascii'))
     ) {
       throw jpegError()

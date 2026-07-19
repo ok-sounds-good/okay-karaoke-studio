@@ -1,21 +1,46 @@
 import { describe, expect, it } from 'vitest'
 import {
-  decodeFontFace, decodeStageStyle, decodeTypeface, decodeVocalStyle,
-  validFontFaceDescriptor, validTypefaceDescriptor, videoStyleValidationErrors,
+  decodeFontFace,
+  decodeStageStyle,
+  decodeTypeface,
+  decodeVocalStyle,
+  validFontFaceDescriptor,
+  validTypefaceDescriptor,
+  videoStyleValidationErrors,
 } from '../src/lib/video-style-codec'
 import {
-  DEFAULT_STAGE_STYLE, DEFAULT_VOCAL_STYLE, FONT_SIZE_OPTIONS,
-  SYSTEM_MONOSPACE_TYPEFACE, SYSTEM_UI_TYPEFACE, backgroundReadiness,
-  cloneStageStyle, cloneVocalStyle, createFontAliasBatch, deterministicFontFamily, fontFaceKey,
-  fontSlantFromStyle, fontStyleFromDescriptor, fontTypefaceKey, fontWeightFromStyle,
-  genericFontFace, isFontSizePx, isHexColor, isValidPostScriptName, isValidSyncAid,
-  localFontSource, normalizeStyleInteger,
-  resolveFontFace, resolveVocalStyle, type FontFaceDescriptor, type FontTypefaceDescriptor,
-  type StageStyle, type VocalStyle,
+  DEFAULT_STAGE_STYLE,
+  DEFAULT_VOCAL_STYLE,
+  FONT_SIZE_OPTIONS,
+  SYSTEM_MONOSPACE_TYPEFACE,
+  SYSTEM_UI_TYPEFACE,
+  backgroundReadiness,
+  cloneStageStyle,
+  cloneVocalStyle,
+  createFontAliasBatch,
+  deterministicFontFamily,
+  fontFaceKey,
+  fontSlantFromStyle,
+  fontStyleFromDescriptor,
+  fontTypefaceKey,
+  fontWeightFromStyle,
+  genericFontFace,
+  isFontSizePx,
+  isHexColor,
+  isValidPostScriptName,
+  isValidSyncAid,
+  localFontSource,
+  normalizeStyleInteger,
+  resolveFontFace,
+  resolveVocalStyle,
+  type FontFaceDescriptor,
+  type FontTypefaceDescriptor,
+  type StageStyle,
+  type VocalStyle,
 } from '../src/lib/video-style'
 const EXPECTED_SIZES = [
-  8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 24, 25, 27, 28, 32, 36, 40, 42,
-  48, 56, 64, 72, 82, 96, 104, 120, 144, 180, 240, 320, 400,
+  8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 24, 25, 27, 28, 32, 36, 40, 42, 48, 56, 64, 72, 82, 96, 104,
+  120, 144, 180, 240, 320, 400,
 ] as const
 
 const LOCAL_TYPEFACE: FontTypefaceDescriptor = {
@@ -23,12 +48,18 @@ const LOCAL_TYPEFACE: FontTypefaceDescriptor = {
   family: 'Demo Sans',
   faces: [
     {
-      fullName: 'Demo Sans Regular', style: 'Regular', postscriptName: 'DemoSans-Regular',
-      weight: 400, slant: 'normal',
+      fullName: 'Demo Sans Regular',
+      style: 'Regular',
+      postscriptName: 'DemoSans-Regular',
+      weight: 400,
+      slant: 'normal',
     },
     {
-      fullName: 'Demo Sans Bold', style: 'Bold', postscriptName: 'DemoSans-Bold',
-      weight: 700, slant: 'normal',
+      fullName: 'Demo Sans Bold',
+      style: 'Bold',
+      postscriptName: 'DemoSans-Bold',
+      weight: 700,
+      slant: 'normal',
     },
   ],
 }
@@ -122,8 +153,13 @@ describe('video style value contracts', () => {
       postscriptName: `DemoSans-${index}`,
     }))
     expect(decodeTypeface(hundred, 'font').faces).toHaveLength(100)
-    const invalids = [jsonClone(LOCAL_TYPEFACE), jsonClone(LOCAL_TYPEFACE),
-      jsonClone(LOCAL_TYPEFACE), jsonClone(LOCAL_TYPEFACE), jsonClone(LOCAL_TYPEFACE)]
+    const invalids = [
+      jsonClone(LOCAL_TYPEFACE),
+      jsonClone(LOCAL_TYPEFACE),
+      jsonClone(LOCAL_TYPEFACE),
+      jsonClone(LOCAL_TYPEFACE),
+      jsonClone(LOCAL_TYPEFACE),
+    ]
     invalids[0].faces = []
     invalids[1].faces = [...hundred.faces, LOCAL_TYPEFACE.faces[0]]
     invalids[2].faces[1].postscriptName = invalids[2].faces[0].postscriptName
@@ -181,7 +217,8 @@ describe('video style value contracts', () => {
     vocal.typeface!.faces[0].fullName = 'Changed'
     vocal.fontStyle!.style = 'Changed'
     expect(LOCAL_TYPEFACE.faces[0]).toMatchObject({
-      fullName: 'Demo Sans Regular', style: 'Regular',
+      fullName: 'Demo Sans Regular',
+      style: 'Regular',
     })
   })
 
@@ -200,19 +237,34 @@ describe('video style value contracts', () => {
     const tied: FontTypefaceDescriptor = {
       ...LOCAL_TYPEFACE,
       faces: LOCAL_TYPEFACE.faces.map((face, index) => ({
-        ...face, style: index ? 'Ångstrom' : 'Zulu', weight: 500,
+        ...face,
+        style: index ? 'Ångstrom' : 'Zulu',
+        weight: 500,
       })),
     }
     const requested: FontFaceDescriptor = {
-      fullName: 'Requested', style: 'Missing', postscriptName: null,
-      weight: 400, slant: 'normal',
+      fullName: 'Requested',
+      style: 'Missing',
+      postscriptName: null,
+      weight: 400,
+      slant: 'normal',
     }
     expect(resolveFontFace(tied, requested).style).toBe('Zulu')
     const equivalentFaces: FontFaceDescriptor[] = [
-      { fullName: 'Twin Zulu', style: 'Regular', postscriptName: 'Twin-Zulu',
-        weight: 400, slant: 'normal' },
-      { fullName: 'Twin Alpha', style: 'Regular', postscriptName: 'Twin-Alpha',
-        weight: 400, slant: 'normal' },
+      {
+        fullName: 'Twin Zulu',
+        style: 'Regular',
+        postscriptName: 'Twin-Zulu',
+        weight: 400,
+        slant: 'normal',
+      },
+      {
+        fullName: 'Twin Alpha',
+        style: 'Regular',
+        postscriptName: 'Twin-Alpha',
+        weight: 400,
+        slant: 'normal',
+      },
     ]
     const equivalentRequest = { ...requested, style: 'Regular' }
     const forward = { ...LOCAL_TYPEFACE, faces: equivalentFaces }
@@ -221,8 +273,13 @@ describe('video style value contracts', () => {
     expect(resolveFontFace(forward, equivalentRequest).postscriptName).toBe('Twin-Alpha')
     expect(resolveFontFace(reverse, equivalentRequest).postscriptName).toBe('Twin-Alpha')
     expect(resolveFontFace(reverse, equivalentFaces[0]).postscriptName).toBe('Twin-Zulu')
-    expect(JSON.parse(fontFaceKey(LOCAL_TYPEFACE.faces[0])))
-      .toEqual(['DemoSans-Regular', 'Demo Sans Regular', 'Regular', 400, 'normal'])
+    expect(JSON.parse(fontFaceKey(LOCAL_TYPEFACE.faces[0]))).toEqual([
+      'DemoSans-Regular',
+      'Demo Sans Regular',
+      'Regular',
+      400,
+      'normal',
+    ])
     expect(JSON.parse(fontFaceKey(genericFontFace(SYSTEM_UI_TYPEFACE, 'Regular')))[0]).toBeNull()
     const reversed = { ...LOCAL_TYPEFACE, faces: [...LOCAL_TYPEFACE.faces].reverse() }
     expect(fontTypefaceKey(reversed)).toBe(fontTypefaceKey(LOCAL_TYPEFACE))
@@ -232,11 +289,13 @@ describe('video style value contracts', () => {
       { ...LOCAL_TYPEFACE, family: 'A', faces: [{ ...baseFace, postscriptName: 'B:C|D' }] },
     ]
     expect(fontTypefaceKey(collidingOldKeys[0])).not.toBe(fontTypefaceKey(collidingOldKeys[1]))
-    expect(fontFaceKey({ ...LOCAL_TYPEFACE.faces[0], fullName: 'Another name' }))
-      .not.toBe(fontFaceKey(LOCAL_TYPEFACE.faces[0]))
+    expect(fontFaceKey({ ...LOCAL_TYPEFACE.faces[0], fullName: 'Another name' })).not.toBe(
+      fontFaceKey(LOCAL_TYPEFACE.faces[0]),
+    )
     expect(deterministicFontFamily(LOCAL_TYPEFACE, 'OKSLocalFont0')).toContain('"OKSLocalFont0"')
-    expect(deterministicFontFamily(LOCAL_TYPEFACE, 'Demo "Alias"'))
-      .toBe(deterministicFontFamily(LOCAL_TYPEFACE))
+    expect(deterministicFontFamily(LOCAL_TYPEFACE, 'Demo "Alias"')).toBe(
+      deterministicFontFamily(LOCAL_TYPEFACE),
+    )
   })
 
   it('preserves valid color spelling and validates linked image readiness', () => {
@@ -269,8 +328,12 @@ describe('video style value contracts', () => {
       expect(decodeStageStyle(imageStage).background.imagePath).toBe(validPath)
     }
     for (const invalidPath of [
-      '', 'relative.png', 'K:/linked/background.png', 'ſ:/linked/background.png',
-      '/linked/bad\0.png', `/${'a'.repeat(8_192)}`,
+      '',
+      'relative.png',
+      'K:/linked/background.png',
+      'ſ:/linked/background.png',
+      '/linked/bad\0.png',
+      `/${'a'.repeat(8_192)}`,
     ]) {
       imageStage.background.imagePath = invalidPath
       expect(() => decodeStageStyle(imageStage)).toThrow(/absolute path|required|too long/u)
@@ -280,10 +343,18 @@ describe('video style value contracts', () => {
   it('enforces sync-aid boundaries and keeps integer normalization stable', () => {
     expect(decodeVocalStyle(cloneVocalStyle(), 'vocal').syncAid.maxLeadMs).toBe(3_000)
     for (const mutate of [
-      (value: ReturnType<typeof cloneVocalStyle>) => { value.syncAid.minLeadMs = 3_001 },
-      (value: ReturnType<typeof cloneVocalStyle>) => { value.syncAid.maxLeadMs = 3_001 },
-      (value: ReturnType<typeof cloneVocalStyle>) => { value.previewMs = -1 },
-      (value: ReturnType<typeof cloneVocalStyle>) => { value.syncAid.minLeadMs = 0.5 },
+      (value: ReturnType<typeof cloneVocalStyle>) => {
+        value.syncAid.minLeadMs = 3_001
+      },
+      (value: ReturnType<typeof cloneVocalStyle>) => {
+        value.syncAid.maxLeadMs = 3_001
+      },
+      (value: ReturnType<typeof cloneVocalStyle>) => {
+        value.previewMs = -1
+      },
+      (value: ReturnType<typeof cloneVocalStyle>) => {
+        value.syncAid.minLeadMs = 0.5
+      },
     ]) {
       const vocal = cloneVocalStyle()
       mutate(vocal)
@@ -321,9 +392,11 @@ describe('video style value contracts', () => {
     ;(invalidStage.stageFrame as Record<string, unknown>).lineColor = 'invalid'
     const invalidVocal = cloneVocalStyle()
     invalidVocal.previewMs = -1
-    expect(videoStyleValidationErrors(invalidStage, [
-      { path: 'project.tracks[0].vocalStyle', style: invalidVocal },
-    ])).toEqual([
+    expect(
+      videoStyleValidationErrors(invalidStage, [
+        { path: 'project.tracks[0].vocalStyle', style: invalidVocal },
+      ]),
+    ).toEqual([
       expect.objectContaining({ code: 'stage-style-invalid', path: 'stageStyle' }),
       expect.objectContaining({
         code: 'vocal-style-invalid',

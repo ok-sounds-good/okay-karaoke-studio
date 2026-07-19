@@ -9,7 +9,10 @@ const savePaths = require('../electron/save-paths.cjs') as {
   canonicalSavePath(filePath: string, format: string, pathApi?: typeof posix): string
   isCanonicalSavePath(filePath: string, format: string, pathApi?: typeof posix): boolean
   showCanonicalSaveDialog(
-    showSaveDialog: (owner: object, options: Record<string, unknown>) => Promise<{
+    showSaveDialog: (
+      owner: object,
+      options: Record<string, unknown>,
+    ) => Promise<{
       canceled: boolean
       filePath?: string
     }>,
@@ -53,18 +56,21 @@ describe('canonical native save destinations', () => {
 
   it('reconfirms every normalized Windows destination in the native dialog before returning it', async () => {
     const owner = {}
-    const showSaveDialog = vi.fn()
+    const showSaveDialog = vi
+      .fn()
       .mockResolvedValueOnce({ canceled: false, filePath: 'C:\\Exports\\song.json' })
       .mockResolvedValueOnce({ canceled: false, filePath: 'C:\\Exports\\song.OKS' })
       .mockResolvedValueOnce({ canceled: false, filePath: 'C:\\Exports\\song.oks' })
 
-    await expect(savePaths.showCanonicalSaveDialog(
-      showSaveDialog,
-      owner,
-      { defaultPath: 'C:\\Documents\\draft.OKS', filters: [] },
-      'oks',
-      win32,
-    )).resolves.toBe('C:\\Exports\\song.oks')
+    await expect(
+      savePaths.showCanonicalSaveDialog(
+        showSaveDialog,
+        owner,
+        { defaultPath: 'C:\\Documents\\draft.OKS', filters: [] },
+        'oks',
+        win32,
+      ),
+    ).resolves.toBe('C:\\Exports\\song.oks')
 
     expect(showSaveDialog).toHaveBeenCalledTimes(3)
     expect(showSaveDialog.mock.calls.map(([, options]) => options.defaultPath)).toEqual([
@@ -81,54 +87,68 @@ describe('canonical native save destinations', () => {
       filePath: '/exports/already-confirmed.ass',
     }))
 
-    await expect(savePaths.showCanonicalSaveDialog(
-      showSaveDialog,
-      owner,
-      { defaultPath: '/exports/already-confirmed.ass', filters: [] },
-      'ass',
-      posix,
-    )).resolves.toBe('/exports/already-confirmed.ass')
+    await expect(
+      savePaths.showCanonicalSaveDialog(
+        showSaveDialog,
+        owner,
+        { defaultPath: '/exports/already-confirmed.ass', filters: [] },
+        'ass',
+        posix,
+      ),
+    ).resolves.toBe('/exports/already-confirmed.ass')
     expect(showSaveDialog).toHaveBeenCalledOnce()
   })
 
   it('returns only the exact POSIX MP4 path confirmed by the OS and respects cancellation', async () => {
     const owner = {}
-    const showSaveDialog = vi.fn()
+    const showSaveDialog = vi
+      .fn()
       .mockResolvedValueOnce({ canceled: false, filePath: '/exports/show.json' })
       .mockResolvedValueOnce({ canceled: false, filePath: '/exports/show.mp4' })
 
-    await expect(savePaths.showCanonicalSaveDialog(
-      showSaveDialog,
-      owner,
-      { defaultPath: '/videos/show.MP4', filters: [] },
-      'mp4',
-      posix,
-    )).resolves.toBe('/exports/show.mp4')
+    await expect(
+      savePaths.showCanonicalSaveDialog(
+        showSaveDialog,
+        owner,
+        { defaultPath: '/videos/show.MP4', filters: [] },
+        'mp4',
+        posix,
+      ),
+    ).resolves.toBe('/exports/show.mp4')
     expect(showSaveDialog.mock.calls.map(([, options]) => options.defaultPath)).toEqual([
       '/videos/show.mp4',
       '/exports/show.mp4',
     ])
 
-    await expect(savePaths.showCanonicalSaveDialog(
-      vi.fn(async () => ({ canceled: true })),
-      owner,
-      { defaultPath: '/videos/show.mp4', filters: [] },
-      'mp4',
-      posix,
-    )).resolves.toBeNull()
+    await expect(
+      savePaths.showCanonicalSaveDialog(
+        vi.fn(async () => ({ canceled: true })),
+        owner,
+        { defaultPath: '/videos/show.mp4', filters: [] },
+        'mp4',
+        posix,
+      ),
+    ).resolves.toBeNull()
 
-    const cancelAfterNormalization = vi.fn()
+    const cancelAfterNormalization = vi
+      .fn()
       .mockResolvedValueOnce({ canceled: false, filePath: '/videos/unconfirmed.json' })
       .mockResolvedValueOnce({ canceled: true })
-    await expect(savePaths.showCanonicalSaveDialog(
-      cancelAfterNormalization,
+    await expect(
+      savePaths.showCanonicalSaveDialog(
+        cancelAfterNormalization,
+        owner,
+        { defaultPath: '/videos/show.mp4', filters: [] },
+        'mp4',
+        posix,
+      ),
+    ).resolves.toBeNull()
+    expect(cancelAfterNormalization).toHaveBeenNthCalledWith(
+      2,
       owner,
-      { defaultPath: '/videos/show.mp4', filters: [] },
-      'mp4',
-      posix,
-    )).resolves.toBeNull()
-    expect(cancelAfterNormalization).toHaveBeenNthCalledWith(2, owner, expect.objectContaining({
-      defaultPath: '/videos/unconfirmed.mp4',
-    }))
+      expect.objectContaining({
+        defaultPath: '/videos/unconfirmed.mp4',
+      }),
+    )
   })
 })

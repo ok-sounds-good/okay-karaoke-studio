@@ -24,9 +24,11 @@ const projectFiles = require('../electron/project-files.cjs') as {
 const temporaryDirectories: string[] = []
 
 afterEach(async () => {
-  await Promise.all(temporaryDirectories.splice(0).map((directory) => (
-    rm(directory, { recursive: true, force: true })
-  )))
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
+  )
 })
 
 async function temporaryProjectPath() {
@@ -128,17 +130,21 @@ describe('Electron project file persistence', () => {
       ...first,
       title: 'Latest saved title',
       updatedAt: '2026-07-12T20:21:22.456Z',
-      tracks: first.tracks.map((track, index) => index === 0
-        ? {
-            ...track,
-            lines: track.lines.map((line) => ({
-              ...line,
-              words: line.words.map((word, wordIndex) => wordIndex === 0
-                ? { ...word, startMs: 1_111, endMs: 2_111 }
-                : { ...word, startMs: 2_111 }),
-            })),
-          }
-        : track),
+      tracks: first.tracks.map((track, index) =>
+        index === 0
+          ? {
+              ...track,
+              lines: track.lines.map((line) => ({
+                ...line,
+                words: line.words.map((word, wordIndex) =>
+                  wordIndex === 0
+                    ? { ...word, startMs: 1_111, endMs: 2_111 }
+                    : { ...word, startMs: 2_111 },
+                ),
+              })),
+            }
+          : track,
+      ),
     } satisfies KaraokeProject
 
     await Promise.all([

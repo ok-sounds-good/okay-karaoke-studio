@@ -38,20 +38,16 @@ describe('karaoke project model', () => {
     expect(project.tracks[0].vocalStyle).not.toBe(DEFAULT_VOCAL_STYLE)
     expect(project.tracks[0].lines.length).toBeGreaterThan(3)
     expect(
-      project.tracks[0].lines.flatMap((line) => line.words).every(
-        (word) => Number.isInteger(word.startMs) && Number.isInteger(word.endMs),
-      ),
+      project.tracks[0].lines
+        .flatMap((line) => line.words)
+        .every((word) => Number.isInteger(word.startMs) && Number.isInteger(word.endMs)),
     ).toBe(true)
     expect(validateProject(project).filter((issue) => issue.severity === 'error')).toEqual([])
   })
 
   it('parses plain lyrics as untimed words and carries aligned edits forward', () => {
     const initial = parseLyrics('Hello bright world\nSing with me', 'lead')
-    expect(initial.lines[0].words.map((word) => word.text)).toEqual([
-      'Hello',
-      'bright',
-      'world',
-    ])
+    expect(initial.lines[0].words.map((word) => word.text)).toEqual(['Hello', 'bright', 'world'])
     expect(initial.lines[0].words.every((word) => word.startMs === null)).toBe(true)
 
     const timed = {
@@ -68,27 +64,14 @@ describe('karaoke project model', () => {
   })
 
   it('preserves one internal blank row as a section separator', () => {
-    const track = parseLyrics(
-      '\n  First phrase  \n\n\n Second phrase \n\n',
-      'lead',
-    )
+    const track = parseLyrics('\n  First phrase  \n\n\n Second phrase \n\n', 'lead')
 
-    expect(track.lines.map((line) => line.text)).toEqual([
-      'First phrase',
-      '',
-      'Second phrase',
-    ])
+    expect(track.lines.map((line) => line.text)).toEqual(['First phrase', '', 'Second phrase'])
     expect(track.lines[1].words).toEqual([])
     expect(track.lines.flatMap((line) => line.words)).toHaveLength(4)
 
-    const reparsed = parseLyrics(
-      'First phrase\n\nSecond phrase',
-      'lead',
-      track,
-    )
-    expect(reparsed.lines.map((line) => line.id)).toEqual(
-      track.lines.map((line) => line.id),
-    )
+    const reparsed = parseLyrics('First phrase\n\nSecond phrase', 'lead', track)
+    expect(reparsed.lines.map((line) => line.id)).toEqual(track.lines.map((line) => line.id))
   })
 
   it('keeps timing attached to the right lines when text is inserted', () => {
@@ -113,10 +96,7 @@ describe('karaoke project model', () => {
   })
 
   it('keeps an edited line aligned when an earlier line is deleted', () => {
-    const initial = parseLyrics(
-      'I love alpha\nI love bravo\nI love charlie',
-      'lead',
-    )
+    const initial = parseLyrics('I love alpha\nI love bravo\nI love charlie', 'lead')
     const timed = {
       ...initial,
       lines: initial.lines.map((line, index) =>
@@ -136,9 +116,7 @@ describe('karaoke project model', () => {
     const initial = parseLyrics(text, 'lead')
     const edited = text.replace('Line 1000', 'Changed 1000')
 
-    expect(() => parseLyrics(edited, 'lead', initial)).toThrow(
-      'too large to align safely',
-    )
+    expect(() => parseLyrics(edited, 'lead', initial)).toThrow('too large to align safely')
   })
 
   it('reports invalid and overlapping timing without rejecting untimed lyrics', () => {
@@ -166,40 +144,47 @@ describe('karaoke project model', () => {
       text: string,
       startMs: number,
       endMs: number,
-    ) => createLyricLine(text, {
-      id: lineId,
-      startMs,
-      endMs,
-      words: [createLyricWord(text, { id: wordId, startMs, endMs })],
-    })
+    ) =>
+      createLyricLine(text, {
+        id: lineId,
+        startMs,
+        endMs,
+        words: [createLyricWord(text, { id: wordId, startMs, endMs })],
+      })
 
     const overlapping = createProject({
-      tracks: [createVocalTrack({
-        id: 'lead',
-        lines: [
-          timedLine('first-line', 'first-word', 'First', 1_000, 1_500),
-          timedLine('second-line', 'second-word', 'Second', 1_400, 1_900),
-        ],
-      })],
+      tracks: [
+        createVocalTrack({
+          id: 'lead',
+          lines: [
+            timedLine('first-line', 'first-word', 'First', 1_000, 1_500),
+            timedLine('second-line', 'second-word', 'Second', 1_400, 1_900),
+          ],
+        }),
+      ],
     })
-    expect(validateProject(overlapping)).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        code: 'word-overlap',
-        path: 'tracks[0].lines[1].words[0]',
-        trackId: 'lead',
-        lineId: 'second-line',
-        wordId: 'second-word',
-      }),
-    ]))
+    expect(validateProject(overlapping)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'word-overlap',
+          path: 'tracks[0].lines[1].words[0]',
+          trackId: 'lead',
+          lineId: 'second-line',
+          wordId: 'second-word',
+        }),
+      ]),
+    )
 
     const edgeTouching = createProject({
-      tracks: [createVocalTrack({
-        id: 'lead',
-        lines: [
-          timedLine('first-line', 'first-word', 'First', 1_000, 1_500),
-          timedLine('second-line', 'second-word', 'Second', 1_500, 1_900),
-        ],
-      })],
+      tracks: [
+        createVocalTrack({
+          id: 'lead',
+          lines: [
+            timedLine('first-line', 'first-word', 'First', 1_000, 1_500),
+            timedLine('second-line', 'second-word', 'Second', 1_500, 1_900),
+          ],
+        }),
+      ],
     })
     expect(validateProject(edgeTouching).map((issue) => issue.code)).not.toContain('word-overlap')
   })
@@ -208,17 +193,13 @@ describe('karaoke project model', () => {
     const project = createProject({
       durationMs: MAX_PROJECT_DURATION_MS + 1,
       offsetMs: Number.MAX_SAFE_INTEGER,
-      tracks: Array.from({ length: 9 }, (_, index) =>
-        createVocalTrack({ id: `track-${index}` }),
-      ),
+      tracks: Array.from({ length: 9 }, (_, index) => createVocalTrack({ id: `track-${index}` })),
     })
 
     expect(validateProject(project).map((validationIssue) => validationIssue.code)).toEqual(
       expect.arrayContaining(['duration-invalid', 'offset-not-integer', 'track-count-limit']),
     )
-    expect(() => parseProject(JSON.stringify(project))).toThrow(
-      'limited to 8 vocal tracks',
-    )
+    expect(() => parseProject(JSON.stringify(project))).toThrow('limited to 8 vocal tracks')
 
     const shiftedPastLimit = createProject({
       offsetMs: 1_000,
@@ -234,9 +215,9 @@ describe('karaoke project model', () => {
         }),
       ],
     })
-    expect(validateProject(shiftedPastLimit).map((validationIssue) => validationIssue.code)).toContain(
-      'timing-after-limit',
-    )
+    expect(
+      validateProject(shiftedPastLimit).map((validationIssue) => validationIssue.code),
+    ).toContain('timing-after-limit')
   })
 
   it('validates persisted lyric display settings', () => {
@@ -258,10 +239,12 @@ describe('karaoke project model', () => {
     const shiftedLate = createProject({
       durationMs: 30_000,
       offsetMs: 10_000,
-      tracks: [createVocalTrack({
-        id: 'late',
-        lines: [createLyricLine('Late', { startMs: 28_000, endMs: 30_000 })],
-      })],
+      tracks: [
+        createVocalTrack({
+          id: 'late',
+          lines: [createLyricLine('Late', { startMs: 28_000, endMs: 30_000 })],
+        }),
+      ],
     })
     expect(validateProject(shiftedLate).map((issue) => issue.code)).toContain(
       'timing-after-duration',
@@ -270,10 +253,12 @@ describe('karaoke project model', () => {
     const shiftedEarlier = createProject({
       durationMs: 30_000,
       offsetMs: -10_000,
-      tracks: [createVocalTrack({
-        id: 'earlier',
-        lines: [createLyricLine('Earlier', { startMs: 32_000, endMs: 34_000 })],
-      })],
+      tracks: [
+        createVocalTrack({
+          id: 'earlier',
+          lines: [createLyricLine('Earlier', { startMs: 32_000, endMs: 34_000 })],
+        }),
+      ],
     })
     expect(validateProject(shiftedEarlier).map((issue) => issue.code)).not.toContain(
       'timing-after-duration',
@@ -329,45 +314,42 @@ describe('lyric display planning', () => {
       ],
     })
 
-    expect(lineTexts(planLyricDisplayLines(
-      track,
-      1_500,
-      { lineCount: 2, advanceMode: 'clear' },
-    ))).toEqual(['One', 'Two'])
-    expect(lineTexts(planLyricDisplayLines(
-      track,
-      2_000,
-      { lineCount: 2, advanceMode: 'clear' },
-    ))).toEqual(['Three', 'Four'])
-    expect(lineTexts(planLyricDisplayLines(
-      track,
-      1_000,
-      { lineCount: 3, advanceMode: 'scroll' },
-    ))).toEqual(['Two', 'Three', 'Four'])
-    expect(lineTexts(planLyricDisplayLines(
-      track,
-      2_000,
-      { lineCount: 3, advanceMode: 'scroll' },
-    ))).toEqual(['Two', 'Three', 'Four'])
+    expect(
+      lineTexts(planLyricDisplayLines(track, 1_500, { lineCount: 2, advanceMode: 'clear' })),
+    ).toEqual(['One', 'Two'])
+    expect(
+      lineTexts(planLyricDisplayLines(track, 2_000, { lineCount: 2, advanceMode: 'clear' })),
+    ).toEqual(['Three', 'Four'])
+    expect(
+      lineTexts(planLyricDisplayLines(track, 1_000, { lineCount: 3, advanceMode: 'scroll' })),
+    ).toEqual(['Two', 'Three', 'Four'])
+    expect(
+      lineTexts(planLyricDisplayLines(track, 2_000, { lineCount: 3, advanceMode: 'scroll' })),
+    ).toEqual(['Two', 'Three', 'Four'])
   })
 
   it('uses an editor focus line for untimed lyrics', () => {
     const track = parseLyrics('Alpha\nBeta\nGamma', 'lead')
-    expect(lineTexts(planLyricDisplayLines(
-      track,
-      0,
-      { lineCount: 2, advanceMode: 'scroll' },
-      track.lines[1].id,
-    ))).toEqual(['Beta', 'Gamma'])
+    expect(
+      lineTexts(
+        planLyricDisplayLines(track, 0, { lineCount: 2, advanceMode: 'scroll' }, track.lines[1].id),
+      ),
+    ).toEqual(['Beta', 'Gamma'])
   })
 })
 
 describe('timing helpers', () => {
   it('honors reduced motion for programmatic scrolling', () => {
     try {
-      vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true })))
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn(() => ({ matches: true })),
+      )
       expect(motionAwareScrollBehavior()).toBe('auto')
-      vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false })))
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn(() => ({ matches: false })),
+      )
       expect(motionAwareScrollBehavior()).toBe('smooth')
     } finally {
       vi.unstubAllGlobals()
@@ -379,9 +361,10 @@ describe('timing helpers', () => {
       startMs: 0,
       endMs: 10_000,
     })
-    expect(clampTiming(9_999, 9_999, { maxMs: 10_000, minimumDurationMs: 25 })).toEqual(
-      { startMs: 9_975, endMs: 10_000 },
-    )
+    expect(clampTiming(9_999, 9_999, { maxMs: 10_000, minimumDurationMs: 25 })).toEqual({
+      startMs: 9_975,
+      endMs: 10_000,
+    })
     expect(formatTime(65_432)).toBe('01:05.432')
     expect(formatTime(3_661_005)).toBe('1:01:01.005')
   })
@@ -440,17 +423,12 @@ describe('LRC interchange', () => {
   })
 
   it('exports exact millisecond line and word timestamps', () => {
-    const track = importLrc(
-      '[00:01.125]<00:01.125>Exact <00:01.875>timing',
-      'lead',
-    )
+    const track = importLrc('[00:01.125]<00:01.125>Exact <00:01.875>timing', 'lead')
     const project = createProject({ title: 'Test', artist: 'Singer', tracks: [track] })
     const output = exportLrc(project, 'lead')
 
     expect(output).toContain('[ti:Test]')
-    expect(output).toContain(
-      '[00:01.125]<00:01.125>Exact <00:01.875>timing',
-    )
+    expect(output).toContain('[00:01.125]<00:01.125>Exact <00:01.875>timing')
     expect(() => exportLrc(project, 'missing')).toThrow(RangeError)
   })
 
@@ -472,19 +450,13 @@ describe('LRC interchange', () => {
     expect(() => importLrc('[offset:9007199254740991]\n[00:01]Unsafe', 'lead')).toThrow(
       'offsets must be within four hours',
     )
-    expect(() => importLrc('[241:00]Too late', 'lead')).toThrow(
-      'cannot exceed four hours',
-    )
-    expect(() => importLrc('[00:00.500]Too early', 'lead', 1_000)).toThrow(
-      'occurs before zero',
-    )
+    expect(() => importLrc('[241:00]Too late', 'lead')).toThrow('cannot exceed four hours')
+    expect(() => importLrc('[00:00.500]Too early', 'lead', 1_000)).toThrow('occurs before zero')
   })
 
   it('rejects compact LRC text before allocating over the word cap', () => {
     const tooManyWords = Array.from({ length: MAX_PROJECT_WORDS + 1 }, () => 'x').join(' ')
-    expect(() => importLrc(`[00:01]${tooManyWords}`, 'lead')).toThrow(
-      'word limit',
-    )
+    expect(() => importLrc(`[00:01]${tooManyWords}`, 'lead')).toThrow('word limit')
   })
 
   it('round-trips timestamp-shaped lyric text without creating extra timing', () => {
@@ -517,10 +489,7 @@ describe('LRC interchange', () => {
   })
 
   it('uses the next distinct line timestamp for duplicate starts', () => {
-    const track = importLrc(
-      '[00:01]First\n[00:01]Second\n[00:03]Third',
-      'lead',
-    )
+    const track = importLrc('[00:01]First\n[00:01]Second\n[00:03]Third', 'lead')
 
     expect(track.lines.map((line) => line.endMs)).toEqual([3_000, 3_000, 6_000])
   })
@@ -585,7 +554,9 @@ describe('ASS export', () => {
       tracks: [createVocalTrack({ id: 'lead', lines: [line] })],
     })
 
-    const event = exportAss(project).split('\n').find((row) => row.startsWith('Dialogue:'))
+    const event = exportAss(project)
+      .split('\n')
+      .find((row) => row.startsWith('Dialogue:'))
     expect(event).toContain('0:00:00.00,0:00:01.50')
     expect(event).toContain('{\\kf150}held')
     expect(event).not.toContain('{\\kf200}')
@@ -613,7 +584,9 @@ describe('ASS export', () => {
       tracks: [createVocalTrack({ id: 'lead', lines: [line] })],
     })
 
-    const event = exportAss(project).split('\n').find((row) => row.startsWith('Dialogue:'))
+    const event = exportAss(project)
+      .split('\n')
+      .find((row) => row.startsWith('Dialogue:'))
     expect(event).toContain('{\\kf100}first {\\kf100}second')
   })
 })
@@ -637,10 +610,14 @@ describe('strict current project serialization', () => {
   it('accepts only numeric schemaVersion 0 and rejects the legacy track shape', () => {
     const unsupportedDeclarations: unknown[] = [1, -1, 0.5, '0', null, false, {}, undefined]
     for (const schemaVersion of unsupportedDeclarations) {
-      expect(() => parseProject(JSON.stringify({
-        ...createDemoProject(),
-        schemaVersion,
-      }))).toThrow(UNSUPPORTED_PROJECT_FORMAT_ERROR)
+      expect(() =>
+        parseProject(
+          JSON.stringify({
+            ...createDemoProject(),
+            schemaVersion,
+          }),
+        ),
+      ).toThrow(UNSUPPORTED_PROJECT_FORMAT_ERROR)
     }
 
     const legacy = structuredClone(createDemoProject()) as unknown as {

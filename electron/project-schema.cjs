@@ -125,7 +125,9 @@ function decodeLyricDisplay(value) {
 function validateTiming(startMs, endMs, label) {
   if (startMs === null && endMs === null) return false
   if (startMs === null || endMs === null) {
-    throw new Error(`Invalid karaoke project: ${label} must have both a start and end time, or neither.`)
+    throw new Error(
+      `Invalid karaoke project: ${label} must have both a start and end time, or neither.`,
+    )
   }
   if (!Number.isSafeInteger(startMs) || !Number.isSafeInteger(endMs)) {
     throw new Error(`Invalid karaoke project: ${label} timings must be safe integer milliseconds.`)
@@ -151,7 +153,9 @@ function validateProject(project) {
   }
   id(project.id)
   if (project.lyricDisplay.lineCount < 1 || project.lyricDisplay.lineCount > 5) {
-    throw new Error('Invalid karaoke project: Lyric display line count must be an integer from 1 to 5.')
+    throw new Error(
+      'Invalid karaoke project: Lyric display line count must be an integer from 1 to 5.',
+    )
   }
   if (
     project.durationMs !== null &&
@@ -163,7 +167,10 @@ function validateProject(project) {
       'Invalid karaoke project: Project duration must be a safe integer between zero and four hours.',
     )
   }
-  if (!Number.isSafeInteger(project.offsetMs) || Math.abs(project.offsetMs) > MAX_PROJECT_DURATION_MS) {
+  if (
+    !Number.isSafeInteger(project.offsetMs) ||
+    Math.abs(project.offsetMs) > MAX_PROJECT_DURATION_MS
+  ) {
     throw new Error(
       'Invalid karaoke project: Project offset must be a safe integer between negative and positive four hours.',
     )
@@ -176,11 +183,17 @@ function validateProject(project) {
     track.lines.forEach((line) => {
       id(line.id)
       const lineTimed = validateTiming(line.startMs, line.endMs, 'Line')
-      if (lineTimed && project.durationMs !== null && line.endMs + project.offsetMs > project.durationMs) {
+      if (
+        lineTimed &&
+        project.durationMs !== null &&
+        line.endMs + project.offsetMs > project.durationMs
+      ) {
         throw new Error('Invalid karaoke project: Line ends after the project duration.')
       }
       if (lineTimed && line.endMs + project.offsetMs > MAX_PROJECT_DURATION_MS) {
-        throw new Error('Invalid karaoke project: Offset-adjusted line timing cannot exceed four hours.')
+        throw new Error(
+          'Invalid karaoke project: Offset-adjusted line timing cannot exceed four hours.',
+        )
       }
       if (lineTimed && priorLine && line.startMs < priorLine.startMs) {
         throw new Error('Invalid karaoke project: Timed lines must be ordered by start time.')
@@ -190,17 +203,20 @@ function validateProject(project) {
       line.words.forEach((word) => {
         id(word.id)
         const wordTimed = validateTiming(word.startMs, word.endMs, 'Word')
-        if (
-          wordTimed && lineTimed &&
-          (word.startMs < line.startMs || word.endMs > line.endMs)
-        ) {
+        if (wordTimed && lineTimed && (word.startMs < line.startMs || word.endMs > line.endMs)) {
           throw new Error('Invalid karaoke project: Word timing must stay within its line timing.')
         }
-        if (wordTimed && project.durationMs !== null && word.endMs + project.offsetMs > project.durationMs) {
+        if (
+          wordTimed &&
+          project.durationMs !== null &&
+          word.endMs + project.offsetMs > project.durationMs
+        ) {
           throw new Error('Invalid karaoke project: Word ends after the project duration.')
         }
         if (wordTimed && word.endMs + project.offsetMs > MAX_PROJECT_DURATION_MS) {
-          throw new Error('Invalid karaoke project: Offset-adjusted word timing cannot exceed four hours.')
+          throw new Error(
+            'Invalid karaoke project: Offset-adjusted word timing cannot exceed four hours.',
+          )
         }
         if (wordTimed && priorWord && word.startMs < priorWord.startMs) {
           throw new Error('Invalid karaoke project: Timed words must be ordered by start time.')
@@ -217,10 +233,24 @@ function decodeProject(value) {
   if (source.schemaVersion !== PROJECT_SCHEMA_VERSION) {
     throw new Error(UNSUPPORTED_PROJECT_FORMAT_ERROR)
   }
-  exactKeys(source, [
-    'schemaVersion', 'id', 'title', 'artist', 'audioPath', 'durationMs', 'offsetMs',
-    'createdAt', 'updatedAt', 'lyricDisplay', 'stageStyle', 'tracks',
-  ], 'project')
+  exactKeys(
+    source,
+    [
+      'schemaVersion',
+      'id',
+      'title',
+      'artist',
+      'audioPath',
+      'durationMs',
+      'offsetMs',
+      'createdAt',
+      'updatedAt',
+      'lyricDisplay',
+      'stageStyle',
+      'tracks',
+    ],
+    'project',
+  )
   const tracks = array(source, 'tracks', 'project')
   if (tracks.length > MAX_PROJECT_TRACKS) {
     throw new RangeError(`Projects are limited to ${MAX_PROJECT_TRACKS} vocal tracks.`)
@@ -241,9 +271,9 @@ function decodeProject(value) {
     updatedAt: string(source, 'updatedAt', 'project'),
     lyricDisplay: decodeLyricDisplay(source.lyricDisplay),
     stageStyle: decodeStageStyle(source.stageStyle),
-    tracks: tracks.map((track, index) => (
-      decodeTrack(track, `project.tracks[${index}]`, cardinality)
-    )),
+    tracks: tracks.map((track, index) =>
+      decodeTrack(track, `project.tracks[${index}]`, cardinality),
+    ),
   })
 }
 
@@ -253,7 +283,9 @@ function parseProjectJson(json) {
   try {
     value = JSON.parse(json)
   } catch (error) {
-    throw new SyntaxError(`Invalid project JSON: ${error instanceof Error ? error.message : String(error)}`)
+    throw new SyntaxError(
+      `Invalid project JSON: ${error instanceof Error ? error.message : String(error)}`,
+    )
   }
   return decodeProject(value)
 }

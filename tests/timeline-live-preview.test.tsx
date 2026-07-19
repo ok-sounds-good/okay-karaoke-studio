@@ -9,7 +9,12 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { projectForTimingPreview, type ActiveTimingDraft } from '../src/App'
 import { KaraokePreview } from '../src/components/KaraokePreview'
 import { Timeline } from '../src/components/Timeline'
-import { createLyricLine, createLyricWord, createProject, createVocalTrack } from '../src/lib/karaoke'
+import {
+  createLyricLine,
+  createLyricWord,
+  createProject,
+  createVocalTrack,
+} from '../src/lib/karaoke'
 import type { KaraokeProject } from '../src/lib/model'
 import { patchWord, shiftWords, type ProjectTimingDraft } from '../src/utils'
 
@@ -182,21 +187,27 @@ function Harness({ onGestureActiveChange }: { onGestureActiveChange?: (active: b
 }
 
 function ShortBlockHarness() {
-  const [project, setProject] = useState<KaraokeProject>(() => createProject({
-    durationMs: 30_000,
-    tracks: [createVocalTrack({
-      id: 'lead',
-      lines: [createLyricLine('Short Next', {
-        id: 'short-line',
-        startMs: 1_000,
-        endMs: 2_100,
-        words: [
-          createLyricWord('Short', { id: 'short', startMs: 1_000, endMs: 1_050 }),
-          createLyricWord('Next', { id: 'short-next', startMs: 2_000, endMs: 2_100 }),
-        ],
-      })],
-    })],
-  }))
+  const [project, setProject] = useState<KaraokeProject>(() =>
+    createProject({
+      durationMs: 30_000,
+      tracks: [
+        createVocalTrack({
+          id: 'lead',
+          lines: [
+            createLyricLine('Short Next', {
+              id: 'short-line',
+              startMs: 1_000,
+              endMs: 2_100,
+              words: [
+                createLyricWord('Short', { id: 'short', startMs: 1_000, endMs: 1_050 }),
+                createLyricWord('Next', { id: 'short-next', startMs: 2_000, endMs: 2_100 }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    }),
+  )
   const shortWord = project.tracks[0].lines[0].words[0]
 
   return (
@@ -217,9 +228,9 @@ function ShortBlockHarness() {
         onSelectWord={() => undefined}
         onSelectWords={() => undefined}
         onShiftWords={(ids, deltaMs) => setProject((current) => shiftWords(current, ids, deltaMs))}
-        onResizeWord={(wordId, startMs, endMs) => (
+        onResizeWord={(wordId, startMs, endMs) =>
           setProject((current) => patchWord(current, wordId, { startMs, endMs }))
-        )}
+        }
         onTimingDraftChange={() => undefined}
         onToggleSync={() => undefined}
         onClearTiming={() => undefined}
@@ -360,12 +371,14 @@ function KeyboardSelectionHarness({ syncMode = false }: { syncMode?: boolean }) 
         syncMode={syncMode}
         onSeek={() => undefined}
         onZoom={() => undefined}
-        onSelectWord={(wordId, add) => setSelectedWordIds((current) => {
-          const next = add ? new Set(current) : new Set<string>()
-          if (add && next.has(wordId)) next.delete(wordId)
-          else next.add(wordId)
-          return next
-        })}
+        onSelectWord={(wordId, add) =>
+          setSelectedWordIds((current) => {
+            const next = add ? new Set(current) : new Set<string>()
+            if (add && next.has(wordId)) next.delete(wordId)
+            else next.add(wordId)
+            return next
+          })
+        }
         onSelectWords={setSelectedWordIds}
         onShiftWords={() => undefined}
         onResizeWord={() => undefined}
@@ -448,14 +461,16 @@ function dispatchPointer(
 }
 
 function previewProgress(scope: HTMLElement, word = 'Hold') {
-  const stageWord = [...scope.querySelectorAll<HTMLElement>('.stage-word')]
-    .find((element) => element.textContent?.trim() === word)
+  const stageWord = [...scope.querySelectorAll<HTMLElement>('.stage-word')].find(
+    (element) => element.textContent?.trim() === word,
+  )
   return stageWord?.style.getPropertyValue('--word-progress')
 }
 
 function timelineWord(scope: HTMLElement, word = 'Hold') {
-  const button = [...scope.querySelectorAll<HTMLButtonElement>('.timeline-word')]
-    .find((element) => element.getAttribute('aria-label')?.startsWith(`${word} timing block,`))
+  const button = [...scope.querySelectorAll<HTMLButtonElement>('.timeline-word')].find((element) =>
+    element.getAttribute('aria-label')?.startsWith(`${word} timing block,`),
+  )
   if (!button) throw new Error(`Missing timeline word: ${word}`)
   return button
 }
@@ -466,23 +481,31 @@ describe('mounted Timeline live-preview wiring', () => {
     let word = timelineWord(scope)
     expect(word.getAttribute('aria-pressed')).toBe('false')
 
-    act(() => word.dispatchEvent(new KeyboardEvent('keydown', {
-      bubbles: true,
-      cancelable: true,
-      code: 'Enter',
-      key: 'Enter',
-    })))
+    act(() =>
+      word.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          bubbles: true,
+          cancelable: true,
+          code: 'Enter',
+          key: 'Enter',
+        }),
+      ),
+    )
     word = timelineWord(scope)
     expect(scope.querySelector('[data-testid="keyboard-selection"]')?.textContent).toBe('hold')
     expect(word.getAttribute('aria-pressed')).toBe('true')
     expect(captures.get(word)?.size ?? 0).toBe(0)
 
-    act(() => word.dispatchEvent(new KeyboardEvent('keydown', {
-      bubbles: true,
-      cancelable: true,
-      code: 'Space',
-      key: ' ',
-    })))
+    act(() =>
+      word.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          bubbles: true,
+          cancelable: true,
+          code: 'Space',
+          key: ' ',
+        }),
+      ),
+    )
     word = timelineWord(scope)
     expect(scope.querySelector('[data-testid="keyboard-selection"]')?.textContent).toBe('')
     expect(word.getAttribute('aria-pressed')).toBe('false')
@@ -797,7 +820,9 @@ describe('mounted Timeline live-preview wiring', () => {
       ),
     )
 
-    const controls = [...container.querySelectorAll<HTMLButtonElement>('.timeline-sync-tools button')]
+    const controls = [
+      ...container.querySelectorAll<HTMLButtonElement>('.timeline-sync-tools button'),
+    ]
     expect(controls.map((button) => button.textContent?.trim())).toEqual([
       'Start sync',
       'Clear timing',
@@ -813,7 +838,9 @@ describe('mounted Timeline live-preview wiring', () => {
     expect(onClearTiming).toHaveBeenCalledOnce()
     expect(onClearTimingAfterCursor).toHaveBeenCalledOnce()
 
-    const navigation = [...container.querySelectorAll<HTMLButtonElement>('.timeline-navigation button')]
+    const navigation = [
+      ...container.querySelectorAll<HTMLButtonElement>('.timeline-navigation button'),
+    ]
     expect(navigation.map((button) => button.getAttribute('aria-label'))).toEqual([
       'Jump timeline view to start',
       'Scroll timeline backward',
@@ -938,7 +965,9 @@ describe('mounted Timeline live-preview wiring', () => {
     expect(previewProgress(scope)).toBe('0%')
     expect(scope.querySelector('[data-testid="saved-timing"]')?.textContent).toBe('1000:2000')
 
-    const refreshMetadata = scope.querySelector<HTMLButtonElement>('[data-testid="refresh-metadata"]')!
+    const refreshMetadata = scope.querySelector<HTMLButtonElement>(
+      '[data-testid="refresh-metadata"]',
+    )!
     act(() => refreshMetadata.click())
     expect(scope.querySelector('[data-testid="draft-state"]')?.textContent).toBe('draft')
     expect(previewProgress(scope)).toBe('0%')
@@ -960,7 +989,9 @@ describe('mounted Timeline live-preview wiring', () => {
     dispatchPointer(held, 'pointermove', 62, 136)
     expect(previewProgress(scope)).toBe('0%')
 
-    const changeTiming = scope.querySelector<HTMLButtonElement>('[data-testid="change-held-timing"]')!
+    const changeTiming = scope.querySelector<HTMLButtonElement>(
+      '[data-testid="change-held-timing"]',
+    )!
     act(() => changeTiming.click())
     expect(scope.querySelector('[data-testid="draft-state"]')?.textContent).toBe('committed')
     expect(scope.querySelector('[data-testid="saved-timing"]')?.textContent).toBe('1100:2000')

@@ -1,1 +1,429 @@
-{"schemaVersion":0,"id":"golden-project","title":"Golden Song","artist":"Fixture Singer","audioPath":"/fixtures/audio.wav","durationMs":5000,"offsetMs":250,"createdAt":"2026-07-14T12:00:00.000Z","updatedAt":"2026-07-14T12:01:00.000Z","lyricDisplay":{"lineCount":2,"advanceMode":"scroll"},"stageStyle":{"background":{"mode":"image","solidColor":"#21182D","gradientStartColor":"#322242","gradientEndColor":"#1E1629","imagePath":"/fixtures/linked background.png"},"lyrics":{"typeface":{"kind":"system-ui","family":"System UI","faces":[{"fullName":"System UI Regular","style":"Regular","postscriptName":null,"weight":400,"slant":"normal"},{"fullName":"System UI Italic","style":"Italic","postscriptName":null,"weight":400,"slant":"italic"},{"fullName":"System UI Semi Bold","style":"Semi Bold","postscriptName":null,"weight":600,"slant":"normal"},{"fullName":"System UI Bold","style":"Bold","postscriptName":null,"weight":700,"slant":"normal"},{"fullName":"System UI Extra Bold","style":"Extra Bold","postscriptName":null,"weight":800,"slant":"normal"}]},"fontStyle":{"fullName":"System UI Extra Bold","style":"Extra Bold","postscriptName":null,"weight":800,"slant":"normal"},"sizePx":82,"unsungColor":"#72687D","sungColor":"#A1B2C3"},"titleCard":{"eyebrow":{"typeface":{"kind":"system-ui","family":"System UI","faces":[{"fullName":"System UI Regular","style":"Regular","postscriptName":null,"weight":400,"slant":"normal"},{"fullName":"System UI Italic","style":"Italic","postscriptName":null,"weight":400,"slant":"italic"},{"fullName":"System UI Semi Bold","style":"Semi Bold","postscriptName":null,"weight":600,"slant":"normal"},{"fullName":"System UI Bold","style":"Bold","postscriptName":null,"weight":700,"slant":"normal"},{"fullName":"System UI Extra Bold","style":"Extra Bold","postscriptName":null,"weight":800,"slant":"normal"}]},"fontStyle":{"fullName":"System UI Extra Bold","style":"Extra Bold","postscriptName":null,"weight":800,"slant":"normal"},"sizePx":25,"color":"#FFAD69","visible":true},"title":{"typeface":{"kind":"system-ui","family":"System UI","faces":[{"fullName":"System UI Regular","style":"Regular","postscriptName":null,"weight":400,"slant":"normal"},{"fullName":"System UI Italic","style":"Italic","postscriptName":null,"weight":400,"slant":"italic"},{"fullName":"System UI Semi Bold","style":"Semi Bold","postscriptName":null,"weight":600,"slant":"normal"},{"fullName":"System UI Bold","style":"Bold","postscriptName":null,"weight":700,"slant":"normal"},{"fullName":"System UI Extra Bold","style":"Extra Bold","postscriptName":null,"weight":800,"slant":"normal"}]},"fontStyle":{"fullName":"System UI Extra Bold","style":"Extra Bold","postscriptName":null,"weight":800,"slant":"normal"},"sizePx":104,"color":"#FBF9FD","visible":true},"artist":{"typeface":{"kind":"system-ui","family":"System UI","faces":[{"fullName":"System UI Regular","style":"Regular","postscriptName":null,"weight":400,"slant":"normal"},{"fullName":"System UI Italic","style":"Italic","postscriptName":null,"weight":400,"slant":"italic"},{"fullName":"System UI Semi Bold","style":"Semi Bold","postscriptName":null,"weight":600,"slant":"normal"},{"fullName":"System UI Bold","style":"Bold","postscriptName":null,"weight":700,"slant":"normal"},{"fullName":"System UI Extra Bold","style":"Extra Bold","postscriptName":null,"weight":800,"slant":"normal"}]},"fontStyle":{"fullName":"System UI Semi Bold","style":"Semi Bold","postscriptName":null,"weight":600,"slant":"normal"},"sizePx":42,"color":"#B4ACBD","visible":true}},"stageFrame":{"enabled":true,"lineColor":"#473C54","lineWidthPx":2,"brand":{"typeface":{"kind":"system-monospace","family":"System Monospace","faces":[{"fullName":"System Monospace Regular","style":"Regular","postscriptName":null,"weight":400,"slant":"normal"},{"fullName":"System Monospace Italic","style":"Italic","postscriptName":null,"weight":400,"slant":"italic"},{"fullName":"System Monospace Semi Bold","style":"Semi Bold","postscriptName":null,"weight":600,"slant":"normal"},{"fullName":"System Monospace Bold","style":"Bold","postscriptName":null,"weight":700,"slant":"normal"},{"fullName":"System Monospace Extra Bold","style":"Extra Bold","postscriptName":null,"weight":800,"slant":"normal"}]},"fontStyle":{"fullName":"System Monospace Bold","style":"Bold","postscriptName":null,"weight":700,"slant":"normal"},"sizePx":25,"color":"#C1BBC7","visible":true},"clock":{"typeface":{"kind":"system-monospace","family":"System Monospace","faces":[{"fullName":"System Monospace Regular","style":"Regular","postscriptName":null,"weight":400,"slant":"normal"},{"fullName":"System Monospace Italic","style":"Italic","postscriptName":null,"weight":400,"slant":"italic"},{"fullName":"System Monospace Semi Bold","style":"Semi Bold","postscriptName":null,"weight":600,"slant":"normal"},{"fullName":"System Monospace Bold","style":"Bold","postscriptName":null,"weight":700,"slant":"normal"},{"fullName":"System Monospace Extra Bold","style":"Extra Bold","postscriptName":null,"weight":800,"slant":"normal"}]},"fontStyle":{"fullName":"System Monospace Semi Bold","style":"Semi Bold","postscriptName":null,"weight":600,"slant":"normal"},"sizePx":27,"color":"#BBB7C0","visible":true},"footer":{"typeface":{"kind":"system-ui","family":"System UI","faces":[{"fullName":"System UI Regular","style":"Regular","postscriptName":null,"weight":400,"slant":"normal"},{"fullName":"System UI Italic","style":"Italic","postscriptName":null,"weight":400,"slant":"italic"},{"fullName":"System UI Semi Bold","style":"Semi Bold","postscriptName":null,"weight":600,"slant":"normal"},{"fullName":"System UI Bold","style":"Bold","postscriptName":null,"weight":700,"slant":"normal"},{"fullName":"System UI Extra Bold","style":"Extra Bold","postscriptName":null,"weight":800,"slant":"normal"}]},"fontStyle":{"fullName":"System UI Bold","style":"Bold","postscriptName":null,"weight":700,"slant":"normal"},"sizePx":24,"color":"#B2AEB8","visible":true}}},"tracks":[{"id":"golden-lead","name":"Lead Vocal","vocalStyle":{"typeface":null,"fontStyle":null,"sizePx":null,"unsungColor":"#102030","sungColor":null,"alignment":"center","previewMs":3000,"syncAid":{"enabled":false,"minLeadMs":2000,"maxLeadMs":3000}},"muted":false,"solo":false,"lines":[{"id":"golden-line","text":"Hello fixture","startMs":1000,"endMs":3000,"words":[{"id":"golden-word-1","text":"Hello","startMs":1000,"endMs":2000},{"id":"golden-word-2","text":"fixture","startMs":2000,"endMs":3000}]}]}]}
+{
+  "schemaVersion": 0,
+  "id": "golden-project",
+  "title": "Golden Song",
+  "artist": "Fixture Singer",
+  "audioPath": "/fixtures/audio.wav",
+  "durationMs": 5000,
+  "offsetMs": 250,
+  "createdAt": "2026-07-14T12:00:00.000Z",
+  "updatedAt": "2026-07-14T12:01:00.000Z",
+  "lyricDisplay": { "lineCount": 2, "advanceMode": "scroll" },
+  "stageStyle": {
+    "background": {
+      "mode": "image",
+      "solidColor": "#21182D",
+      "gradientStartColor": "#322242",
+      "gradientEndColor": "#1E1629",
+      "imagePath": "/fixtures/linked background.png"
+    },
+    "lyrics": {
+      "typeface": {
+        "kind": "system-ui",
+        "family": "System UI",
+        "faces": [
+          {
+            "fullName": "System UI Regular",
+            "style": "Regular",
+            "postscriptName": null,
+            "weight": 400,
+            "slant": "normal"
+          },
+          {
+            "fullName": "System UI Italic",
+            "style": "Italic",
+            "postscriptName": null,
+            "weight": 400,
+            "slant": "italic"
+          },
+          {
+            "fullName": "System UI Semi Bold",
+            "style": "Semi Bold",
+            "postscriptName": null,
+            "weight": 600,
+            "slant": "normal"
+          },
+          {
+            "fullName": "System UI Bold",
+            "style": "Bold",
+            "postscriptName": null,
+            "weight": 700,
+            "slant": "normal"
+          },
+          {
+            "fullName": "System UI Extra Bold",
+            "style": "Extra Bold",
+            "postscriptName": null,
+            "weight": 800,
+            "slant": "normal"
+          }
+        ]
+      },
+      "fontStyle": {
+        "fullName": "System UI Extra Bold",
+        "style": "Extra Bold",
+        "postscriptName": null,
+        "weight": 800,
+        "slant": "normal"
+      },
+      "sizePx": 82,
+      "unsungColor": "#72687D",
+      "sungColor": "#A1B2C3"
+    },
+    "titleCard": {
+      "eyebrow": {
+        "typeface": {
+          "kind": "system-ui",
+          "family": "System UI",
+          "faces": [
+            {
+              "fullName": "System UI Regular",
+              "style": "Regular",
+              "postscriptName": null,
+              "weight": 400,
+              "slant": "normal"
+            },
+            {
+              "fullName": "System UI Italic",
+              "style": "Italic",
+              "postscriptName": null,
+              "weight": 400,
+              "slant": "italic"
+            },
+            {
+              "fullName": "System UI Semi Bold",
+              "style": "Semi Bold",
+              "postscriptName": null,
+              "weight": 600,
+              "slant": "normal"
+            },
+            {
+              "fullName": "System UI Bold",
+              "style": "Bold",
+              "postscriptName": null,
+              "weight": 700,
+              "slant": "normal"
+            },
+            {
+              "fullName": "System UI Extra Bold",
+              "style": "Extra Bold",
+              "postscriptName": null,
+              "weight": 800,
+              "slant": "normal"
+            }
+          ]
+        },
+        "fontStyle": {
+          "fullName": "System UI Extra Bold",
+          "style": "Extra Bold",
+          "postscriptName": null,
+          "weight": 800,
+          "slant": "normal"
+        },
+        "sizePx": 25,
+        "color": "#FFAD69",
+        "visible": true
+      },
+      "title": {
+        "typeface": {
+          "kind": "system-ui",
+          "family": "System UI",
+          "faces": [
+            {
+              "fullName": "System UI Regular",
+              "style": "Regular",
+              "postscriptName": null,
+              "weight": 400,
+              "slant": "normal"
+            },
+            {
+              "fullName": "System UI Italic",
+              "style": "Italic",
+              "postscriptName": null,
+              "weight": 400,
+              "slant": "italic"
+            },
+            {
+              "fullName": "System UI Semi Bold",
+              "style": "Semi Bold",
+              "postscriptName": null,
+              "weight": 600,
+              "slant": "normal"
+            },
+            {
+              "fullName": "System UI Bold",
+              "style": "Bold",
+              "postscriptName": null,
+              "weight": 700,
+              "slant": "normal"
+            },
+            {
+              "fullName": "System UI Extra Bold",
+              "style": "Extra Bold",
+              "postscriptName": null,
+              "weight": 800,
+              "slant": "normal"
+            }
+          ]
+        },
+        "fontStyle": {
+          "fullName": "System UI Extra Bold",
+          "style": "Extra Bold",
+          "postscriptName": null,
+          "weight": 800,
+          "slant": "normal"
+        },
+        "sizePx": 104,
+        "color": "#FBF9FD",
+        "visible": true
+      },
+      "artist": {
+        "typeface": {
+          "kind": "system-ui",
+          "family": "System UI",
+          "faces": [
+            {
+              "fullName": "System UI Regular",
+              "style": "Regular",
+              "postscriptName": null,
+              "weight": 400,
+              "slant": "normal"
+            },
+            {
+              "fullName": "System UI Italic",
+              "style": "Italic",
+              "postscriptName": null,
+              "weight": 400,
+              "slant": "italic"
+            },
+            {
+              "fullName": "System UI Semi Bold",
+              "style": "Semi Bold",
+              "postscriptName": null,
+              "weight": 600,
+              "slant": "normal"
+            },
+            {
+              "fullName": "System UI Bold",
+              "style": "Bold",
+              "postscriptName": null,
+              "weight": 700,
+              "slant": "normal"
+            },
+            {
+              "fullName": "System UI Extra Bold",
+              "style": "Extra Bold",
+              "postscriptName": null,
+              "weight": 800,
+              "slant": "normal"
+            }
+          ]
+        },
+        "fontStyle": {
+          "fullName": "System UI Semi Bold",
+          "style": "Semi Bold",
+          "postscriptName": null,
+          "weight": 600,
+          "slant": "normal"
+        },
+        "sizePx": 42,
+        "color": "#B4ACBD",
+        "visible": true
+      }
+    },
+    "stageFrame": {
+      "enabled": true,
+      "lineColor": "#473C54",
+      "lineWidthPx": 2,
+      "brand": {
+        "typeface": {
+          "kind": "system-monospace",
+          "family": "System Monospace",
+          "faces": [
+            {
+              "fullName": "System Monospace Regular",
+              "style": "Regular",
+              "postscriptName": null,
+              "weight": 400,
+              "slant": "normal"
+            },
+            {
+              "fullName": "System Monospace Italic",
+              "style": "Italic",
+              "postscriptName": null,
+              "weight": 400,
+              "slant": "italic"
+            },
+            {
+              "fullName": "System Monospace Semi Bold",
+              "style": "Semi Bold",
+              "postscriptName": null,
+              "weight": 600,
+              "slant": "normal"
+            },
+            {
+              "fullName": "System Monospace Bold",
+              "style": "Bold",
+              "postscriptName": null,
+              "weight": 700,
+              "slant": "normal"
+            },
+            {
+              "fullName": "System Monospace Extra Bold",
+              "style": "Extra Bold",
+              "postscriptName": null,
+              "weight": 800,
+              "slant": "normal"
+            }
+          ]
+        },
+        "fontStyle": {
+          "fullName": "System Monospace Bold",
+          "style": "Bold",
+          "postscriptName": null,
+          "weight": 700,
+          "slant": "normal"
+        },
+        "sizePx": 25,
+        "color": "#C1BBC7",
+        "visible": true
+      },
+      "clock": {
+        "typeface": {
+          "kind": "system-monospace",
+          "family": "System Monospace",
+          "faces": [
+            {
+              "fullName": "System Monospace Regular",
+              "style": "Regular",
+              "postscriptName": null,
+              "weight": 400,
+              "slant": "normal"
+            },
+            {
+              "fullName": "System Monospace Italic",
+              "style": "Italic",
+              "postscriptName": null,
+              "weight": 400,
+              "slant": "italic"
+            },
+            {
+              "fullName": "System Monospace Semi Bold",
+              "style": "Semi Bold",
+              "postscriptName": null,
+              "weight": 600,
+              "slant": "normal"
+            },
+            {
+              "fullName": "System Monospace Bold",
+              "style": "Bold",
+              "postscriptName": null,
+              "weight": 700,
+              "slant": "normal"
+            },
+            {
+              "fullName": "System Monospace Extra Bold",
+              "style": "Extra Bold",
+              "postscriptName": null,
+              "weight": 800,
+              "slant": "normal"
+            }
+          ]
+        },
+        "fontStyle": {
+          "fullName": "System Monospace Semi Bold",
+          "style": "Semi Bold",
+          "postscriptName": null,
+          "weight": 600,
+          "slant": "normal"
+        },
+        "sizePx": 27,
+        "color": "#BBB7C0",
+        "visible": true
+      },
+      "footer": {
+        "typeface": {
+          "kind": "system-ui",
+          "family": "System UI",
+          "faces": [
+            {
+              "fullName": "System UI Regular",
+              "style": "Regular",
+              "postscriptName": null,
+              "weight": 400,
+              "slant": "normal"
+            },
+            {
+              "fullName": "System UI Italic",
+              "style": "Italic",
+              "postscriptName": null,
+              "weight": 400,
+              "slant": "italic"
+            },
+            {
+              "fullName": "System UI Semi Bold",
+              "style": "Semi Bold",
+              "postscriptName": null,
+              "weight": 600,
+              "slant": "normal"
+            },
+            {
+              "fullName": "System UI Bold",
+              "style": "Bold",
+              "postscriptName": null,
+              "weight": 700,
+              "slant": "normal"
+            },
+            {
+              "fullName": "System UI Extra Bold",
+              "style": "Extra Bold",
+              "postscriptName": null,
+              "weight": 800,
+              "slant": "normal"
+            }
+          ]
+        },
+        "fontStyle": {
+          "fullName": "System UI Bold",
+          "style": "Bold",
+          "postscriptName": null,
+          "weight": 700,
+          "slant": "normal"
+        },
+        "sizePx": 24,
+        "color": "#B2AEB8",
+        "visible": true
+      }
+    }
+  },
+  "tracks": [
+    {
+      "id": "golden-lead",
+      "name": "Lead Vocal",
+      "vocalStyle": {
+        "typeface": null,
+        "fontStyle": null,
+        "sizePx": null,
+        "unsungColor": "#102030",
+        "sungColor": null,
+        "alignment": "center",
+        "previewMs": 3000,
+        "syncAid": { "enabled": false, "minLeadMs": 2000, "maxLeadMs": 3000 }
+      },
+      "muted": false,
+      "solo": false,
+      "lines": [
+        {
+          "id": "golden-line",
+          "text": "Hello fixture",
+          "startMs": 1000,
+          "endMs": 3000,
+          "words": [
+            { "id": "golden-word-1", "text": "Hello", "startMs": 1000, "endMs": 2000 },
+            { "id": "golden-word-2", "text": "fixture", "startMs": 2000, "endMs": 3000 }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -36,10 +36,7 @@
 }
 
 .karaoke-stage .karaoke-stage__safe-area {
-  inset:
-    var(--stage-frame-top)
-    var(--stage-frame-right)
-    var(--stage-frame-bottom)
+  inset: var(--stage-frame-top) var(--stage-frame-right) var(--stage-frame-bottom)
     var(--stage-frame-left);
   border: var(--stage-frame-width) solid var(--stage-frame-color);
   border-radius: var(--stage-frame-radius);
@@ -63,10 +60,7 @@
 }
 
 .karaoke-stage .karaoke-stage__content {
-  inset:
-    var(--stage-content-top)
-    var(--stage-content-right)
-    var(--stage-content-bottom)
+  inset: var(--stage-content-top) var(--stage-content-right) var(--stage-content-bottom)
     var(--stage-content-left);
 }
 
@@ -84,11 +78,8 @@
 
 .karaoke-stage .title-card h3 {
   max-width: var(--stage-title-max-width);
-  margin:
-    var(--stage-title-margin-top)
-    var(--stage-title-margin-right)
-    var(--stage-title-margin-bottom)
-    var(--stage-title-margin-left);
+  margin: var(--stage-title-margin-top) var(--stage-title-margin-right)
+    var(--stage-title-margin-bottom) var(--stage-title-margin-left);
   line-height: var(--stage-title-line-height);
   letter-spacing: var(--stage-title-spacing);
   text-shadow: var(--stage-title-shadow);
@@ -121,9 +112,15 @@
   display: inline-block;
 }
 
-.karaoke-stage .stage-line--left p { text-align: left; }
-.karaoke-stage .stage-line--center p { text-align: center; }
-.karaoke-stage .stage-line--right p { text-align: right; }
+.karaoke-stage .stage-line--left p {
+  text-align: left;
+}
+.karaoke-stage .stage-line--center p {
+  text-align: center;
+}
+.karaoke-stage .stage-line--right p {
+  text-align: right;
+}
 
 .karaoke-stage .stage-word,
 .karaoke-stage .stage-word.is-done {
@@ -162,17 +159,17 @@
   top: 1.2cqw;
   left: 50%;
   max-width: 68%;
-  padding: .38cqw .62cqw;
+  padding: 0.38cqw 0.62cqw;
   border: 1px solid var(--orange);
-  border-radius: .42cqw;
+  border-radius: 0.42cqw;
   background: var(--panel);
   color: var(--text-soft);
-  font-size: .58cqw;
+  font-size: 0.58cqw;
   transform: translateX(-50%);
 }
 
 .stage-resource-warning button {
-  margin-left: .4cqw;
+  margin-left: 0.4cqw;
   color: var(--accent-soft);
   font: inherit;
   font-weight: 800;

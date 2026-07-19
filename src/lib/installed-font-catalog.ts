@@ -16,7 +16,7 @@ function compareOrdinal(left: string, right: string) {
 
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : null
 }
 
@@ -52,20 +52,24 @@ function normalizeFace(value: unknown): NormalizedFace | null {
 }
 
 function compareNormalizedFaces(left: NormalizedFace, right: NormalizedFace) {
-  return compareOrdinal(left.family, right.family) ||
+  return (
+    compareOrdinal(left.family, right.family) ||
     compareOrdinal(left.face.style, right.face.style) ||
     compareOrdinal(left.face.fullName, right.face.fullName) ||
     compareOrdinal(left.face.postscriptName ?? '', right.face.postscriptName ?? '')
+  )
 }
 
 /** Converts browser font metadata into deterministic local descriptors; never font bytes or paths. */
 export function normalizeInstalledFontCatalog(
   values: readonly unknown[],
 ): FontTypefaceDescriptor[] {
-  const normalized = values.flatMap((value) => {
-    const face = normalizeFace(value)
-    return face ? [face] : []
-  }).sort(compareNormalizedFaces)
+  const normalized = values
+    .flatMap((value) => {
+      const face = normalizeFace(value)
+      return face ? [face] : []
+    })
+    .sort(compareNormalizedFaces)
   const seenPostScriptNames = new Set<string>()
   const families = new Map<string, FontFaceDescriptor[]>()
 

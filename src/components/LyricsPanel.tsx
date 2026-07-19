@@ -50,7 +50,9 @@ export function LyricsPanel({
     <section className="lyrics-panel panel" aria-label="Lyrics editor">
       <header className="panel-header lyrics-panel__header">
         <div className="panel-title">
-          <span className="panel-title__icon"><Captions size={16} /></span>
+          <span className="panel-title__icon">
+            <Captions size={16} />
+          </span>
           <div>
             <span className="eyebrow">Word map</span>
             <h2>Lyrics</h2>
@@ -70,9 +72,13 @@ export function LyricsPanel({
             role="tab"
             aria-selected={track.id === activeTrack.id}
           >
-            <span style={{
-              background: resolveVocalSungColor(stageStyle, track.vocalStyle),
-            }}><Mic2 size={12} /></span>
+            <span
+              style={{
+                background: resolveVocalSungColor(stageStyle, track.vocalStyle),
+              }}
+            >
+              <Mic2 size={12} />
+            </span>
             <b>{index + 1}</b>
             {track.name}
           </button>
@@ -85,10 +91,12 @@ export function LyricsPanel({
           <span>of {words.length} words timed</span>
         </div>
         <span className="lyrics-progress__bar">
-          <i style={{
-            width: `${words.length ? (timedCount / words.length) * 100 : 0}%`,
-            background: activeColor,
-          }} />
+          <i
+            style={{
+              width: `${words.length ? (timedCount / words.length) * 100 : 0}%`,
+              background: activeColor,
+            }}
+          />
         </span>
       </div>
 
@@ -112,22 +120,35 @@ export function LyricsPanel({
                     {formatTime(line.startMs, true)}
                   </button>
                 ) : (
-                  <span className="untimed-label"><TimerReset size={11} /> Untimed</span>
+                  <span className="untimed-label">
+                    <TimerReset size={11} /> Untimed
+                  </span>
                 )}
-                {lineTimed === line.words.length && line.words.length > 0 && <Check size={12} className="line-check" />}
+                {lineTimed === line.words.length && line.words.length > 0 && (
+                  <Check size={12} className="line-check" />
+                )}
               </div>
               <p className="lyric-line__words">
                 {line.words.map((word) => {
                   const selected = selectedWordIds.has(word.id)
                   const isSyncWord = syncWordId === word.id
                   const isPast = word.endMs !== null && lyricMs >= word.endMs
-                  const isCurrent = word.startMs !== null && lyricMs >= word.startMs && lyricMs <= (word.endMs ?? word.startMs + 350)
+                  const isCurrent =
+                    word.startMs !== null &&
+                    lyricMs >= word.startMs &&
+                    lyricMs <= (word.endMs ?? word.startMs + 350)
                   return (
                     <button
                       key={word.id}
                       className={`lyric-word ${selected ? 'is-selected' : ''} ${isSyncWord ? 'is-sync-target' : ''} ${isPast ? 'is-past' : ''} ${isCurrent ? 'is-current' : ''} ${word.startMs === null ? 'is-untimed' : ''}`}
-                      onClick={(event) => onSelectWord(word, event.shiftKey || event.metaKey || event.ctrlKey)}
-                      title={word.startMs === null ? 'Not timed yet' : `${formatTime(word.startMs, true)} – ${formatTime(word.endMs ?? word.startMs, true)}`}
+                      onClick={(event) =>
+                        onSelectWord(word, event.shiftKey || event.metaKey || event.ctrlKey)
+                      }
+                      title={
+                        word.startMs === null
+                          ? 'Not timed yet'
+                          : `${formatTime(word.startMs, true)} – ${formatTime(word.endMs ?? word.startMs, true)}`
+                      }
                     >
                       {word.text.replaceAll('/', '·')}
                     </button>

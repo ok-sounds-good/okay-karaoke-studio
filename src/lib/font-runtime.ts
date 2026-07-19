@@ -1,8 +1,4 @@
-import {
-  createFontAliasBatch,
-  deterministicFontFamily,
-  localFontSource,
-} from './font-identity'
+import { createFontAliasBatch, deterministicFontFamily, localFontSource } from './font-identity'
 import {
   resolveFontFace,
   type FontFaceDescriptor,
@@ -11,7 +7,9 @@ import {
 const aliases = createFontAliasBatch()
 const loadedFonts = new Map<string, Promise<string | null>>()
 export async function loadLocalFont(
-  typeface: FontTypefaceDescriptor, requestedStyle: FontFaceDescriptor, retry = false,
+  typeface: FontTypefaceDescriptor,
+  requestedStyle: FontFaceDescriptor,
+  retry = false,
 ): Promise<string | null> {
   const face = resolveFontFace(typeface, requestedStyle)
   if (typeface.kind !== 'local' || !face.postscriptName || typeof FontFace === 'undefined') {
@@ -41,8 +39,6 @@ export async function loadLocalFont(
   })
   return pending
 }
-export function fontFamilyFor(
-  typeface: FontTypefaceDescriptor, alias: string | null,
-): string {
+export function fontFamilyFor(typeface: FontTypefaceDescriptor, alias: string | null): string {
   return deterministicFontFamily(typeface, alias ?? undefined)
 }

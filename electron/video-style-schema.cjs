@@ -2,8 +2,8 @@
 
 // This contract is for JSON-shaped data; proxy/getter evaluation counts are not an API.
 const FONT_SIZE_OPTIONS = Object.freeze([
-  8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 24, 25, 27, 28, 32, 36, 40, 42,
-  48, 56, 64, 72, 82, 96, 104, 120, 144, 180, 240, 320, 400,
+  8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 24, 25, 27, 28, 32, 36, 40, 42, 48, 56, 64, 72, 82, 96, 104,
+  120, 144, 180, 240, 320, 400,
 ])
 const FONT_SIZE_SET = new Set(FONT_SIZE_OPTIONS)
 const FACE_KEYS = ['fullName', 'style', 'postscriptName', 'weight', 'slant']
@@ -119,11 +119,8 @@ function isValidPostScriptName(value) {
   if (typeof value !== 'string' || value.length < 1 || value.length > 63) return false
   for (const character of value) {
     const codePoint = character.codePointAt(0) || 0
-    if (
-      codePoint < 0x21 ||
-      codePoint > 0x7e ||
-      FORBIDDEN_POSTSCRIPT_CHARACTERS.has(character)
-    ) return false
+    if (codePoint < 0x21 || codePoint > 0x7e || FORBIDDEN_POSTSCRIPT_CHARACTERS.has(character))
+      return false
   }
   return true
 }
@@ -131,27 +128,38 @@ function isValidPostScriptName(value) {
 function validFontFaceDescriptor(value) {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
   if (!hasExactKeys(value, FACE_KEYS)) return false
-  return typeof value.fullName === 'string' && Boolean(value.fullName.trim()) &&
+  return (
+    typeof value.fullName === 'string' &&
+    Boolean(value.fullName.trim()) &&
     value.fullName.length <= 300 &&
-    typeof value.style === 'string' && Boolean(value.style.trim()) && value.style.length <= 120 &&
+    typeof value.style === 'string' &&
+    Boolean(value.style.trim()) &&
+    value.style.length <= 120 &&
     (value.postscriptName === null || isValidPostScriptName(value.postscriptName)) &&
-    Number.isSafeInteger(value.weight) && value.weight >= 100 && value.weight <= 900 &&
+    Number.isSafeInteger(value.weight) &&
+    value.weight >= 100 &&
+    value.weight <= 900 &&
     ['normal', 'italic', 'oblique'].includes(String(value.slant))
+  )
 }
 
 function sameFace(left, right) {
-  return left.fullName === right.fullName &&
+  return (
+    left.fullName === right.fullName &&
     left.style === right.style &&
     left.postscriptName === right.postscriptName &&
     left.weight === right.weight &&
     left.slant === right.slant
+  )
 }
 
 function sameTypeface(candidate, canonical) {
-  return candidate.kind === canonical.kind &&
+  return (
+    candidate.kind === canonical.kind &&
     candidate.family === canonical.family &&
     candidate.faces.length === canonical.faces.length &&
     candidate.faces.every((face, index) => sameFace(face, canonical.faces[index]))
+  )
 }
 
 function validTypefaceDescriptor(value) {
@@ -171,8 +179,10 @@ function validTypefaceDescriptor(value) {
   if (value.kind === 'system-ui') return sameTypeface(value, SYSTEM_UI_TYPEFACE)
   if (value.kind === 'system-monospace') return sameTypeface(value, SYSTEM_MONOSPACE_TYPEFACE)
   const postscriptNames = value.faces.map((face) => face.postscriptName)
-  return postscriptNames.every((name) => name !== null) &&
+  return (
+    postscriptNames.every((name) => name !== null) &&
     new Set(postscriptNames).size === postscriptNames.length
+  )
 }
 
 function validTextStyle(value, withVisibility = false) {
@@ -180,12 +190,14 @@ function validTextStyle(value, withVisibility = false) {
   const keys = withVisibility
     ? ['typeface', 'fontStyle', 'sizePx', 'color', 'visible']
     : ['typeface', 'fontStyle', 'sizePx', 'color']
-  return hasExactKeys(value, keys) &&
+  return (
+    hasExactKeys(value, keys) &&
     validTypefaceDescriptor(value.typeface) &&
     validFontFaceDescriptor(value.fontStyle) &&
     isFontSizePx(value.sizePx) &&
     isHexColor(value.color) &&
     (!withVisibility || typeof value.visible === 'boolean')
+  )
 }
 
 function decodeFontFace(value, path) {
@@ -300,11 +312,7 @@ function decodeStageStyle(value) {
       sungColor: color(lyrics, 'sungColor', 'project.stageStyle.lyrics'),
     },
     titleCard: {
-      eyebrow: decodeTextStyle(
-        title.eyebrow,
-        'project.stageStyle.titleCard.eyebrow',
-        true,
-      ),
+      eyebrow: decodeTextStyle(title.eyebrow, 'project.stageStyle.titleCard.eyebrow', true),
       title: decodeTextStyle(title.title, 'project.stageStyle.titleCard.title', true),
       artist: decodeTextStyle(title.artist, 'project.stageStyle.titleCard.artist', true),
     },
@@ -321,7 +329,8 @@ function decodeStageStyle(value) {
 
 function isValidSyncAid(style) {
   const { previewMs, syncAid } = style
-  return typeof syncAid.enabled === 'boolean' &&
+  return (
+    typeof syncAid.enabled === 'boolean' &&
     Number.isSafeInteger(previewMs) &&
     Number.isSafeInteger(syncAid.minLeadMs) &&
     Number.isSafeInteger(syncAid.maxLeadMs) &&
@@ -330,6 +339,7 @@ function isValidSyncAid(style) {
     syncAid.minLeadMs <= syncAid.maxLeadMs &&
     syncAid.maxLeadMs <= previewMs &&
     previewMs <= 60_000
+  )
 }
 
 function decodeVocalStyle(value, path) {
@@ -367,12 +377,9 @@ function decodeVocalStyle(value, path) {
   const syncAid = record(source.syncAid, `${path}.syncAid`)
   exactKeys(syncAid, ['enabled', 'minLeadMs', 'maxLeadMs'], `${path}.syncAid`)
   const style = {
-    typeface: source.typeface === null
-      ? null
-      : decodeTypeface(source.typeface, `${path}.typeface`),
-    fontStyle: source.fontStyle === null
-      ? null
-      : decodeFontFace(source.fontStyle, `${path}.fontStyle`),
+    typeface: source.typeface === null ? null : decodeTypeface(source.typeface, `${path}.typeface`),
+    fontStyle:
+      source.fontStyle === null ? null : decodeFontFace(source.fontStyle, `${path}.fontStyle`),
     sizePx: source.sizePx,
     unsungColor: nullableColor('unsungColor'),
     sungColor: nullableColor('sungColor'),

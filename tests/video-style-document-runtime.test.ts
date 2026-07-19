@@ -75,7 +75,10 @@ describe('browser render runtime', () => {
     const rejectedSources = new Set<string>()
     const deferredSources = new Map<string, Promise<void>>()
     class TestFontFace {
-      constructor(public family: string, public source: string) {
+      constructor(
+        public family: string,
+        public source: string,
+      ) {
         loadedFaces.push({ family, source })
       }
       async load() {
@@ -94,25 +97,55 @@ describe('browser render runtime', () => {
     })
 
     const typeface: FontTypefaceDescriptor = {
-      kind: 'local', family: 'Tie Sans', faces: [
-        { fullName: 'Tie Zulu', style: 'Zulu', postscriptName: 'Tie"Zulu', weight: 300,
-          slant: 'normal' },
-        { fullName: 'Tie Angstrom', style: 'Ångstrom', postscriptName: 'Tie-Angstrom', weight: 500,
-          slant: 'normal' },
+      kind: 'local',
+      family: 'Tie Sans',
+      faces: [
+        {
+          fullName: 'Tie Zulu',
+          style: 'Zulu',
+          postscriptName: 'Tie"Zulu',
+          weight: 300,
+          slant: 'normal',
+        },
+        {
+          fullName: 'Tie Angstrom',
+          style: 'Ångstrom',
+          postscriptName: 'Tie-Angstrom',
+          weight: 500,
+          slant: 'normal',
+        },
       ],
     }
     const requested: FontFaceDescriptor = {
-      fullName: 'Missing', style: 'Missing', postscriptName: null, weight: 400, slant: 'normal',
+      fullName: 'Missing',
+      style: 'Missing',
+      postscriptName: null,
+      weight: 400,
+      slant: 'normal',
     }
     const style = {
-      typeface, fontStyle: requested, sizePx: 82,
-      unsungColor: '#72687D', sungColor: '#FF8A2B', alignment: 'left',
+      typeface,
+      fontStyle: requested,
+      sizePx: 82,
+      unsungColor: '#72687D',
+      sungColor: '#FF8A2B',
+      alignment: 'left',
     }
     const equivalentFaces: FontFaceDescriptor[] = [
-      { fullName: 'Exact Zulu', style: 'Regular', postscriptName: 'Tie\\Zulu',
-        weight: 400, slant: 'normal' },
-      { fullName: 'Exact Alpha', style: 'Regular', postscriptName: 'Tie\\Alpha',
-        weight: 400, slant: 'normal' },
+      {
+        fullName: 'Exact Zulu',
+        style: 'Regular',
+        postscriptName: 'Tie\\Zulu',
+        weight: 400,
+        slant: 'normal',
+      },
+      {
+        fullName: 'Exact Alpha',
+        style: 'Regular',
+        postscriptName: 'Tie\\Alpha',
+        weight: 400,
+        slant: 'normal',
+      },
     ]
     const equivalentRequest = { ...requested, style: 'Regular', weight: 400 }
     const exactStyle = {
@@ -132,13 +165,12 @@ describe('browser render runtime', () => {
       stageLayout: typeof STAGE_LAYOUT
     }
     const assets = (fonts: object[]) => ({
-      backgroundDataUrl: '', fonts,
+      backgroundDataUrl: '',
+      fonts,
       stageLayout: structuredClone(STAGE_LAYOUT),
       syncAidGeometry: structuredClone(SYNC_AID_GEOMETRY),
     })
-    await runtime.prepareKaraokeAssets(assets([
-      style, style, exactStyle, reversedExactStyle,
-    ]))
+    await runtime.prepareKaraokeAssets(assets([style, style, exactStyle, reversedExactStyle]))
     expect(Object.isFrozen(runtime.stageLayout.lyric.gapsPx)).toBe(true)
     expect(loadedFaces.map((face) => face.source)).toEqual([
       String.raw`local("Tie\"Zulu")`,
@@ -151,14 +183,28 @@ describe('browser render runtime', () => {
     stageStyle.lyrics = style
     const lines = [
       { id: 'c', trackId: 'a:b', text: 'First', style, words: [{ text: '<First>', progress: 2 }] },
-      { id: 'b:c', trackId: 'a', text: 'Second', style, words: [{ text: 'Second', progress: NaN }] },
+      {
+        id: 'b:c',
+        trackId: 'a',
+        text: 'Second',
+        style,
+        words: [{ text: 'Second', progress: NaN }],
+      },
     ]
     const syncAids = lines.map((line, index) => ({
-      lineId: line.id, trackId: line.trackId, style, progress: index ? Number.NaN : 0.5,
+      lineId: line.id,
+      trackId: line.trackId,
+      style,
+      progress: index ? Number.NaN : 0.5,
     }))
     const frameState = {
-      artist: 'Artist', title: 'Title', playbackMs: 1234, showTitle: false,
-      stageStyle, lines, syncAids,
+      artist: 'Artist',
+      title: 'Title',
+      playbackMs: 1234,
+      showTitle: false,
+      stageStyle,
+      lines,
+      syncAids,
     }
     expect(runtime.renderKaraokeFrame(frameState, 9)).toBe(true)
     const sceneRect = vi.fn(() => DOMRect.fromRect({ x: 0, width: 960, height: 540 }))
@@ -167,8 +213,8 @@ describe('browser render runtime', () => {
     })
     const lyricRects: ReturnType<typeof vi.fn>[] = []
     document.querySelectorAll('.lyric-text').forEach((element, index) => {
-      const lyricRect = vi.fn(
-        () => DOMRect.fromRect({ x: index ? 300 : 100, width: 100, height: 40 }),
+      const lyricRect = vi.fn(() =>
+        DOMRect.fromRect({ x: index ? 300 : 100, width: 100, height: 40 }),
       )
       lyricRects.push(lyricRect)
       Object.defineProperty(element, 'getBoundingClientRect', { value: lyricRect })
@@ -178,19 +224,24 @@ describe('browser render runtime', () => {
     expect(lyricRects.map((rect) => rect.mock.calls.length)).toEqual([1, 1])
 
     const lyrics = [...document.querySelectorAll<HTMLElement>('.lyric')]
-    const expectedFamily = deterministicFontFamily(typeface, loadedFaces[0].family)
-      .replace(`"${loadedFaces[0].family}"`, loadedFaces[0].family)
+    const expectedFamily = deterministicFontFamily(typeface, loadedFaces[0].family).replace(
+      `"${loadedFaces[0].family}"`,
+      loadedFaces[0].family,
+    )
     expect(lyrics[0].style.fontFamily).toBe(expectedFamily)
     expect(lyrics[0].style.fontWeight).toBe('300')
     expect(lyrics[0].style.fontSynthesis).toBe('none')
     expect(document.querySelector('.word-base')?.textContent).toBe('<First>')
     expect(document.querySelector('img')).toBeNull()
-    expect([...document.querySelectorAll<HTMLElement>('.word-fill')].map((node) => node.style.width))
-      .toEqual(['100.000%', '0.000%'])
-    expect([...document.querySelectorAll<HTMLElement>('.sync i')].map((node) => node.style.left))
-      .toEqual(['-86px', '-86px'])
-    expect([...document.querySelectorAll<HTMLElement>('.sync i')].map((node) => node.style.transform))
-      .toEqual(['translateX(100px)', 'translateX(0px)'])
+    expect(
+      [...document.querySelectorAll<HTMLElement>('.word-fill')].map((node) => node.style.width),
+    ).toEqual(['100.000%', '0.000%'])
+    expect(
+      [...document.querySelectorAll<HTMLElement>('.sync i')].map((node) => node.style.left),
+    ).toEqual(['-86px', '-86px'])
+    expect(
+      [...document.querySelectorAll<HTMLElement>('.sync i')].map((node) => node.style.transform),
+    ).toEqual(['translateX(100px)', 'translateX(0px)'])
     expect(document.body.dataset.frame).toBe('10')
 
     rejectedSources.add(loadedFaces[0].source)
@@ -203,11 +254,16 @@ describe('browser render runtime', () => {
     expect(document.body.dataset.frame).toBe('11')
 
     const retryFace: FontFaceDescriptor = {
-      fullName: 'Retry Face', style: 'Regular', postscriptName: 'Retry-Face',
-      weight: 400, slant: 'normal',
+      fullName: 'Retry Face',
+      style: 'Regular',
+      postscriptName: 'Retry-Face',
+      weight: 400,
+      slant: 'normal',
     }
     const retryTypeface: FontTypefaceDescriptor = {
-      kind: 'local', family: 'Retry Sans', faces: [retryFace],
+      kind: 'local',
+      family: 'Retry Sans',
+      faces: [retryFace],
     }
     const retryStyle = {
       ...style,
@@ -227,11 +283,16 @@ describe('browser render runtime', () => {
 
     const makeLocalStyle = (postscriptName: string) => {
       const face: FontFaceDescriptor = {
-        fullName: postscriptName, style: 'Regular', postscriptName,
-        weight: 400, slant: 'normal',
+        fullName: postscriptName,
+        style: 'Regular',
+        postscriptName,
+        weight: 400,
+        slant: 'normal',
       }
       const localTypeface: FontTypefaceDescriptor = {
-        kind: 'local', family: postscriptName, faces: [face],
+        kind: 'local',
+        family: postscriptName,
+        faces: [face],
       }
       return { ...style, typeface: localTypeface, fontStyle: face }
     }
@@ -239,20 +300,28 @@ describe('browser render runtime', () => {
       const activeStage = cloneStageStyle()
       activeStage.lyrics = activeStyle
       return {
-        ...frameState, stageStyle: activeStage, syncAids: [],
+        ...frameState,
+        stageStyle: activeStage,
+        syncAids: [],
         lines: [{ ...lines[0], id: 'active', trackId: 'active', style: activeStyle }],
       }
     }
     const expectedStyleFamily = (
       activeStyle: ReturnType<typeof makeLocalStyle>,
       loaded: { family: string },
-    ) => deterministicFontFamily(activeStyle.typeface, loaded.family)
-      .replace(`"${loaded.family}"`, loaded.family)
+    ) =>
+      deterministicFontFamily(activeStyle.typeface, loaded.family).replace(
+        `"${loaded.family}"`,
+        loaded.family,
+      )
 
     let releaseDeferred!: () => void
-    deferredSources.set('local("Deferred-A")', new Promise((resolve) => {
-      releaseDeferred = resolve
-    }))
+    deferredSources.set(
+      'local("Deferred-A")',
+      new Promise((resolve) => {
+        releaseDeferred = resolve
+      }),
+    )
     const deferredStyle = makeLocalStyle('Deferred-A')
     const freshStyle = makeLocalStyle('Fresh-B')
     const pendingA = runtime.prepareKaraokeAssets(assets([deferredStyle]))
@@ -284,7 +353,8 @@ describe('browser render runtime', () => {
     }
     vi.stubGlobal('Image', RejectingImage)
     const failedBackground = {
-      ...assets([deferredStyle]), backgroundDataUrl: 'data:image/png;base64,invalid',
+      ...assets([deferredStyle]),
+      backgroundDataUrl: 'data:image/png;base64,invalid',
     }
     await expect(runtime.prepareKaraokeAssets(failedBackground)).rejects.toBeTruthy()
     expect(runtime.backgroundDataUrl).toBe('')
@@ -298,9 +368,7 @@ describe('browser render runtime', () => {
       fontStyle: invalidFace,
     }
     const invalid = await runtime.prepareKaraokeAssets(assets([invalidStyle]))
-    expect(invalid.fontFallbacks).toEqual([
-      { requested: 'Invalid Face', effective: 'System UI' },
-    ])
+    expect(invalid.fontFallbacks).toEqual([{ requested: 'Invalid Face', effective: 'System UI' }])
     expect(loadedFaces).toHaveLength(6)
   })
 })

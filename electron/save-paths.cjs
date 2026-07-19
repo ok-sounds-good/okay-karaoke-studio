@@ -32,13 +32,7 @@ function isCanonicalSavePath(filePath, format, pathApi = path) {
   return filePath === canonicalSavePath(filePath, format, pathApi)
 }
 
-async function showCanonicalSaveDialog(
-  showSaveDialog,
-  owner,
-  options,
-  format,
-  pathApi = path,
-) {
+async function showCanonicalSaveDialog(showSaveDialog, owner, options, format, pathApi = path) {
   if (typeof showSaveDialog !== 'function') {
     throw new TypeError('showSaveDialog must be a function')
   }
