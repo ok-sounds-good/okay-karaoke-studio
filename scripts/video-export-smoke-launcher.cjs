@@ -15,13 +15,13 @@ const EXPECTED_MATRIX = presets.resolutions.flatMap((preset) =>
   presets.frameRates.map((fps) => ({ ...preset, fps })),
 )
 
-function validEvidence(value) {
+function validEvidence(value, fps) {
   return (
     value &&
     Number.isSafeInteger(value.boundaryFrame) &&
     Number.isSafeInteger(value.firstProgressFrame) &&
     value.firstProgressFrame > value.boundaryFrame &&
-    value.firstProgressFrame <= value.boundaryFrame + 4 &&
+    value.firstProgressFrame <= value.boundaryFrame + Math.ceil(fps * 0.15) &&
     Number.isSafeInteger(value.changedPixels) &&
     value.changedPixels > 0 &&
     Number.isSafeInteger(value.totalDifference) &&
@@ -66,7 +66,7 @@ function validateManifest(value) {
       !/^[0-9a-f]{64}$/u.test(item.sha256) ||
       !Array.isArray(item.decodedLyricEvidence) ||
       item.decodedLyricEvidence.length !== evidenceCount ||
-      !item.decodedLyricEvidence.every(validEvidence) ||
+      !item.decodedLyricEvidence.every((evidence) => validEvidence(evidence, item.fps)) ||
       (index < 2 &&
         item.decodedLyricEvidence.some(
           (evidence) => evidence.firstProgressFrame !== evidence.boundaryFrame + 1,

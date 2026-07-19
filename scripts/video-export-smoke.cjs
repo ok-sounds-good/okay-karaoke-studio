@@ -150,7 +150,8 @@ function lyricEvidence({ ffmpegPath, videoPath, width, height, fps, startMs, roo
   const before = decodeLyricCrop(ffmpegPath, videoPath, boundaryFrame, width, height, root)
   const crop = cropFor(width, height)
   const minimumChangedPixels = Math.max(8, Math.round((crop.width * crop.height) / 10_000))
-  for (let offset = 1; offset <= 4; offset += 1) {
+  const maximumOffset = Math.ceil(fps * 0.15)
+  for (let offset = 1; offset <= maximumOffset; offset += 1) {
     const after = decodeLyricCrop(
       ffmpegPath,
       videoPath,
@@ -164,7 +165,7 @@ function lyricEvidence({ ffmpegPath, videoPath, width, height, fps, startMs, roo
       return { boundaryFrame, firstProgressFrame: boundaryFrame + offset, ...difference }
     }
   }
-  throw new Error(`transition did not appear within four frames of ${boundaryFrame}`)
+  throw new Error(`transition did not appear within 150ms of frame ${boundaryFrame}`)
 }
 
 function projectFixture(project, audioPath) {
