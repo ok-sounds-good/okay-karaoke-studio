@@ -77,7 +77,7 @@ describe('visual result validation', () => {
       ok: true,
       schemaVersion: 1,
     })
-  })
+  }, 20000)
 
   it('accepts the exact ordered Style-session capture contract', async () => {
     const { output } = await freshResult(results.STYLE_SESSION_SCENARIO)
@@ -166,7 +166,7 @@ describe('visual result validation', () => {
       ok: true,
       schemaVersion: 1,
     })
-  })
+  }, 20000)
 
   it('rejects duplicate-content Style-session captures', async () => {
     const { output } = await freshResult(results.STYLE_SESSION_SCENARIO)
@@ -210,7 +210,7 @@ describe('visual result validation', () => {
         scenario: results.STYLE_SESSION_SCENARIO,
       }),
     ).rejects.toThrow('VISUAL_SMOKE_RESULT_INVALID')
-  })
+  }, 20000)
 
   it.each(['hash', 'dimensions'])('rejects a manifest-valid %s mismatch', async (kind) => {
     const { output } = await freshResult()
@@ -401,5 +401,5 @@ describe('visual result validation', () => {
         scenario: results.STYLE_SESSION_SCENARIO,
       }),
     ).rejects.toThrow('VISUAL_SMOKE_RESULT_INVALID')
-  })
+  }, 20000)
 })

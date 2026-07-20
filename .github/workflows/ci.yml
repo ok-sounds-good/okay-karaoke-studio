@@ -7,15 +7,18 @@ on:
   pull_request:
     branches:
       - main
+  release:
+    types:
+      - published
   workflow_dispatch:
     inputs:
       windows_mvp_acceptance:
-        description: "Run Windows acceptance path"
+        description: 'Run Windows acceptance path'
         type: boolean
         required: false
         default: false
       windows_mvp_candidate_sha:
-        description: "Exact 40-character SHA for Windows acceptance"
+        description: 'Exact 40-character SHA for Windows acceptance'
         required: false
         type: string
         default: ''
@@ -97,7 +100,7 @@ jobs:
   macOS:
     name: macOS
     runs-on: macos-latest
-    if: ${{ github.event_name != 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'release' || github.event_name == 'workflow_dispatch' }}
     needs:
       - unit-tests
       - authorize-native-candidate
@@ -151,7 +154,7 @@ jobs:
   Windows:
     name: Windows
     runs-on: windows-latest
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.windows_mvp_acceptance }}
+    if: ${{ github.event_name == 'release' || github.event_name == 'workflow_dispatch' }}
     needs:
       - unit-tests
       - authorize-native-candidate

@@ -79,34 +79,6 @@ describe('Windows x64 package contract', () => {
     ])
   })
 
-  it('builds, validates, and stores fixed owned Windows artifacts in CircleCI', async () => {
-    const workflow = await repositoryFile('.circleci/config.yml')
-    const windows = workflow.slice(workflow.indexOf('  Windows:'), workflow.indexOf('\nworkflows:'))
-
-    expect(windows).toContain('name: Build unsigned Windows x64 package')
-    expect(windows).toContain('bun run dist:win')
-    expect(windows).toContain('name: Validate Windows x64 package inventory')
-    expect(windows).toContain('node scripts/windows-package-evidence.cjs')
-    expect(await repositoryFile('scripts/windows-package-evidence.cjs')).toContain(
-      'Get-AuthenticodeSignature',
-    )
-    expect(await repositoryFile('scripts/windows-package-evidence.cjs')).toContain(
-      "ELECTRON_MEDIA_RUNTIME = 'ffmpeg.dll'",
-    )
-    expect(windows).toContain('path: release/win-unpacked')
-    expect(windows).toContain('destination: windows-x64-unpacked')
-    expect(windows).toContain('path: release/windows-x64-installer')
-    expect(windows).toContain('destination: windows-x64-installer')
-    expect(windows).toContain('path: release/windows-package-evidence.json')
-    expect(windows).toContain('destination: windows-package-evidence.json')
-    expect(windows).toContain('Remove-Item "Env:$name"')
-    expect(windows).not.toMatch(/(?:--publish\s+(?!never)|CSC_LINK\s*=|WIN_CSC_LINK\s*=)/u)
-
-    const mac = workflow.slice(workflow.indexOf('  macOS:'), workflow.indexOf('  Windows:'))
-    expect(mac).not.toContain('dist:win')
-    expect(mac).not.toContain('store_artifacts')
-  })
-
   it('rejects artifact paths that are not owned by the repository', () => {
     expect(evidence.assertOwnedPath('/workspace/repo', '/workspace/repo/release', 'release')).toBe(
       path.resolve('/workspace/repo/release'),

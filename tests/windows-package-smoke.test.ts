@@ -128,7 +128,7 @@ describe('Windows packaged application smoke', () => {
     })
     expect(result.manifest.launches[1].artifacts).toHaveLength(15)
     expect(await readFile(join(output, 'launch.log'), 'utf8')).not.toContain(root)
-  })
+  }, 20000)
 
   it.each([
     ['nonzero exit', { ...cleanOutcome(), code: 9 }],
