@@ -536,31 +536,11 @@
   }
 }
 
-.field--inline em,
-.dialog-section-title small,
-.audio-source small,
 .timeline-hint,
-.timeline-track-label small,
-.sync-button small,
-.time-readout span,
-.time-readout em,
-.transport-status,
-.modal-note,
-.workflow-guide p,
-.raw-lyrics > p,
-.fit-line > span,
-.fit-line > small,
-.export-readiness span,
-.export-options small,
-.validation-item small,
-.validation-item em,
-.validation-empty p,
-.video-export-progress {
+.timeline-track-label small {
   color: var(--muted);
 }
 
-.vocal-track-card__number,
-.track-tab > span,
 .timeline-track-label > span {
   color: #30283a;
 }
