@@ -186,6 +186,7 @@ describe('video export lifecycle cancellation guard', () => {
 
   it('routes native window close and application quit through the guard', () => {
     const electronMain = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf8')
+    const handlers = readFileSync(new URL('../electron/ipc-handlers.cjs', import.meta.url), 'utf8')
 
     expect(electronMain).toMatch(
       /window\.on\('close',[\s\S]{0,360}?preventDefault\(\)[\s\S]{0,220}?requestWindowClose\(\)/,
@@ -196,7 +197,7 @@ describe('video export lifecycle cancellation guard', () => {
     expect(electronMain).toMatch(
       /onPromotionStart:\s*\(\)\s*=>\s*operation\.commitState\.beginPromotion\(\)/,
     )
-    expect(electronMain).toMatch(
+    expect(handlers).toMatch(
       /cancelVideoExport,[\s\S]{0,280}?tryBeginCancellation\(\)[\s\S]{0,120}?return false/,
     )
   })

@@ -63,6 +63,10 @@ const {
   registerStudioSchemes,
 } = require('./studio-protocols.cjs')
 const {
+  createIpcHandlerRegistration,
+  installIpcHandlerRegistration,
+} = require('./ipc-handlers.cjs')
+const {
   createExternalUrlOpener,
   createMainWindowOptions,
   isAllowedAppNavigation,
@@ -581,327 +585,47 @@ async function saveValidatedProject(owner, ownerId, request) {
 }
 
 function registerIpcHandlers() {
-  ipcMain.handle(CHANNELS.listStyleTemplates, async (event) => {
-    assertTrustedSender(event)
-    return styleTemplateStore.list()
+  const handlers = createIpcHandlerRegistration({
+    assertTrustedSender,
+    backgroundCapabilityState,
+    backgroundImageFilters: BACKGROUND_IMAGE_FILTERS,
+    channels: CHANNELS,
+    createElectronNativeImageDecoder,
+    dialog,
+    fs,
+    isNativeCloseRequestId,
+    isRecord,
+    linkedImageExportFailure,
+    linkedImageMedia,
+    lrcFilters: LRC_FILTERS,
+    maxLrcFileBytes: MAX_LRC_FILE_BYTES,
+    maxProjectFileBytes: MAX_PROJECT_FILE_BYTES,
+    makeMediaResult,
+    mediaCapabilities,
+    mediaScheme: MEDIA_SCHEME,
+    normalizeBackgroundMutationRequest,
+    normalizeExportRequest,
+    normalizeMediaCapabilityReference,
+    normalizeProjectRequest,
+    normalizeVideoExportRequest,
+    nativeCloseArbiter,
+    nativeCloseRendererReadiness,
+    path,
+    projectOpenFilters: PROJECT_OPEN_FILTERS,
+    projectOpens,
+    readLinkedImage,
+    readUtf8FileWithinLimit,
+    registerAudioResult,
+    requireString,
+    styleTemplateStore,
+    withParsedProject,
+    writeTextExport,
+    videoExportOperation,
+    audioExtensions: AUDIO_EXTENSIONS,
+    audioFilters: AUDIO_FILTERS,
+    saveValidatedProject,
   })
-
-  ipcMain.handle(CHANNELS.createStyleTemplate, async (event, value) => {
-    assertTrustedSender(event)
-    return styleTemplateStore.create(value)
-  })
-
-  ipcMain.handle(CHANNELS.renameStyleTemplate, async (event, value) => {
-    assertTrustedSender(event)
-    return styleTemplateStore.rename(value)
-  })
-
-  ipcMain.handle(CHANNELS.deleteStyleTemplate, async (event, value) => {
-    assertTrustedSender(event)
-    return styleTemplateStore.delete(value)
-  })
-
-  ipcMain.handle(CHANNELS.getPendingWindowClose, async (event) => {
-    assertTrustedSender(event)
-    nativeCloseRendererReadiness.markReady(event.sender.id)
-    return nativeCloseArbiter.getPendingRequest()
-  })
-
-  ipcMain.handle(CHANNELS.resolveWindowClose, async (event, value) => {
-    assertTrustedSender(event)
-    if (!isRecord(value)) throw new TypeError('resolveWindowClose requires an options object')
-    if (!isNativeCloseRequestId(value.requestId)) {
-      throw new TypeError('resolveWindowClose.requestId must be a UUID')
-    }
-    if (typeof value.proceed !== 'boolean') {
-      throw new TypeError('resolveWindowClose.proceed must be a boolean')
-    }
-    return nativeCloseArbiter.resolve(value.requestId, value.proceed)
-  })
-
-  ipcMain.handle(CHANNELS.openProject, async (event) => {
-    const owner = assertTrustedSender(event)
-    const ownerId = event.sender.id
-    const requestId = projectOpens.beginOpen(ownerId)
-    const result = await dialog.showOpenDialog(owner, {
-      title: 'Open Karaoke Project',
-      buttonLabel: 'Open Project',
-      properties: ['openFile'],
-      filters: PROJECT_OPEN_FILTERS,
-    })
-
-    if (result.canceled || result.filePaths.length === 0) return null
-
-    const filePath = path.resolve(result.filePaths[0])
-    const contents = await readUtf8FileWithinLimit(filePath, MAX_PROJECT_FILE_BYTES, 'Project file')
-    return projectOpens.stageOpen(ownerId, requestId, filePath, contents)
-  })
-
-  ipcMain.handle(CHANNELS.settleProjectOpen, async (event, value) => {
-    assertTrustedSender(event)
-    if (!isRecord(value)) throw new TypeError('settleProjectOpen requires an options object')
-    const requestId = requireString(value.requestId, 'requestId')
-    if (typeof value.accepted !== 'boolean') {
-      throw new TypeError('settleProjectOpen.accepted must be a boolean')
-    }
-    return projectOpens.settleOpen(event.sender.id, requestId, value.accepted)
-  })
-
-  ipcMain.handle(CHANNELS.resetProjectScope, async (event) => {
-    assertTrustedSender(event)
-    return projectOpens.resetProjectScope(event.sender.id)
-  })
-
-  ipcMain.handle(CHANNELS.saveProject, async (event, value) => {
-    const owner = assertTrustedSender(event)
-    const ownerId = event.sender.id
-    const request = normalizeProjectRequest(value)
-    return withParsedProject(request.contents, () => saveValidatedProject(owner, ownerId, request))
-  })
-
-  ipcMain.handle(CHANNELS.importAudio, async (event) => {
-    const owner = assertTrustedSender(event)
-    const ownerId = event.sender.id
-    const requestSequence = mediaCapabilities.beginRequest(ownerId, 'audio')
-    const result = await dialog.showOpenDialog(owner, {
-      title: 'Import Audio',
-      buttonLabel: 'Import Audio',
-      properties: ['openFile'],
-      filters: AUDIO_FILTERS,
-    })
-
-    if (result.canceled || result.filePaths.length === 0) {
-      mediaCapabilities.finishRequest(ownerId, 'audio', requestSequence)
-      return null
-    }
-
-    const filePath = path.resolve(result.filePaths[0])
-    const extension = path.extname(filePath).toLowerCase()
-    const fileStats = await fs.stat(filePath)
-    if (!fileStats.isFile() || !AUDIO_EXTENSIONS.has(extension)) {
-      mediaCapabilities.finishRequest(ownerId, 'audio', requestSequence)
-      throw new TypeError('The selected file is not a supported audio file')
-    }
-    if (!mediaCapabilities.requestIsCurrent(ownerId, 'audio', requestSequence)) return null
-
-    return registerAudioResult(filePath, event.sender, requestSequence)
-  })
-
-  ipcMain.handle(CHANNELS.resolveProjectAudio, async (event, value) => {
-    assertTrustedSender(event)
-    if (!isRecord(value)) throw new TypeError('resolveProjectAudio requires an options object')
-    const ownerId = event.sender.id
-    const projectPath = path.resolve(requireString(value.projectPath, 'projectPath'))
-    const restoration = mediaCapabilities.beginRestore(ownerId, 'audio', projectPath)
-    if (!restoration.authorized) return null
-    if (!restoration.filePath) {
-      mediaCapabilities.finishRequest(ownerId, 'audio', restoration.sequence)
-      return null
-    }
-    try {
-      const fileStats = await fs.stat(restoration.filePath)
-      if (
-        !fileStats.isFile() ||
-        !mediaCapabilities.requestIsCurrent(ownerId, 'audio', restoration.sequence)
-      )
-        return null
-      return registerAudioResult(restoration.filePath, event.sender, restoration.sequence)
-    } catch {
-      mediaCapabilities.finishRequest(ownerId, 'audio', restoration.sequence)
-      return null
-    }
-  })
-
-  ipcMain.handle(CHANNELS.releaseAudio, async (event) => {
-    assertTrustedSender(event)
-    mediaCapabilities.resetKind(event.sender.id, 'audio')
-  })
-
-  ipcMain.handle(CHANNELS.getBackgroundState, async (event) => {
-    assertTrustedSender(event)
-    return backgroundCapabilityState(event.sender.id)
-  })
-
-  ipcMain.handle(CHANNELS.chooseBackgroundImage, async (event) => {
-    const owner = assertTrustedSender(event)
-    const ownerId = event.sender.id
-    const requestSequence = mediaCapabilities.beginRequest(ownerId, 'background')
-    const result = await dialog.showOpenDialog(owner, {
-      title: 'Choose Video Background',
-      buttonLabel: 'Choose Image',
-      properties: ['openFile'],
-      filters: BACKGROUND_IMAGE_FILTERS,
-    })
-    if (result.canceled || result.filePaths.length === 0) {
-      mediaCapabilities.finishRequest(ownerId, 'background', requestSequence)
-      return null
-    }
-
-    const filePath = path.resolve(result.filePaths[0])
-    let image
-    try {
-      image = await readLinkedImage(filePath, {
-        decode: createElectronNativeImageDecoder(),
-      })
-    } catch (error) {
-      mediaCapabilities.finishRequest(ownerId, 'background', requestSequence)
-      if (!mediaCapabilities.requestIsCurrent(ownerId, 'background', requestSequence)) return null
-      throw error
-    }
-    const token = mediaCapabilities.registerBackgroundCandidate(
-      ownerId,
-      filePath,
-      linkedImageMedia(image),
-      requestSequence,
-    )
-    return token ? makeMediaResult(token, filePath, 'background') : null
-  })
-
-  ipcMain.handle(CHANNELS.resolveProjectBackground, async (event, value) => {
-    assertTrustedSender(event)
-    if (!isRecord(value)) throw new TypeError('resolveProjectBackground requires an options object')
-    const ownerId = event.sender.id
-    const projectPath = path.resolve(requireString(value.projectPath, 'projectPath'))
-    const restoration = mediaCapabilities.beginRestore(ownerId, 'background', projectPath)
-    if (!restoration.authorized) return { status: 'stale' }
-    if (!restoration.filePath) {
-      mediaCapabilities.finishRequest(ownerId, 'background', restoration.sequence)
-      return { status: 'missing', state: backgroundCapabilityState(ownerId) }
-    }
-
-    try {
-      const image = await readLinkedImage(restoration.filePath, {
-        decode: createElectronNativeImageDecoder(),
-      })
-      const token = mediaCapabilities.registerRestoredBackground(
-        ownerId,
-        restoration.filePath,
-        linkedImageMedia(image),
-        restoration.sequence,
-      )
-      return token
-        ? {
-            status: 'success',
-            media: makeMediaResult(token, restoration.filePath, 'background'),
-            state: backgroundCapabilityState(ownerId),
-          }
-        : { status: 'stale' }
-    } catch {
-      return mediaCapabilities.finishRequest(ownerId, 'background', restoration.sequence)
-        ? { status: 'missing', state: backgroundCapabilityState(ownerId) }
-        : { status: 'stale' }
-    }
-  })
-
-  ipcMain.handle(CHANNELS.settleBackgroundImage, async (event, value) => {
-    assertTrustedSender(event)
-    if (!isRecord(value)) throw new TypeError('settleBackgroundImage requires an options object')
-    if (typeof value.accepted !== 'boolean') {
-      throw new TypeError('settleBackgroundImage.accepted must be a boolean')
-    }
-    const candidate = normalizeMediaCapabilityReference(value.url, { scheme: MEDIA_SCHEME })
-    if (!candidate.valid || !candidate.token) return null
-    return mediaCapabilities.settleBackgroundCandidate(
-      event.sender.id,
-      candidate.token,
-      value.accepted,
-    )
-      ? backgroundCapabilityState(event.sender.id)
-      : null
-  })
-
-  ipcMain.handle(CHANNELS.retainBackground, async (event, value) => {
-    assertTrustedSender(event)
-    if (!isRecord(value)) throw new TypeError('retainBackground requires an options object')
-    const request = normalizeBackgroundMutationRequest(value, 'nullable', MEDIA_SCHEME)
-    if (!request.valid) return null
-    return mediaCapabilities.retainBackground(
-      event.sender.id,
-      request.expectedRevision,
-      request.expectedToken,
-      request.targetToken,
-    )
-      ? backgroundCapabilityState(event.sender.id)
-      : null
-  })
-
-  ipcMain.handle(CHANNELS.releaseBackground, async (event, value) => {
-    assertTrustedSender(event)
-    if (!isRecord(value)) throw new TypeError('releaseBackground requires an options object')
-    const request = normalizeBackgroundMutationRequest(value, 'none', MEDIA_SCHEME)
-    if (!request.valid) return null
-    return mediaCapabilities.releaseKind(
-      event.sender.id,
-      'background',
-      request.expectedRevision,
-      request.expectedToken,
-    )
-      ? backgroundCapabilityState(event.sender.id)
-      : null
-  })
-
-  ipcMain.handle(CHANNELS.releaseBackgroundSnapshot, async (event, value) => {
-    assertTrustedSender(event)
-    if (!isRecord(value))
-      throw new TypeError('releaseBackgroundSnapshot requires an options object')
-    const request = normalizeBackgroundMutationRequest(value, 'required', MEDIA_SCHEME)
-    if (!request.valid || !request.targetToken) return null
-    return mediaCapabilities.releaseBackgroundSnapshot(
-      event.sender.id,
-      request.expectedRevision,
-      request.expectedToken,
-      request.targetToken,
-    )
-      ? backgroundCapabilityState(event.sender.id)
-      : null
-  })
-
-  ipcMain.handle(CHANNELS.importLrc, async (event) => {
-    const owner = assertTrustedSender(event)
-    const result = await dialog.showOpenDialog(owner, {
-      title: 'Import LRC Lyrics',
-      buttonLabel: 'Import Lyrics',
-      properties: ['openFile'],
-      filters: LRC_FILTERS,
-    })
-
-    if (result.canceled || result.filePaths.length === 0) return null
-
-    const filePath = path.resolve(result.filePaths[0])
-    const contents = await readUtf8FileWithinLimit(filePath, MAX_LRC_FILE_BYTES, 'LRC file')
-    return { path: filePath, name: path.basename(filePath), contents }
-  })
-
-  ipcMain.handle(CHANNELS.exportText, async (event, value) => {
-    const owner = assertTrustedSender(event)
-    const request = normalizeExportRequest(value)
-    if (request.format === 'oks') {
-      return withParsedProject(request.contents, () => writeTextExport(owner, request))
-    }
-    return writeTextExport(owner, request)
-  })
-
-  ipcMain.handle(CHANNELS.exportVideo, async (event, value) => {
-    const owner = assertTrustedSender(event)
-    const request = normalizeVideoExportRequest(value)
-    try {
-      return await videoExportOperation.run({ owner, sender: event.sender, request })
-    } catch (error) {
-      const failure = linkedImageExportFailure(error, request.background, MEDIA_SCHEME)
-      if (failure) return failure
-      throw error
-    }
-  })
-
-  ipcMain.handle(CHANNELS.cancelVideoExport, async (event) => {
-    assertTrustedSender(event)
-    const operation = videoExportOperation.activeExportForOwner(event.sender.id)
-    if (!operation) return false
-    if (!operation.commitState.tryBeginCancellation()) return false
-    operation.controller.abort()
-    await operation.finished
-    return true
-  })
+  installIpcHandlerRegistration(ipcMain, handlers)
 }
 
 function sendMenuAction(action) {

@@ -48,6 +48,7 @@ function loadStudio(result: unknown) {
 
 describe('style template Electron boundary', () => {
   const main = source('electron/main.cjs')
+  const handlers = source('electron/ipc-handlers.cjs')
   const preload = source('electron/preload.cjs')
   const types = source('src/electron.d.ts')
 
@@ -65,9 +66,9 @@ describe('style template Electron boundary', () => {
       'renameStyleTemplate',
       'deleteStyleTemplate',
     ]) {
-      const start = main.indexOf(`ipcMain.handle(CHANNELS.${channel}`)
-      const end = main.indexOf('\n  })', start)
-      const handler = main.slice(start, end)
+      const start = handlers.indexOf(`channels.${channel}`)
+      const end = handlers.indexOf('\n    ],', start)
+      const handler = handlers.slice(start, end)
       expect(start).toBeGreaterThan(0)
       expect(handler).toContain('assertTrustedSender(event)')
       if (channel !== 'listStyleTemplates') {

@@ -29,16 +29,18 @@ describe('project action workflow wiring', () => {
 
   it('keeps trusted, bounded, exact-ID close IPC and ordinary beforeunload', () => {
     const main = source('../electron/main.cjs')
+    const handlers = source('../electron/ipc-handlers.cjs')
     const windowSecurity = source('../electron/window-security.cjs')
     const preload = source('../electron/preload.cjs')
 
-    expect(main).toMatch(/getPendingWindowClose[\s\S]{0,180}assertTrustedSender/)
-    expect(main).toMatch(
+    expect(handlers).toMatch(/getPendingWindowClose[\s\S]{0,180}assertTrustedSender/)
+    expect(main).toContain('installIpcHandlerRegistration(ipcMain, handlers)')
+    expect(handlers).toMatch(
       /getPendingWindowClose[\s\S]{0,220}assertTrustedSender[\s\S]{0,120}markReady\(event\.sender\.id\)/,
     )
-    expect(main).toMatch(/resolveWindowClose[\s\S]{0,220}assertTrustedSender/)
-    expect(main).toContain('isNativeCloseRequestId(value.requestId)')
-    expect(main).toContain('nativeCloseArbiter.resolve(value.requestId, value.proceed)')
+    expect(handlers).toMatch(/resolveWindowClose[\s\S]{0,220}assertTrustedSender/)
+    expect(handlers).toContain('isNativeCloseRequestId(value.requestId)')
+    expect(handlers).toContain('nativeCloseArbiter.resolve(value.requestId, value.proceed)')
     expect(preload).toContain('value.length === 36')
     expect(preload).toContain('isWindowCloseRequestId(value.requestId)')
     expect(preload).toContain('isWindowCloseRequestId(requestId)')

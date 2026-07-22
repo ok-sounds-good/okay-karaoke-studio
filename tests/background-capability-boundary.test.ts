@@ -5,6 +5,7 @@ const source = (file: string) => readFileSync(new URL(`../${file}`, import.meta.
 
 describe('linked-background Electron boundary', () => {
   const main = source('electron/main.cjs')
+  const handlers = source('electron/ipc-handlers.cjs')
   const protocols = source('electron/studio-protocols.cjs')
   const windowSecurity = source('electron/window-security.cjs')
   const preload = source('electron/preload.cjs')
@@ -12,14 +13,14 @@ describe('linked-background Electron boundary', () => {
   const videoExport = source('electron/video-export.cjs')
 
   it('keeps selection native, trusted, and pathless from the renderer', () => {
-    const start = main.indexOf('ipcMain.handle(CHANNELS.chooseBackgroundImage')
-    const end = main.indexOf('ipcMain.handle(CHANNELS.resolveProjectBackground', start)
-    const handler = main.slice(start, end)
+    const start = handlers.indexOf('channels.chooseBackgroundImage')
+    const end = handlers.indexOf('channels.resolveProjectBackground', start)
+    const handler = handlers.slice(start, end)
     expect(start).toBeGreaterThan(0)
     expect(handler.indexOf('assertTrustedSender(event)')).toBeLessThan(
       handler.indexOf('dialog.showOpenDialog(owner'),
     )
-    expect(handler).toContain('filters: BACKGROUND_IMAGE_FILTERS')
+    expect(handler).toContain('filters: backgroundImageFilters')
     expect(handler).toContain('readLinkedImage(filePath')
     expect(handler).not.toContain('value.path')
     expect(preload).toContain(
@@ -55,7 +56,7 @@ describe('linked-background Electron boundary', () => {
     expect(exportSetup).not.toContain('readLinkedImage')
     expect(videoExport).not.toContain('readLinkedImage(background.imagePath)')
     expect(preload).not.toContain('backgroundImage.bytes')
-    expect(main).toContain('linkedImageExportFailure(error, request.background, MEDIA_SCHEME)')
+    expect(handlers).toContain('linkedImageExportFailure(error, request.background, mediaScheme)')
   })
 
   it('exposes only opaque settlement and exact-project restore operations', () => {
@@ -72,10 +73,10 @@ describe('linked-background Electron boundary', () => {
     }
     expect(main).toContain('prepareProjectMedia(scope.path, scope.project, AUDIO_EXTENSIONS)')
     expect(main).toContain('mediaCapabilities.replaceProjectScope(ownerId, scope.projectPath')
-    expect(main).toContain("normalizeBackgroundMutationRequest(value, 'nullable', MEDIA_SCHEME)")
-    expect(main).toContain("status: 'missing'")
-    expect(main).toContain("return { status: 'stale' }")
-    const retainHandler = main.slice(main.indexOf('ipcMain.handle(CHANNELS.retainBackground'))
+    expect(handlers).toContain("normalizeBackgroundMutationRequest(value, 'nullable', mediaScheme)")
+    expect(handlers).toContain("status: 'missing'")
+    expect(handlers).toContain("return { status: 'stale' }")
+    const retainHandler = handlers.slice(handlers.indexOf('channels.retainBackground'))
     expect(retainHandler.indexOf('assertTrustedSender(event)')).toBeLessThan(
       retainHandler.indexOf('normalizeBackgroundMutationRequest'),
     )
