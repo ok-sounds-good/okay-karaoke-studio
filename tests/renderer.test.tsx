@@ -207,7 +207,7 @@ describe('offset-aware renderer state', () => {
 })
 describe('Timeline and Sync Focus styling regressions', () => {
   it('keeps split resize handles exposed for compact timing blocks', () => {
-    const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
+    const styles = readFileSync(new URL('../src/timeline.css', import.meta.url), 'utf8')
 
     expect(styles).not.toMatch(
       /\.timeline-word\.is-compact \.timeline-word__handle\s*\{[^}]*display:\s*none/,

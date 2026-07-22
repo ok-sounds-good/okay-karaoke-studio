@@ -206,8 +206,6 @@ select:focus-visible {
 .dialog-section-title small,
 .audio-source small,
 .vocal-track-card__status,
-.timeline-hint,
-.timeline-track-label small,
 .sync-button small,
 .time-readout span,
 .time-readout em,
@@ -270,7 +268,7 @@ select:focus-visible {
 
 .vocal-track-card__number,
 .track-tab > span,
-.timeline-track-label > span {
+.track-tab > span {
   color: #30283a;
 }
 
@@ -527,184 +525,6 @@ select:focus-visible {
   background: var(--orange);
   box-shadow: 0 0 0 3px rgba(255, 138, 43, 0.13);
   color: #3c200e;
-}
-
-.zoom-control {
-  border-color: var(--control-line);
-  background: #fff;
-  color: var(--muted);
-}
-
-.zoom-value {
-  color: var(--muted-strong);
-}
-
-.timeline-workspace {
-  border-bottom-color: var(--line-soft);
-}
-
-.timeline-track-labels {
-  border-right-color: #ddd2e8;
-  background: #f6f2f9;
-  box-shadow: 7px 0 14px rgba(76, 55, 101, 0.05);
-}
-
-.timeline-label-spacer,
-.timeline-track-label {
-  border-bottom-color: #e4dbea;
-  color: var(--muted);
-}
-
-.timeline-track-label.is-active {
-  background: var(--purple-soft);
-}
-
-.timeline-track-label strong {
-  color: var(--text-soft);
-}
-
-.timeline-viewport {
-  background: #fbfafc;
-}
-
-.timeline-ruler {
-  border-bottom-color: #ded5e7;
-  background: #f3eef7;
-}
-
-.timeline-tick {
-  background: #c9bdd4;
-}
-
-.timeline-tick.is-major {
-  background: #a996bc;
-}
-
-.timeline-tick b {
-  color: var(--muted);
-}
-
-.timeline-waveform {
-  border-bottom-color: #e1d8e9;
-  background:
-    linear-gradient(90deg, rgba(137, 109, 171, 0.07) 1px, transparent 1px),
-    linear-gradient(#faf8fc, #f3eef7);
-  background-size:
-    36px 100%,
-    auto;
-}
-
-.timeline-waveform::after {
-  background: rgba(104, 80, 132, 0.12);
-}
-
-.timeline-waveform path {
-  fill: #9f88b8;
-}
-
-.waveform-played {
-  border-right-color: rgba(255, 138, 43, 0.65);
-  background: rgba(255, 138, 43, 0.08);
-}
-
-.timeline-lane,
-.timeline-lane.is-active {
-  border-bottom-color: #e6deec;
-  background: linear-gradient(90deg, rgba(137, 109, 171, 0.055) 1px, transparent 1px), #fff;
-  background-size:
-    36px 100%,
-    auto;
-}
-
-.timeline-lane.is-active {
-  background: linear-gradient(90deg, rgba(137, 109, 171, 0.06) 1px, transparent 1px), #faf6fd;
-}
-
-.timeline-line-label {
-  color: color-mix(in srgb, var(--track-color) 38%, var(--text));
-}
-
-.timeline-line-label__word.is-selected {
-  background: color-mix(in srgb, var(--track-color) 12%, white);
-  color: var(--text);
-}
-
-.timeline-line-label__word.is-sync-target {
-  background: var(--orange-soft);
-  color: #a6480a;
-}
-
-.timeline-word {
-  border-color: color-mix(in srgb, var(--track-color) 55%, #d4c8df);
-  background: color-mix(in srgb, var(--track-color) 17%, white);
-  box-shadow: 0 3px 8px rgba(76, 55, 101, 0.1);
-  color: var(--text);
-}
-
-.timeline-word:hover {
-  background: color-mix(in srgb, var(--track-color) 24%, white);
-}
-
-.timeline-word.is-selected {
-  border-color: #fff;
-  box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--track-color) 38%, transparent),
-    0 5px 14px rgba(76, 55, 101, 0.14);
-}
-
-.timeline-word__handle {
-  background: var(--text);
-}
-
-.timeline-word.is-sync-target {
-  border-color: var(--orange);
-  background: var(--orange-soft);
-  color: #a6480a;
-}
-
-@keyframes sync-pulse {
-  50% {
-    box-shadow: 0 0 0 4px rgba(255, 138, 43, 0.13);
-  }
-}
-
-.timeline-playhead,
-.timeline-playhead::before,
-.timeline-playhead > span {
-  background: var(--orange);
-}
-
-.timeline-playhead {
-  box-shadow: 0 0 10px rgba(255, 138, 43, 0.35);
-}
-
-.timeline-playhead > span {
-  color: #3c200e;
-}
-
-.untimed-tray {
-  background: #f4eff8;
-}
-
-.untimed-tray__label,
-.untimed-tray em,
-.untimed-tray > div > span,
-.untimed-tray button {
-  color: var(--muted);
-}
-
-.untimed-tray button {
-  background: rgba(255, 255, 255, 0.72);
-}
-
-.untimed-tray button.is-sync-target {
-  border-color: var(--orange);
-  background: var(--orange-soft);
-  color: #aa4c0c;
-}
-
-.untimed-tray--empty {
-  background: rgba(155, 120, 207, 0.05);
 }
 
 .transport {

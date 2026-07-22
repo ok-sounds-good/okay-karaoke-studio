@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import App from './App'
 import './styles.css'
 import './identity.css'
+import './timeline.css'
 import './stage-rendering.css'
 
 createRoot(document.getElementById('root')!).render(
