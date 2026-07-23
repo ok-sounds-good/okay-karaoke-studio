@@ -17,10 +17,13 @@ const {
   STYLE_KEY_RESULT_SCRIPT,
   STYLE_KEY_SEQUENCE,
   STYLE_SESSION_READINESS_TIMEOUT_MS,
+  STYLE_TEMPLATE_NAME,
   STYLE_TARGET_SCRIPT,
   executeBeforeDeadline,
   projectLyricsReadinessScript,
   styleSessionActionScript,
+  styleTemplateFormReadinessScript,
+  styleTemplateReadinessScript,
   validBackgroundState,
   validLeadVocalState,
   validProjectLyricsState,
@@ -28,6 +31,8 @@ const {
   validStageFrameState,
   validStyleActionTarget,
   validStyleKeyboardState,
+  validStyleTemplateFormState,
+  validStyleTemplateState,
   validStyleTarget,
 } = require('./visual-smoke-renderer-contracts.cjs')
 const { publishArtifactBuffers, writeFreshLauncherFailure } = require('./smoke-artifacts.cjs')
@@ -229,6 +234,25 @@ function sendTrustedStyleKey(contents, accelerator) {
   }
 }
 
+function sendTrustedStyleText(contents, text) {
+  if (
+    !contents ||
+    typeof contents.sendInputEvent !== 'function' ||
+    text !== STYLE_TEMPLATE_NAME ||
+    !/^[A-Za-z0-9 ]+$/u.test(text)
+  )
+    throw smokeError('VISUAL_SMOKE_ACTIVATION_INVALID')
+  try {
+    for (const keyCode of text) {
+      contents.sendInputEvent({ keyCode, type: 'keyDown' })
+      contents.sendInputEvent({ keyCode, type: 'char' })
+      contents.sendInputEvent({ keyCode, type: 'keyUp' })
+    }
+  } catch {
+    throw smokeError('VISUAL_SMOKE_ACTIVATION_INVALID')
+  }
+}
+
 async function captureStyleSession(window, app, options) {
   const displayScale = await prepareCaptureWindow(window, app, options)
   const capture = (viewport) => captureViewport(window, viewport, options.captureSettle)
@@ -403,6 +427,27 @@ async function captureStyleSession(window, app, options) {
   if (!validLeadVocalState(leadVocalState, viewport))
     throw smokeError('VISUAL_SMOKE_READINESS_INVALID')
   pngs.push(await capture(viewport))
+  await activate('templates')
+  const templateFormState = await executeBeforeDeadline(
+    () => window.webContents.executeJavaScript(styleTemplateFormReadinessScript(viewport), false),
+    options.readinessTimeoutMs,
+  )
+  if (!validStyleTemplateFormState(templateFormState, viewport))
+    throw smokeError('VISUAL_SMOKE_READINESS_INVALID')
+  await activate('template-name')
+  sendTrustedStyleText(window.webContents, STYLE_TEMPLATE_NAME)
+  await activate('save-template')
+  const templateState = await executeBeforeDeadline(
+    () =>
+      window.webContents.executeJavaScript(
+        styleTemplateReadinessScript(viewport, STYLE_TEMPLATE_NAME),
+        false,
+      ),
+    options.readinessTimeoutMs,
+  )
+  if (!validStyleTemplateState(templateState, viewport, STYLE_TEMPLATE_NAME))
+    throw smokeError('VISUAL_SMOKE_READINESS_INVALID')
+  pngs.push(await capture(viewport))
   return options.createScenarioArtifacts(STYLE_SESSION_SCENARIO, pngs).artifacts
 }
 
@@ -498,4 +543,5 @@ module.exports = {
   captureStyleSession,
   runVisualSmoke,
   sendTrustedStyleActivation,
+  sendTrustedStyleText,
 }

@@ -10,6 +10,8 @@ import {
   parseProject,
   serializeProject,
 } from '../src/lib/model'
+import type { StyleTemplate } from '../src/lib/style-template-codec'
+import { cloneStageStyle, cloneVocalStyle } from '../src/lib/video-style'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -21,6 +23,7 @@ interface StudioHarness {
   emitClose: (request: StudioWindowCloseRequest) => void
   importAudio: ReturnType<typeof vi.fn>
   importLrc: ReturnType<typeof vi.fn>
+  listStyleTemplates: ReturnType<typeof vi.fn<StudioApi['listStyleTemplates']>>
   openProject: ReturnType<typeof vi.fn>
   releaseBackgroundSnapshot: ReturnType<typeof vi.fn>
   resetProjectScope: ReturnType<typeof vi.fn>
@@ -62,6 +65,7 @@ function createStudioHarness(): StudioHarness {
   const openProject = vi.fn(async () => null)
   const importAudio = vi.fn(async () => null)
   const importLrc = vi.fn(async () => null)
+  const listStyleTemplates = vi.fn<StudioApi['listStyleTemplates']>(async () => [])
   let backgroundSequence = 0
   let backgroundState: StudioBackgroundCapabilityState = {
     activeUrl: null,
@@ -99,6 +103,10 @@ function createStudioHarness(): StudioHarness {
     },
   )
   const studio = {
+    listStyleTemplates,
+    createStyleTemplate: vi.fn<StudioApi['createStyleTemplate']>(),
+    renameStyleTemplate: vi.fn<StudioApi['renameStyleTemplate']>(),
+    deleteStyleTemplate: vi.fn<StudioApi['deleteStyleTemplate']>(),
     openProject,
     settleProjectOpen: vi.fn(async () => true),
     resetProjectScope,
@@ -140,6 +148,7 @@ function createStudioHarness(): StudioHarness {
     },
     importAudio,
     importLrc,
+    listStyleTemplates,
     openProject,
     releaseBackgroundSnapshot,
     resetProjectScope,
@@ -497,6 +506,81 @@ describe('project Style App integration', () => {
     const redone = parseProject(harness.saveProject.mock.calls.at(-1)?.[0].contents)
     expect(redone.stageStyle.lyrics.sizePx).toBe(96)
     expect(redone.tracks[0].vocalStyle.sungColor).toBe('#123456')
+  })
+
+  it('loads one template draft, applies one project history step, and seeds the next Export', async () => {
+    const original = createDemoProject()
+    const stageStyle = cloneStageStyle(original.stageStyle)
+    stageStyle.lyrics.sizePx = 96
+    stageStyle.background = {
+      ...stageStyle.background,
+      mode: 'solid',
+      solidColor: '#123456',
+    }
+    const vocalStyle = cloneVocalStyle(original.tracks[0]!.vocalStyle)
+    vocalStyle.sungColor = '#fedcba'
+    vocalStyle.previewMs = 5_500
+    vocalStyle.syncAid = { enabled: true, minLeadMs: 2_500, maxLeadMs: 4_500 }
+    const template: StyleTemplate = {
+      id: 'warm-stage',
+      name: 'Warm stage',
+      preferences: {
+        stageStyle,
+        lyricDisplay: { lineCount: 3, advanceMode: 'scroll' },
+        vocalStyle,
+        videoExportDefaults: { resolution: '1080p', fps: 60 },
+      },
+    }
+    harness.listStyleTemplates.mockResolvedValueOnce([template])
+
+    await openDemo()
+    await click(buttonByText('Style'))
+    await click(buttonByText('Templates'))
+    expect(harness.listStyleTemplates).toHaveBeenCalledOnce()
+    await click(buttonByText('Load into Style'))
+    expect(document.body.textContent).toContain('Loaded “Warm stage” into this Style draft.')
+    await click(buttonByText('Apply & close'))
+
+    expect(document.querySelector('.style-workspace')).toBeNull()
+    expect(buttonByLabel('Undo').disabled).toBe(false)
+    await click(buttonByLabel('Save project'))
+    const applied = parseProject(harness.saveProject.mock.calls.at(-1)![0].contents)
+    expect(applied.stageStyle.lyrics.sizePx).toBe(96)
+    expect(applied.stageStyle.background).toMatchObject({
+      mode: 'solid',
+      solidColor: '#123456',
+    })
+    expect(applied.lyricDisplay).toEqual({ lineCount: 3, advanceMode: 'scroll' })
+    expect(applied.tracks[0]!.vocalStyle).toMatchObject({
+      sungColor: '#fedcba',
+      previewMs: 5_500,
+      syncAid: { enabled: true, minLeadMs: 2_500, maxLeadMs: 4_500 },
+    })
+    expect(applied).toMatchObject({
+      title: original.title,
+      artist: original.artist,
+      audioPath: original.audioPath,
+      offsetMs: original.offsetMs,
+    })
+    expect(applied.tracks[0]!.lines).toEqual(original.tracks[0]!.lines)
+
+    await click(buttonByText('Export'))
+    expect(
+      document.querySelector<HTMLSelectElement>('[aria-label="Video resolution"]')?.value,
+    ).toBe('1080p')
+    expect(
+      document.querySelector<HTMLSelectElement>('[aria-label="Video frame rate"]')?.value,
+    ).toBe('60')
+    await click(buttonByLabel('Close dialog'))
+
+    await click(buttonByLabel('Undo'))
+    expect(buttonByLabel('Undo').disabled).toBe(true)
+    expect(buttonByLabel('Redo').disabled).toBe(false)
+    await click(buttonByLabel('Save project'))
+    const undone = parseProject(harness.saveProject.mock.calls.at(-1)![0].contents)
+    expect(undone.stageStyle).toEqual(original.stageStyle)
+    expect(undone.lyricDisplay).toEqual(original.lyricDisplay)
+    expect(undone.tracks[0]!.vocalStyle).toEqual(original.tracks[0]!.vocalStyle)
   })
 
   it('applies one verified linked Image through strict-v0 save, undo, redo, and missing reopen', async () => {

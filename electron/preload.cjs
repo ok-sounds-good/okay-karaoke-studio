@@ -30,6 +30,7 @@ const CHANNELS = Object.freeze({
   createStyleTemplate: 'studio:create-style-template',
   renameStyleTemplate: 'studio:rename-style-template',
   deleteStyleTemplate: 'studio:delete-style-template',
+  resolveStyleTemplateBackground: 'studio:resolve-style-template-background',
 })
 
 const MENU_ACTIONS = new Set([
@@ -311,6 +312,42 @@ function requireStyleTemplateName(value, operation) {
   return value
 }
 
+function validLinkedImagePath(value) {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= 8_192 &&
+    !value.includes('\0') &&
+    (value.startsWith('/') || /^[A-Za-z]:[\\/]/u.test(value) || value.startsWith('\\\\'))
+  )
+}
+
+function validBackgroundMedia(value) {
+  return (
+    exactRecord(value, ['path', 'name', 'url']) &&
+    validLinkedImagePath(value.path) &&
+    typeof value.name === 'string' &&
+    value.name.length > 0 &&
+    value.name.length <= 300 &&
+    typeof value.url === 'string' &&
+    /^studio-media:\/\/asset\/[0-9a-f-]{36}(?:\/|$)/iu.test(value.url)
+  )
+}
+
+function requireStyleTemplateBackgroundResult(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new TypeError('resolveStyleTemplateBackground returned an invalid result.')
+  }
+  if (value.status === 'success' && exactRecord(value, ['status', 'media'])) {
+    if (validBackgroundMedia(value.media)) return value
+  } else if (value.status === 'missing' && exactRecord(value, ['status', 'path'])) {
+    if (validLinkedImagePath(value.path)) return value
+  } else if (value.status === 'stale' && exactRecord(value, ['status'])) {
+    return value
+  }
+  throw new TypeError('resolveStyleTemplateBackground returned an invalid result.')
+}
+
 const studio = Object.freeze({
   listStyleTemplates: async () =>
     requireStyleTemplateList(await ipcRenderer.invoke(CHANNELS.listStyleTemplates)),
@@ -337,6 +374,12 @@ const studio = Object.freeze({
     if (deleted !== true) throw new TypeError('deleteStyleTemplate returned an invalid result.')
     return true
   },
+  resolveStyleTemplateBackground: async (id) =>
+    requireStyleTemplateBackgroundResult(
+      await ipcRenderer.invoke(CHANNELS.resolveStyleTemplateBackground, {
+        id: requireStyleTemplateId(id, 'resolveStyleTemplateBackground'),
+      }),
+    ),
   openProject: () => ipcRenderer.invoke(CHANNELS.openProject),
   settleProjectOpen: async (requestId, accepted) =>
     (await ipcRenderer.invoke(CHANNELS.settleProjectOpen, { requestId, accepted })) === true,

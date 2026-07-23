@@ -6,6 +6,7 @@ const { VIEWPORT } = require('../scripts/visual-result-validation.cjs')
 
 const PACKAGED_APP_URL = 'studio-app://app/index.html'
 const STYLE_SESSION_READINESS_TIMEOUT_MS = 10_000
+const STYLE_TEMPLATE_NAME = 'Smoke 158'
 const STYLE_KEY_SEQUENCE = Object.freeze([
   'Tab',
   'Tab',
@@ -255,21 +256,21 @@ function projectLyricsReadinessScript(viewport, contract = { kind: 'project-lyri
     fitFixture.className = 'style-destination-tabs'
     fitFixture.setAttribute('aria-hidden', 'true')
     fitFixture.style.cssText = 'position:fixed;left:0;top:0;width:330px;visibility:hidden;pointer-events:none'
-    fitFixture.style.setProperty('--style-destination-count', '5')
-    for (const label of ['Project lyrics', 'Lead Vocal', 'Background', 'Title card', 'Stage frame']) {
+    fitFixture.style.setProperty('--style-destination-count', '6')
+    for (const label of ['Project lyrics', 'Lead Vocal', 'Background', 'Title card', 'Stage frame', 'Templates']) {
       const button = document.createElement('button')
       button.textContent = label
       fitFixture.append(button)
     }
     document.body.append(fitFixture)
 
-    const fiveDestinationsFit = () => {
+    const sixDestinationsFit = () => {
       const fixtureBounds = fitFixture.getBoundingClientRect()
       const buttons = [...fitFixture.querySelectorAll('button')]
       const bounds = buttons.map((button) => button.getBoundingClientRect())
       const rowTops = new Set(bounds.map((box) => box.top))
       return fixtureBounds.width === 330 && fitFixture.scrollWidth <= fitFixture.clientWidth &&
-        bounds.length === 5 && rowTops.size === 2 && bounds.every((box) =>
+        bounds.length === 6 && rowTops.size === 2 && bounds.every((box) =>
           box.left >= fixtureBounds.left && box.right <= fixtureBounds.right) &&
         buttons.every((button) => button.scrollWidth <= button.clientWidth)
     }
@@ -385,7 +386,7 @@ function projectLyricsReadinessScript(viewport, contract = { kind: 'project-lyri
           (hidden !== (status?.textContent === 'Hidden in output')) ||
           (contract.eyebrowHidden && contract.role !== 'eyebrow' ? Boolean(eyebrow) : !eyebrow) ||
           (contract.artistHidden && contract.role !== 'artist' ? Boolean(artist) : !artist) ||
-          workspace.querySelectorAll('.style-editor__body').length !== 1 || !fiveDestinationsFit()) return null
+          workspace.querySelectorAll('.style-editor__body').length !== 1 || !sixDestinationsFit()) return null
       }
       return { applied, height: expected.height, resourcesReady: true, role: contract.role,
         stageHeight: bounds.height, stageWidth: bounds.width, width: expected.width }
@@ -463,7 +464,7 @@ function projectLyricsReadinessScript(viewport, contract = { kind: 'project-lyri
           !bodyBounds || initialControls.some((control) => {
             const box = control?.getBoundingClientRect()
             return !box || box.top < bodyBounds.top || box.bottom > bodyBounds.bottom
-          }) || workspace.querySelectorAll('.style-editor__body').length !== 1 || !fiveDestinationsFit() ||
+          }) || workspace.querySelectorAll('.style-editor__body').length !== 1 || !sixDestinationsFit() ||
           status.length !== (expectedStatus ? 1 : 0) ||
           (expectedStatus && status[0]?.getAttribute('aria-label') !== expectedStatus) ||
           (status[0] && status[0].nextElementSibling?.textContent !== 'Fixed 1920 × 1080 stage')) return null
@@ -521,7 +522,7 @@ function projectLyricsReadinessScript(viewport, contract = { kind: 'project-lyri
           document.documentElement.clientHeight !== expected.height ||
           document.documentElement.scrollWidth > expected.width || document.body.scrollWidth > expected.width ||
           window.location.href !== '${PACKAGED_APP_URL}' || document.querySelector('.stage-resource-warning') ||
-          !fiveDestinationsFit()) return null
+          !sixDestinationsFit()) return null
         return { controls: timing.length + 1, cueProgress: .5, height: expected.height,
           resourcesReady: true, stageHeight: bounds.height, stageWidth: bounds.width,
           width: expected.width }
@@ -545,7 +546,7 @@ function projectLyricsReadinessScript(viewport, contract = { kind: 'project-lyri
         document.documentElement.clientHeight !== expected.height ||
         window.location.href !== '${PACKAGED_APP_URL}' ||
         fontSet?.status !== 'loaded' ||
-        !fiveDestinationsFit() || Array.from(document.images).some(
+        !sixDestinationsFit() || Array.from(document.images).some(
           (image) => !image.complete || image.naturalWidth <= 0 || image.naturalHeight <= 0,
         )
       ) return null
@@ -646,6 +647,7 @@ function styleSessionActionScript(action) {
     const backgroundTab = document.querySelector('[role="tab"][data-style-destination="background"]')
     const titleTab = document.querySelector('[role="tab"][data-style-destination="title-card"]')
     const stageTab = document.querySelector('[role="tab"][data-style-destination="stage-frame"]')
+    const templatesTab = document.querySelector('[role="tab"][data-style-destination="templates"]')
     const gradient = document.querySelector('input[type="radio"][value="gradient"]')
     const solid = document.querySelector('input[type="radio"][value="solid"]')
     const eyebrow = document.querySelector('input[type="radio"][value="eyebrow"]')
@@ -659,15 +661,20 @@ function styleSessionActionScript(action) {
     const clockFace = document.querySelector('[aria-label="Clock face Bold"]')
     const footerVisibility = document.querySelector('[aria-label="Show Footer in output"]')
     const syncAid = document.querySelector('[aria-label="Enable Lead Vocal Sync Aid"]')
+    const templateName = document.querySelector('input[aria-label="New template name"]')
+    const saveTemplate = [...(workspace?.querySelectorAll('button') ?? [])].find(
+      (button) => button.textContent?.trim() === 'Save as new',
+    )
     const apply = workspace?.querySelector('[data-style-action="apply"]')
     const targets = { background: backgroundTab, lead: leadVocalTab, solid, apply, reopen:
       document.querySelector('button.style-button[aria-label="Edit project Style"]'),
       title: titleTab, 'eyebrow-visibility': eyebrowVisibility, artist,
       'artist-visibility': artistVisibility, 'apply-title': apply, stage: stageTab,
       'stage-off': stageMaster, 'stage-on': stageMaster, clock, 'clock-face': clockFace,
-      footer, 'footer-visibility': footerVisibility, 'apply-stage': apply, 'sync-aid': syncAid }
+      footer, 'footer-visibility': footerVisibility, 'apply-stage': apply, 'sync-aid': syncAid,
+      templates: templatesTab, 'template-name': templateName, 'save-template': saveTemplate }
     const target = targets[action]
-    if (action === 'sync-aid' && target instanceof HTMLElement) {
+    if (['sync-aid', 'template-name', 'save-template'].includes(action) && target instanceof HTMLElement) {
       target.scrollIntoView({ block: 'center' })
     }
     const semantic = ({
@@ -691,6 +698,15 @@ function styleSessionActionScript(action) {
       'footer-visibility': footer?.checked && footerVisibility?.checked,
       'apply-stage': stageTab?.getAttribute('aria-selected') === 'true' &&
         stageMaster?.checked && footer?.checked && !footerVisibility?.checked,
+      templates: workspace instanceof HTMLElement &&
+        leadVocalTab?.getAttribute('aria-selected') === 'true' &&
+        templatesTab?.getAttribute('aria-selected') === 'false',
+      'template-name': templatesTab?.getAttribute('aria-selected') === 'true' &&
+        templateName instanceof HTMLInputElement && !templateName.disabled && !templateName.value &&
+        Boolean(workspace?.querySelector('.style-template-list[aria-busy="false"]')),
+      'save-template': templatesTab?.getAttribute('aria-selected') === 'true' &&
+        templateName instanceof HTMLInputElement && templateName.value === ${JSON.stringify(STYLE_TEMPLATE_NAME)} &&
+        saveTemplate instanceof HTMLButtonElement && !saveTemplate.disabled,
     })[action] === true
     if (!(target instanceof HTMLElement) || !semantic || target.disabled) return null
     const bounds = target.getBoundingClientRect()
@@ -702,6 +718,229 @@ function styleSessionActionScript(action) {
       readyState: document.readyState, width: document.documentElement.clientWidth,
       x: Math.round(bounds.left + bounds.width / 2), y: Math.round(bounds.top + bounds.height / 2) }
   })()`
+}
+
+function styleTemplateReadinessScript(viewport, name = STYLE_TEMPLATE_NAME) {
+  return `(() => new Promise((resolve) => {
+    const expected = ${JSON.stringify(viewport)}
+    const expectedName = ${JSON.stringify(name)}
+    const frame = () => new Promise((done) => requestAnimationFrame(() => done()))
+    const mutationObserver = new MutationObserver(() => schedule())
+    const resizeObserver = new ResizeObserver(() => schedule())
+    const fontSet = document.fonts
+    let checking = false
+    let finished = false
+    let rerun = false
+    const sample = () => {
+      const workspace = document.querySelector('.style-workspace[role="dialog"]')
+      const panel = document.querySelector('[role="tabpanel"][aria-labelledby$="-templates-tab"]')
+      const tab = document.querySelector('[role="tab"][data-style-destination="templates"]')
+      const list = panel?.querySelector('.style-template-list')
+      const selected = list?.querySelector('button[aria-pressed="true"]')
+      const status = panel?.querySelector('[role="status"]')
+      const newName = panel?.querySelector('input[aria-label="New template name"]')
+      const renameName = panel?.querySelector('input[aria-label="Rename selected template"]')
+      const save = [...(panel?.querySelectorAll('button') ?? [])].find(
+        (button) => button.textContent?.trim() === 'Save as new',
+      )
+      const load = [...(panel?.querySelectorAll('button') ?? [])].find(
+        (button) => button.textContent?.trim() === 'Load into Style',
+      )
+      const remove = [...(panel?.querySelectorAll('button') ?? [])].find(
+        (button) => button.textContent?.trim() === 'Delete',
+      )
+      const preview = document.querySelector('[aria-label="Project lyrics design preview"]')
+      const stage = preview?.querySelector('[data-logical-stage="1920x1080"]')
+      const line = stage?.querySelector('[data-design-preview="project-lyrics"] .stage-line')
+      const bounds = stage?.getBoundingClientRect()
+      selected?.scrollIntoView({ block: 'nearest' })
+      const body = workspace?.querySelector('.style-editor__body')
+      const bodyBounds = body?.getBoundingClientRect()
+      const selectedBounds = selected?.getBoundingClientRect()
+      const controls = [newName, renameName, save, load, remove]
+      if (!(workspace instanceof HTMLElement) || !(panel instanceof HTMLElement) || panel.hidden ||
+        !(tab instanceof HTMLButtonElement) || tab.getAttribute('aria-selected') !== 'true' ||
+        !(list instanceof HTMLElement) || list.getAttribute('aria-busy') !== 'false' ||
+        !(selected instanceof HTMLButtonElement) || selected.textContent?.trim() !== expectedName ||
+        !bodyBounds || !selectedBounds || selectedBounds.left < bodyBounds.left ||
+        selectedBounds.right > bodyBounds.right || selectedBounds.top < bodyBounds.top ||
+        selectedBounds.bottom > bodyBounds.bottom ||
+        !(status instanceof HTMLElement) || status.textContent?.trim() !== 'Saved “' + expectedName + '”.' ||
+        !(newName instanceof HTMLInputElement) || newName.value ||
+        !(renameName instanceof HTMLInputElement) || renameName.value !== expectedName ||
+        !(save instanceof HTMLButtonElement) || !save.disabled ||
+        controls.some((control) => !(control instanceof HTMLElement) ||
+          (control !== save && control instanceof HTMLButtonElement && control.disabled) ||
+          getComputedStyle(control).visibility !== 'visible') ||
+        !(preview instanceof HTMLElement) || !(stage instanceof HTMLElement) || !(line instanceof HTMLElement) ||
+        !bounds || bounds.width <= 0 || bounds.height <= 0 ||
+        Math.abs(bounds.width / bounds.height - 16 / 9) > .01 ||
+        document.readyState !== 'complete' || fontSet?.status !== 'loaded' ||
+        document.documentElement.clientWidth !== expected.width ||
+        document.documentElement.clientHeight !== expected.height ||
+        document.documentElement.scrollWidth > expected.width || document.body.scrollWidth > expected.width ||
+        window.location.href !== '${PACKAGED_APP_URL}' || document.querySelector('.stage-resource-warning') ||
+        Array.from(document.images).some((image) => !image.complete ||
+          image.naturalWidth <= 0 || image.naturalHeight <= 0)) return null
+      return { controls: controls.length, height: expected.height, name: expectedName,
+        resourcesReady: true, stageHeight: bounds.height, stageWidth: bounds.width,
+        status: status.textContent.trim(), width: expected.width }
+    }
+    const cleanup = () => {
+      mutationObserver.disconnect()
+      resizeObserver.disconnect()
+      fontSet?.removeEventListener?.('loadingdone', schedule)
+      fontSet?.removeEventListener?.('loadingerror', schedule)
+    }
+    const finish = (value) => {
+      if (finished) return
+      finished = true
+      cleanup()
+      resolve(value)
+    }
+    async function check() {
+      if (finished) return
+      if (checking) {
+        rerun = true
+        return
+      }
+      checking = true
+      try {
+        await fontSet?.ready
+        await Promise.all(Array.from(document.images, (image) => image.decode?.() ?? Promise.resolve()))
+        await frame()
+        await frame()
+        const first = sample()
+        await frame()
+        const second = sample()
+        if (first && second && JSON.stringify(first) === JSON.stringify(second)) finish(second)
+      } catch {
+        // Resource and persistence failures remain non-ready until the outer deadline expires.
+      } finally {
+        checking = false
+        if (rerun && !finished) {
+          rerun = false
+          queueMicrotask(check)
+        }
+      }
+    }
+    function schedule() { void check() }
+    mutationObserver.observe(document.documentElement, {
+      attributes: true,
+      childList: true,
+      characterData: true,
+      subtree: true,
+    })
+    resizeObserver.observe(document.documentElement)
+    document.addEventListener('load', schedule, true)
+    document.addEventListener('error', schedule, true)
+    fontSet?.addEventListener?.('loadingdone', schedule)
+    fontSet?.addEventListener?.('loadingerror', schedule)
+    schedule()
+  }))()`
+}
+
+function styleTemplateFormReadinessScript(viewport) {
+  return `(() => new Promise((resolve) => {
+    const expected = ${JSON.stringify(viewport)}
+    const frame = () => new Promise((done) => requestAnimationFrame(() => done()))
+    const mutationObserver = new MutationObserver(() => schedule())
+    const resizeObserver = new ResizeObserver(() => schedule())
+    const fontSet = document.fonts
+    let checking = false
+    let finished = false
+    let rerun = false
+    const sample = () => {
+      const workspace = document.querySelector('.style-workspace[role="dialog"]')
+      const body = workspace?.querySelector('.style-editor__body')
+      const panel = document.querySelector('[role="tabpanel"][aria-labelledby$="-templates-tab"]')
+      const tab = document.querySelector('[role="tab"][data-style-destination="templates"]')
+      const list = panel?.querySelector('.style-template-list')
+      const newName = panel?.querySelector('input[aria-label="New template name"]')
+      const save = [...(panel?.querySelectorAll('button') ?? [])].find(
+        (button) => button.textContent?.trim() === 'Save as new',
+      )
+      const preview = document.querySelector('[aria-label="Project lyrics design preview"]')
+      const stage = preview?.querySelector('[data-logical-stage="1920x1080"]')
+      const line = stage?.querySelector('[data-design-preview="project-lyrics"] .stage-line')
+      newName?.scrollIntoView({ block: 'center' })
+      const bodyBounds = body?.getBoundingClientRect()
+      const nameBounds = newName?.getBoundingClientRect()
+      const stageBounds = stage?.getBoundingClientRect()
+      if (!(workspace instanceof HTMLElement) || !(body instanceof HTMLElement) ||
+        !(panel instanceof HTMLElement) || panel.hidden ||
+        !(tab instanceof HTMLButtonElement) || tab.getAttribute('aria-selected') !== 'true' ||
+        !(list instanceof HTMLElement) || list.getAttribute('aria-busy') !== 'false' ||
+        !(newName instanceof HTMLInputElement) || newName.disabled || newName.value ||
+        !(save instanceof HTMLButtonElement) || !save.disabled ||
+        !bodyBounds || !nameBounds || nameBounds.left < bodyBounds.left ||
+        nameBounds.right > bodyBounds.right || nameBounds.top < bodyBounds.top ||
+        nameBounds.bottom > bodyBounds.bottom ||
+        !(preview instanceof HTMLElement) || !(stage instanceof HTMLElement) || !(line instanceof HTMLElement) ||
+        !stageBounds || stageBounds.width <= 0 || stageBounds.height <= 0 ||
+        Math.abs(stageBounds.width / stageBounds.height - 16 / 9) > .01 ||
+        document.readyState !== 'complete' || fontSet?.status !== 'loaded' ||
+        document.documentElement.clientWidth !== expected.width ||
+        document.documentElement.clientHeight !== expected.height ||
+        document.documentElement.scrollWidth > expected.width || document.body.scrollWidth > expected.width ||
+        window.location.href !== '${PACKAGED_APP_URL}' || document.querySelector('.stage-resource-warning') ||
+        Array.from(document.images).some((image) => !image.complete ||
+          image.naturalWidth <= 0 || image.naturalHeight <= 0)) return null
+      return { controls: 2, height: expected.height, nameReady: true, resourcesReady: true,
+        stageHeight: stageBounds.height, stageWidth: stageBounds.width, width: expected.width }
+    }
+    const cleanup = () => {
+      mutationObserver.disconnect()
+      resizeObserver.disconnect()
+      fontSet?.removeEventListener?.('loadingdone', schedule)
+      fontSet?.removeEventListener?.('loadingerror', schedule)
+    }
+    const finish = (value) => {
+      if (finished) return
+      finished = true
+      cleanup()
+      resolve(value)
+    }
+    async function check() {
+      if (finished) return
+      if (checking) {
+        rerun = true
+        return
+      }
+      checking = true
+      try {
+        await fontSet?.ready
+        await Promise.all(Array.from(document.images, (image) => image.decode?.() ?? Promise.resolve()))
+        await frame()
+        await frame()
+        const first = sample()
+        await frame()
+        const second = sample()
+        if (first && second && JSON.stringify(first) === JSON.stringify(second)) finish(second)
+      } catch {
+        // Loading and layout failures remain non-ready until the outer deadline expires.
+      } finally {
+        checking = false
+        if (rerun && !finished) {
+          rerun = false
+          queueMicrotask(check)
+        }
+      }
+    }
+    function schedule() { void check() }
+    mutationObserver.observe(document.documentElement, {
+      attributes: true,
+      childList: true,
+      characterData: true,
+      subtree: true,
+    })
+    resizeObserver.observe(document.documentElement)
+    document.addEventListener('load', schedule, true)
+    document.addEventListener('error', schedule, true)
+    fontSet?.addEventListener?.('loadingdone', schedule)
+    fontSet?.addEventListener?.('loadingerror', schedule)
+    schedule()
+  }))()`
 }
 
 function validRendererState(value) {
@@ -820,6 +1059,39 @@ function validLeadVocalState(value, viewport) {
   )
 }
 
+function validStyleTemplateState(value, viewport, name = STYLE_TEMPLATE_NAME) {
+  return Boolean(
+    value &&
+    typeof value === 'object' &&
+    value.controls === 5 &&
+    value.height === viewport.height &&
+    value.name === name &&
+    value.resourcesReady === true &&
+    Number.isFinite(value.stageHeight) &&
+    value.stageHeight > 0 &&
+    Number.isFinite(value.stageWidth) &&
+    value.stageWidth > 0 &&
+    value.status === `Saved “${name}”.` &&
+    value.width === viewport.width,
+  )
+}
+
+function validStyleTemplateFormState(value, viewport) {
+  return Boolean(
+    value &&
+    typeof value === 'object' &&
+    value.controls === 2 &&
+    value.height === viewport.height &&
+    value.nameReady === true &&
+    value.resourcesReady === true &&
+    Number.isFinite(value.stageHeight) &&
+    value.stageHeight > 0 &&
+    Number.isFinite(value.stageWidth) &&
+    value.stageWidth > 0 &&
+    value.width === viewport.width,
+  )
+}
+
 function validStageFrameState(value, viewport, contract) {
   return Boolean(
     value &&
@@ -892,10 +1164,13 @@ module.exports = {
   STYLE_KEY_RESULT_SCRIPT,
   STYLE_KEY_SEQUENCE,
   STYLE_SESSION_READINESS_TIMEOUT_MS,
+  STYLE_TEMPLATE_NAME,
   STYLE_TARGET_SCRIPT,
   executeBeforeDeadline,
   projectLyricsReadinessScript,
   styleSessionActionScript,
+  styleTemplateFormReadinessScript,
+  styleTemplateReadinessScript,
   validBackgroundState,
   validLeadVocalState,
   validProjectLyricsState,
@@ -903,5 +1178,7 @@ module.exports = {
   validStageFrameState,
   validStyleActionTarget,
   validStyleKeyboardState,
+  validStyleTemplateFormState,
+  validStyleTemplateState,
   validStyleTarget,
 }

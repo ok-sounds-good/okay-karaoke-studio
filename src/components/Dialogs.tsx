@@ -21,9 +21,9 @@ import {
 } from 'lucide-react'
 import type { ValidationIssue, VocalTrack } from '../lib/model'
 import {
-  DEFAULT_VIDEO_EXPORT_SETTINGS,
   VIDEO_FRAME_RATES,
   VIDEO_RESOLUTION_OPTIONS,
+  type VideoExportDefaults,
 } from '../lib/video-export-settings'
 import { Button, Modal } from './ui'
 
@@ -290,6 +290,7 @@ interface ExportDialogProps {
   onExportProject: () => void
   videoAvailable: boolean
   videoProgress: StudioVideoExportProgress | null
+  defaults: VideoExportDefaults
 }
 
 export function ExportDialog({
@@ -306,11 +307,10 @@ export function ExportDialog({
   onExportProject,
   videoAvailable,
   videoProgress,
+  defaults,
 }: ExportDialogProps) {
-  const [resolution, setResolution] = useState<StudioVideoResolution>(
-    DEFAULT_VIDEO_EXPORT_SETTINGS.resolution,
-  )
-  const [fps, setFps] = useState<StudioVideoFps>(DEFAULT_VIDEO_EXPORT_SETTINGS.fps)
+  const [resolution, setResolution] = useState<StudioVideoResolution>(defaults.resolution)
+  const [fps, setFps] = useState<StudioVideoFps>(defaults.fps)
   const [cancelConfirmationOpen, setCancelConfirmationOpen] = useState(false)
   const [cancellationPending, setCancellationPending] = useState(false)
   const [cancelError, setCancelError] = useState<string | null>(null)

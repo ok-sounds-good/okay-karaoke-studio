@@ -11,9 +11,11 @@ import type {
 } from '../src/hooks/useProjectStyleSession'
 import { createProjectStyleDraft } from '../src/hooks/useProjectStyleSession'
 import { createProject } from '../src/lib/model'
+import type { StyleTemplate } from '../src/lib/style-template-codec'
 import {
   FONT_SIZE_OPTIONS,
   SYSTEM_MONOSPACE_TYPEFACE,
+  cloneStageStyle,
   cloneVocalStyle,
   resolveFontFace,
   type FontFaceDescriptor,
@@ -77,6 +79,36 @@ function testFace(style: string, weight: number): FontFaceDescriptor {
     weight,
     slant: 'normal',
   }
+}
+
+function testStyleTemplate(id: string, name: string): StyleTemplate {
+  const stageStyle = cloneStageStyle()
+  stageStyle.lyrics.sizePx = 96
+  stageStyle.background = {
+    ...stageStyle.background,
+    mode: 'image',
+    imagePath: '/templates/missing-background.png',
+  }
+  const vocalStyle = cloneVocalStyle()
+  vocalStyle.previewMs = 5_500
+  vocalStyle.syncAid = { enabled: true, minLeadMs: 2_500, maxLeadMs: 4_500 }
+  return {
+    id,
+    name,
+    preferences: {
+      stageStyle,
+      lyricDisplay: { lineCount: 3, advanceMode: 'scroll' },
+      vocalStyle,
+      videoExportDefaults: { resolution: '1080p', fps: 60 },
+    },
+  }
+}
+
+async function settleAsyncWork() {
+  await act(async () => {
+    await Promise.resolve()
+    await Promise.resolve()
+  })
 }
 
 describe('ProjectStyleEditor', () => {
@@ -182,7 +214,7 @@ describe('ProjectStyleEditor', () => {
   it('uses automatic accessible destination tabs with wrapping Arrow and Home/End navigation', async () => {
     await renderEditor()
     const tabs = [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')]
-    const [lyricsTab, leadVocalTab, backgroundTab, titleCardTab, stageFrameTab] = tabs
+    const [lyricsTab, leadVocalTab, backgroundTab, titleCardTab, stageFrameTab, templatesTab] = tabs
     const controlledPanel = (tab: HTMLButtonElement) =>
       container.querySelector<HTMLElement>(`#${CSS.escape(tab.getAttribute('aria-controls')!)}`)!
 
@@ -192,6 +224,7 @@ describe('ProjectStyleEditor', () => {
       'Background',
       'Title card',
       'Stage frame',
+      'Templates',
     ])
     expect(controlledPanel(backgroundTab).hidden).toBe(true)
 
@@ -206,14 +239,164 @@ describe('ProjectStyleEditor', () => {
     await act(async () => keyDown(titleCardTab, { code: 'ArrowRight', key: 'ArrowRight' }))
     expect(document.activeElement).toBe(stageFrameTab)
     await act(async () => keyDown(stageFrameTab, { code: 'ArrowRight', key: 'ArrowRight' }))
+    expect(document.activeElement).toBe(templatesTab)
+    await act(async () => keyDown(templatesTab, { code: 'ArrowRight', key: 'ArrowRight' }))
     expect(document.activeElement).toBe(lyricsTab)
     await act(async () => keyDown(lyricsTab, { code: 'End', key: 'End' }))
-    expect(document.activeElement).toBe(stageFrameTab)
-    await act(async () => keyDown(stageFrameTab, { code: 'Home', key: 'Home' }))
+    expect(document.activeElement).toBe(templatesTab)
+    await act(async () => keyDown(templatesTab, { code: 'Home', key: 'Home' }))
     expect(document.activeElement).toBe(lyricsTab)
-    const wrapped = keyDown(lyricsTab, { code: 'ArrowLeft', key: 'ArrowLeft' })
+    let wrapped!: KeyboardEvent
+    await act(async () => {
+      wrapped = keyDown(lyricsTab, { code: 'ArrowLeft', key: 'ArrowLeft' })
+    })
     expect(wrapped.defaultPrevented).toBe(true)
-    expect(document.activeElement).toBe(stageFrameTab)
+    expect(document.activeElement).toBe(templatesTab)
+  })
+
+  it('loads and manages saved templates with explicit draft and deletion semantics', async () => {
+    const warm = testStyleTemplate('warm', 'Warm stage')
+    const created = testStyleTemplate('created', 'Created copy')
+    const renamed = { ...created, name: 'Renamed copy' }
+    const listStyleTemplates = vi.fn(async () => [warm])
+    const createStyleTemplate = vi.fn(async () => created)
+    const renameStyleTemplate = vi.fn(async () => renamed)
+    const deleteStyleTemplate = vi.fn(async () => true as const)
+    const onPrepareTemplateBackground = vi.fn(async () => ({
+      status: 'missing' as const,
+      path: '/templates/missing-background.png',
+    }))
+    vi.stubGlobal('studio', {
+      listStyleTemplates,
+      createStyleTemplate,
+      renameStyleTemplate,
+      deleteStyleTemplate,
+    } as unknown as StudioApi)
+    const onDraftChange = vi.fn<ProjectStyleSession['change']>()
+    const { draft, onTogglePlayback } = await renderEditor({
+      onDraftChange,
+      onPrepareTemplateBackground,
+    })
+
+    await act(async () => findButton(container, 'Templates').click())
+    await settleAsyncWork()
+
+    expect(listStyleTemplates).toHaveBeenCalledOnce()
+    expect(findButton(container, 'Warm stage').getAttribute('aria-pressed')).toBe('true')
+    expect(container.textContent).toContain('missing image remains linked for relinking')
+
+    await act(async () => findButton(container, 'Load into Style').click())
+    expect(onPrepareTemplateBackground).toHaveBeenCalledExactlyOnceWith('warm')
+    const loaded = applyDraftChange(onDraftChange.mock.calls.at(-1)?.[0], draft)
+    expect(loaded.stageStyle.lyrics.sizePx).toBe(96)
+    expect(loaded.lyricDisplay).toEqual({ lineCount: 3, advanceMode: 'scroll' })
+    expect(loaded.vocalTiming).toEqual({
+      previewMs: '5500',
+      minLeadMs: '2500',
+      maxLeadMs: '4500',
+    })
+    expect(container.textContent).toContain('Loaded “Warm stage” into this Style draft.')
+
+    const newName = container.querySelector<HTMLInputElement>('[aria-label="New template name"]')!
+    await act(async () => replaceInput(newName, 'Created copy'))
+    await act(async () => findButton(container, 'Save as new').click())
+    await settleAsyncWork()
+    expect(createStyleTemplate).toHaveBeenCalledWith({
+      name: 'Created copy',
+      preferences: expect.objectContaining({
+        lyricDisplay: draft.lyricDisplay,
+        videoExportDefaults: draft.videoExportDefaults,
+      }),
+    })
+    expect(findButton(container, 'Created copy').getAttribute('aria-pressed')).toBe('true')
+
+    const renameInput = container.querySelector<HTMLInputElement>(
+      '[aria-label="Rename selected template"]',
+    )!
+    await act(async () => replaceInput(renameInput, 'Renamed copy'))
+    await act(async () => findButton(container, 'Rename').click())
+    await settleAsyncWork()
+    expect(renameStyleTemplate).toHaveBeenCalledWith('created', 'Renamed copy')
+    expect(findButton(container, 'Renamed copy').getAttribute('aria-pressed')).toBe('true')
+
+    await act(async () => findButton(container, 'Delete').click())
+    const confirmation = container.querySelector<HTMLElement>('[role="alertdialog"]')!
+    expect(confirmation.getAttribute('aria-label')).toBe('Confirm template deletion')
+    expect(confirmation.getAttribute('aria-modal')).toBe('true')
+    const keep = findButton(confirmation, 'Keep')
+    const confirmDelete = findButton(confirmation, 'Delete template')
+    expect(document.activeElement).toBe(keep)
+    let wrapped = keyDown(keep, { code: 'Tab', key: 'Tab', shiftKey: true })
+    expect(wrapped.defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(confirmDelete)
+    wrapped = keyDown(confirmDelete, { code: 'Tab', key: 'Tab' })
+    expect(wrapped.defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(keep)
+    keyDown(keep, { code: 'Space', key: ' ', shiftKey: true })
+    expect(onTogglePlayback).not.toHaveBeenCalled()
+    await act(async () => keyDown(confirmation, { code: 'Escape', key: 'Escape' }))
+    expect(container.querySelector('[role="alertdialog"]')).toBeNull()
+    expect(document.activeElement).toBe(findButton(container, 'Delete'))
+    expect(deleteStyleTemplate).not.toHaveBeenCalled()
+
+    await act(async () => findButton(container, 'Delete').click())
+    await act(async () => findButton(container, 'Delete template').click())
+    await settleAsyncWork()
+    expect(deleteStyleTemplate).toHaveBeenCalledWith('created')
+    expect(container.textContent).toContain('Deleted “Renamed copy”.')
+    expect(findButton(container, 'Warm stage').getAttribute('aria-pressed')).toBe('true')
+    expect(onDraftChange).toHaveBeenCalledOnce()
+  })
+
+  it('prepares non-image template loading by discarding any pending image candidate', async () => {
+    const template = testStyleTemplate('solid', 'Solid stage')
+    template.preferences.stageStyle.background = {
+      ...template.preferences.stageStyle.background,
+      imagePath: '/templates/remembered-background.png',
+      mode: 'solid',
+      solidColor: '#102030',
+    }
+    vi.stubGlobal('studio', {
+      listStyleTemplates: vi.fn(async () => [template]),
+    } as unknown as StudioApi)
+    const onDraftChange = vi.fn<ProjectStyleSession['change']>()
+    const onPrepareTemplateBackground = vi.fn(async () => ({ status: 'cleared' as const }))
+    const { draft } = await renderEditor({
+      onDraftChange,
+      onPrepareTemplateBackground,
+    })
+
+    await act(async () => findButton(container, 'Templates').click())
+    await settleAsyncWork()
+    await act(async () => findButton(container, 'Load into Style').click())
+
+    expect(onPrepareTemplateBackground).toHaveBeenCalledExactlyOnceWith(null)
+    const loaded = applyDraftChange(onDraftChange.mock.calls.at(-1)?.[0], draft)
+    expect(loaded.stageStyle.background).toEqual(template.preferences.stageStyle.background)
+  })
+
+  it('shows a retriable library failure instead of an empty-library state', async () => {
+    const listStyleTemplates = vi
+      .fn<StudioApi['listStyleTemplates']>()
+      .mockRejectedValueOnce(new Error('Template library is unavailable.'))
+      .mockResolvedValueOnce([testStyleTemplate('warm', 'Warm stage')])
+    vi.stubGlobal('studio', { listStyleTemplates } as unknown as StudioApi)
+    await renderEditor()
+
+    await act(async () => findButton(container, 'Templates').click())
+    await settleAsyncWork()
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      'Template library is unavailable.',
+    )
+    expect(container.textContent).toContain('Saved templates could not be loaded.')
+    expect(container.textContent).not.toContain('No saved templates yet.')
+
+    await act(async () => findButton(container, 'Retry loading templates').click())
+    await settleAsyncWork()
+    expect(listStyleTemplates).toHaveBeenCalledTimes(2)
+    expect(container.querySelector('[role="alert"]')).toBeNull()
+    expect(findButton(container, 'Warm stage')).not.toBeNull()
   })
 
   it('edits Lead Vocal overrides and exposes planner-backed timing controls', async () => {

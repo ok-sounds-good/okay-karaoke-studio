@@ -7,7 +7,7 @@ import { cloneStageStyle, cloneVocalStyle } from '../src/lib/video-style'
 import type { StyleTemplatePreferences } from '../src/lib/style-template-codec'
 
 const require = createRequire(import.meta.url)
-const { createStyleTemplateStore, MAX_STYLE_TEMPLATE_FILE_BYTES } =
+const { createStyleTemplateStore: createRawStyleTemplateStore, MAX_STYLE_TEMPLATE_FILE_BYTES } =
   require('../electron/style-template-store.cjs') as {
     MAX_STYLE_TEMPLATE_FILE_BYTES: number
     createStyleTemplateStore(options: {
@@ -17,7 +17,21 @@ const { createStyleTemplateStore, MAX_STYLE_TEMPLATE_FILE_BYTES } =
       writeFile?: (path: string, contents: string) => Promise<void>
     }): {
       list(): Promise<Array<{ id: string; name: string; preferences: StyleTemplatePreferences }>>
-      create(value: { name: string; preferences: StyleTemplatePreferences }): Promise<{
+      find(value: { id: string }): Promise<{
+        id: string
+        name: string
+        preferences: StyleTemplatePreferences
+      } | null>
+      findAuthorized(value: { id: string }): Promise<{
+        id: string
+        name: string
+        preferences: StyleTemplatePreferences
+        backgroundImagePath: string | null
+      } | null>
+      create(
+        value: { name: string; preferences: StyleTemplatePreferences },
+        options?: { authorizeBackgroundPath?: (path: string) => boolean | Promise<boolean> },
+      ): Promise<{
         id: string
         name: string
         preferences: StyleTemplatePreferences
@@ -26,6 +40,14 @@ const { createStyleTemplateStore, MAX_STYLE_TEMPLATE_FILE_BYTES } =
       delete(value: { id: string }): Promise<true>
     }
   }
+const createStyleTemplateStore = (options: Parameters<typeof createRawStyleTemplateStore>[0]) => {
+  const store = createRawStyleTemplateStore(options)
+  return {
+    ...store,
+    create: (value: Parameters<typeof store.create>[0], createOptions = {}) =>
+      store.create(value, { authorizeBackgroundPath: () => true, ...createOptions }),
+  }
+}
 const { writeUtf8FileAtomically } = require('../electron/project-files.cjs') as {
   writeUtf8FileAtomically(
     path: string,
@@ -89,6 +111,50 @@ describe('main-process style template store', () => {
     expect((await reopened.list()).map(({ id }) => id)).toEqual(['stable-b'])
   })
 
+  it('finds a fresh validated template by opaque ID without exposing a mutable stored value', async () => {
+    const { filePath } = await storePath()
+    const store = createStyleTemplateStore({ filePath, createId: () => 'stable-id' })
+    await store.create({ name: 'Warm', preferences: preferences('/linked/template.png') })
+
+    const found = await store.find({ id: 'stable-id' })
+    expect(found?.preferences.stageStyle.background.imagePath).toBe('/linked/template.png')
+    if (!found) throw new Error('Expected a stored template')
+    found.preferences.stageStyle.background.imagePath = '/mutated.png'
+    expect(
+      (await store.find({ id: 'stable-id' }))?.preferences.stageStyle.background.imagePath,
+    ).toBe('/linked/template.png')
+    await expect(store.find({ id: 'stable-id', path: '/hostile.png' } as never)).rejects.toThrow(
+      'invalid shape',
+    )
+    await expect(store.find({ id: 'missing' })).resolves.toBeNull()
+  })
+
+  it('requires main authorization for image persistence and preserves only internal provenance across restart', async () => {
+    const { filePath } = await storePath()
+    const store = createStyleTemplateStore({ filePath, createId: () => 'trusted-id' })
+    const value = { name: 'Trusted', preferences: preferences('/linked/trusted.png') }
+    await expect(createRawStyleTemplateStore({ filePath }).create(value)).rejects.toThrow(
+      'not authorized',
+    )
+    await expect(
+      store.create(value, { authorizeBackgroundPath: async () => false }),
+    ).rejects.toThrow('not authorized')
+    const created = await store.create(value, { authorizeBackgroundPath: async () => true })
+    expect(created).not.toHaveProperty('backgroundImagePath')
+    expect(await store.find({ id: created.id })).not.toHaveProperty('backgroundImagePath')
+    const reopened = createStyleTemplateStore({ filePath })
+    expect((await reopened.findAuthorized({ id: created.id }))?.backgroundImagePath).toBe(
+      '/linked/trusted.png',
+    )
+    const persisted = JSON.parse(await readFile(filePath, 'utf8'))
+    expect(persisted.schemaVersion).toBe(0)
+    persisted.backgroundAuthorizations = []
+    await writeFile(filePath, JSON.stringify(persisted))
+    await expect(
+      createStyleTemplateStore({ filePath }).findAuthorized({ id: created.id }),
+    ).rejects.toThrow('Invalid style template background authorization')
+  })
+
   it('rejects duplicate canonical names, invalid request shapes, and missing IDs', async () => {
     const { filePath } = await storePath()
     const store = createStyleTemplateStore({ filePath, createId: () => 'stable-id' })
@@ -141,7 +207,8 @@ describe('main-process style template store', () => {
   it('preserves and rejects corrupt, unsupported, oversized, and unreadable stores', async () => {
     for (const [name, contents] of [
       ['corrupt', '{not-json'],
-      ['unsupported', '{"schemaVersion":1,"templates":[]}'],
+      ['incomplete-current', '{"schemaVersion":0,"templates":[]}'],
+      ['unsupported', '{"schemaVersion":1,"templates":[],"backgroundAuthorizations":[]}'],
       ['oversized', 'x'.repeat(MAX_STYLE_TEMPLATE_FILE_BYTES + 1)],
     ] as const) {
       const { filePath } = await storePath()
@@ -187,7 +254,7 @@ describe('main-process style template store', () => {
     'preserves the destination and cleans its temporary file after %s failure',
     async (failure) => {
       const { directory, filePath } = await storePath()
-      const prior = '{"schemaVersion":0,"templates":[]}'
+      const prior = '{"schemaVersion":0,"templates":[],"backgroundAuthorizations":[]}'
       await writeFile(filePath, prior)
       const injected = Object.assign(new Error(`${failure} failed`), { code: 'EIO' })
       let temporaryCloseAttempts = 0

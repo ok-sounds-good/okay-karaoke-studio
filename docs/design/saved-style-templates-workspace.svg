@@ -1,0 +1,147 @@
+<?xml version="1.0"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="title desc">
+  <title id="title">Concept B: Saved Style Templates as a destination inside Style</title>
+  <desc id="desc">A 1280 by 720 Okay Karaoke Studio Style workspace with Templates selected as a sixth destination. A template list, selected-template details, missing-image warning, create, rename, delete, and Load into draft actions sit beside a fixed stage inspection preview. Apply and close remains disabled until the template is loaded into the draft.</desc>
+  <defs>
+    <linearGradient id="stage" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#23152f"/>
+      <stop offset=".55" stop-color="#3c2750"/>
+      <stop offset="1" stop-color="#17101f"/>
+    </linearGradient>
+    <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
+      <path d="M24 0H0V24" fill="none" stroke="#a984c8" stroke-opacity=".08"/>
+    </pattern>
+    <style>
+      text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#302b38}
+      .heading{font-size:16px;font-weight:800}.subheading{font-size:13px;font-weight:800}
+      .label{font-size:10px;font-weight:700}.small{font-size:8.5px;fill:#62576e}
+      .tiny{font-size:7px;fill:#72677c;font-weight:700;letter-spacing:.08em}
+      .panel{fill:#fff;stroke:#d9cce9}.soft{fill:#f3edf9;stroke:#d9cce9}.field{fill:#fff;stroke:#a88fba}
+      .selected{fill:#f1eafa;stroke:#9b78cf}.button{fill:#ff8a2b;stroke:#e66f12}
+      .buttonText{fill:#3c200e;font-size:8.5px;font-weight:800}.mutedButton{fill:#eeeaf1;stroke:#ddd5e2}
+      .stageLine{fill:#f6f1f9;font-size:23px;font-weight:800}.stageSmall{fill:#c6bdcc;font-size:7px;font-weight:700}
+    </style>
+  </defs>
+
+  <rect width="1280" height="720" fill="#f8f6fb"/>
+
+  <!-- Existing top bar -->
+  <rect width="1280" height="58" fill="#fff"/>
+  <line x1="0" y1="58" x2="1280" y2="58" stroke="#ebe4f2"/>
+  <rect x="16" y="14" width="30" height="30" rx="9" fill="#aa8dde" stroke="#d8c9e9"/>
+  <path d="M25 21h13v16H25z" fill="#fbf9fd" transform="rotate(-5 31 29)"/>
+  <text x="56" y="25" class="label">Okay</text>
+  <text x="56" y="39" class="tiny">KARAOKE STUDIO</text>
+  <rect x="142" y="14" width="92" height="30" rx="9" fill="#e9def5" stroke="#9b78cf"/>
+  <text x="188" y="33" text-anchor="middle" class="label" fill="#70469e">Style</text>
+  <text x="510" y="33" class="small">Midnight Rehearsal · Style draft</text>
+  <rect x="1000" y="14" width="58" height="30" rx="8" class="soft"/>
+  <text x="1029" y="33" text-anchor="middle" class="small">Save</text>
+  <rect x="1067" y="14" width="84" height="30" rx="8" class="soft"/>
+  <text x="1109" y="33" text-anchor="middle" class="small">Workflow</text>
+  <rect x="1160" y="14" width="104" height="30" rx="9" class="button"/>
+  <text x="1212" y="33" text-anchor="middle" class="buttonText">Export</text>
+
+  <!-- Style editor -->
+  <rect x="16" y="70" width="504" height="568" rx="14" class="panel"/>
+  <text x="36" y="94" class="tiny">VIDEO STYLE · SAVED TEMPLATES</text>
+  <text x="36" y="117" class="heading">Style</text>
+  <text x="496" y="102" text-anchor="end" class="tiny">APPLICATION LIBRARY</text>
+  <line x1="16" y1="128" x2="520" y2="128" stroke="#ebe4f2"/>
+
+  <!-- Six compact destinations -->
+  <g class="small">
+    <rect x="32" y="139" width="68" height="28" rx="8" class="soft"/><text x="66" y="157" text-anchor="middle">Lyrics</text>
+    <rect x="106" y="139" width="62" height="28" rx="8" class="soft"/><text x="137" y="157" text-anchor="middle">Vocal</text>
+    <rect x="174" y="139" width="83" height="28" rx="8" class="soft"/><text x="215" y="157" text-anchor="middle">Background</text>
+    <rect x="263" y="139" width="54" height="28" rx="8" class="soft"/><text x="290" y="157" text-anchor="middle">Title</text>
+    <rect x="323" y="139" width="58" height="28" rx="8" class="soft"/><text x="352" y="157" text-anchor="middle">Frame</text>
+    <rect x="387" y="139" width="117" height="28" rx="8" class="selected"/><text x="445" y="157" text-anchor="middle" class="label" fill="#70469e">Templates</text>
+  </g>
+
+  <text x="34" y="194" class="subheading">Saved Style Templates</text>
+  <text x="34" y="211" class="small">Inspect, load, or manage application-level creator preferences.</text>
+  <rect x="34" y="222" width="280" height="32" rx="8" class="field"/>
+  <circle cx="50" cy="238" r="6" fill="none" stroke="#72677c"/>
+  <path d="M54 242l5 5" stroke="#72677c"/>
+  <text x="67" y="242" class="small">Search templates</text>
+  <rect x="323" y="222" width="181" height="32" rx="8" class="soft"/>
+  <text x="413" y="242" text-anchor="middle" class="label">Save current draft as new…</text>
+
+  <!-- Template list -->
+  <rect x="34" y="266" width="202" height="292" rx="10" fill="#fbfafd" stroke="#ded4e7"/>
+  <text x="48" y="289" class="tiny">3 TEMPLATES</text>
+  <rect x="42" y="301" width="186" height="62" rx="9" class="soft"/>
+  <circle cx="59" cy="320" r="8" fill="#d9894f"/>
+  <text x="76" y="323" class="label">Warm Pub</text>
+  <text x="59" y="344" class="small">Gradient · Georgia · 720p</text>
+  <rect x="42" y="371" width="186" height="75" rx="9" class="selected"/>
+  <circle cx="59" cy="391" r="8" fill="#513568"/>
+  <text x="76" y="394" class="label" fill="#70469e">Stage Show Dark</text>
+  <text x="59" y="415" class="small">Image · Avenir Next · 1080p</text>
+  <circle cx="59" cy="431" r="7" fill="#fff0e4" stroke="#d86d21"/>
+  <text x="59" y="434" text-anchor="middle" class="tiny" fill="#b44d0d">!</text>
+  <text x="73" y="434" class="small" fill="#a84c13">1 linked resource missing</text>
+  <rect x="42" y="454" width="186" height="62" rx="9" class="soft"/>
+  <circle cx="59" cy="473" r="8" fill="#f9f7fb" stroke="#4e4457"/>
+  <text x="76" y="476" class="label">High-Contrast Practice</text>
+  <text x="59" y="497" class="small">Solid · System UI · 720p</text>
+  <text x="59" y="539" class="small">Templates persist across projects and restarts.</text>
+
+  <!-- Selected-template details -->
+  <rect x="246" y="266" width="258" height="292" rx="10" fill="#fff" stroke="#ded4e7"/>
+  <text x="262" y="290" class="tiny">SELECTED TEMPLATE</text>
+  <text x="262" y="316" class="subheading">Stage Show Dark</text>
+  <rect x="262" y="328" width="226" height="42" rx="8" fill="#fff8f1" stroke="#efc6a6"/>
+  <text x="275" y="345" class="label" fill="#a84c13">Linked image not found</text>
+  <text x="275" y="359" class="small">Load is allowed; MP4 stays blocked until relinked.</text>
+  <text x="262" y="394" class="tiny">INCLUDED PREFERENCES</text>
+  <text x="262" y="415" class="small">Background</text><text x="486" y="415" text-anchor="end" class="label">Linked image</text>
+  <text x="262" y="437" class="small">Project lyrics</text><text x="486" y="437" text-anchor="end" class="label">Avenir Next · 82 px</text>
+  <text x="262" y="459" class="small">Lead Vocal</text><text x="486" y="459" text-anchor="end" class="label">Centered · Overrides</text>
+  <text x="262" y="481" class="small">Frame / title</text><text x="486" y="481" text-anchor="end" class="label">Enabled</text>
+  <text x="262" y="503" class="small">Export default</text><text x="486" y="503" text-anchor="end" class="label">1080p · 60 fps</text>
+  <rect x="262" y="519" width="112" height="28" rx="8" class="button"/>
+  <text x="318" y="537" text-anchor="middle" class="buttonText">Load into draft</text>
+  <rect x="381" y="519" width="51" height="28" rx="8" class="soft"/>
+  <text x="406" y="537" text-anchor="middle" class="small">Rename</text>
+  <rect x="438" y="519" width="50" height="28" rx="8" fill="#fff5f5" stroke="#e2bcbc"/>
+  <text x="463" y="537" text-anchor="middle" class="small" fill="#9f3131">Delete</text>
+
+  <!-- Editor actions -->
+  <line x1="16" y1="574" x2="520" y2="574" stroke="#ebe4f2"/>
+  <text x="34" y="596" class="small">Selection is being inspected; it is not loaded into the Style draft.</text>
+  <text x="34" y="614" class="tiny">LOAD INTO DRAFT TO ENABLE APPLY</text>
+  <rect x="338" y="593" width="68" height="31" rx="9" class="soft"/>
+  <text x="372" y="613" text-anchor="middle" class="small">Cancel</text>
+  <rect x="414" y="593" width="90" height="31" rx="9" class="mutedButton"/>
+  <text x="459" y="613" text-anchor="middle" class="small" fill="#a39aa8">Apply &amp; close</text>
+
+  <!-- Template inspection preview -->
+  <rect x="532" y="70" width="732" height="568" rx="14" class="panel"/>
+  <text x="554" y="96" class="tiny">STAGE MONITOR · TEMPLATE INSPECTION</text>
+  <text x="554" y="120" class="heading">Stage Show Dark</text>
+  <rect x="554" y="135" width="688" height="387" rx="11" fill="url(#stage)"/>
+  <rect x="554" y="135" width="688" height="387" rx="11" fill="url(#grid)"/>
+  <rect x="599" y="174" width="598" height="309" rx="3" fill="none" stroke="#6c4b82" stroke-width="2"/>
+  <text x="618" y="197" class="stageSmall">OKAY / STUDIO</text>
+  <text x="1178" y="197" text-anchor="end" class="stageSmall">00:42.600</text>
+  <text x="898" y="331" text-anchor="middle" class="stageLine" fill="#ff8a2b">Hold on to the night</text>
+  <text x="618" y="462" class="stageSmall">THE LATE SET · MIDNIGHT REHEARSAL</text>
+  <rect x="554" y="538" width="688" height="79" rx="9" class="soft"/>
+  <circle cx="577" cy="562" r="9" fill="#e9def5" stroke="#9b78cf"/>
+  <text x="595" y="565" class="label">Inspection only</text>
+  <text x="595" y="584" class="small">Review the template at stage scale before loading it.</text>
+  <text x="595" y="601" class="small">The missing image uses the established fallback.</text>
+
+  <!-- Fixed transport -->
+  <rect y="650" width="1280" height="70" fill="#fff"/>
+  <line x1="0" y1="650" x2="1280" y2="650" stroke="#ebe4f2"/>
+  <rect x="16" y="659" width="220" height="52" rx="11" class="soft"/>
+  <text x="34" y="683" class="label">Start sync</text>
+  <text x="34" y="700" class="tiny">CLOSE STYLE TO ENABLE</text>
+  <circle cx="566" cy="685" r="22" fill="#ff8a2b"/>
+  <path d="M560 676l16 9-16 9z" fill="#3c200e"/>
+  <text x="618" y="689" class="label">0:42.600 / 3:42.000</text>
+  <text x="1110" y="689" class="small">1.0× · Volume</text>
+</svg>

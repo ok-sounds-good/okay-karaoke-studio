@@ -234,6 +234,118 @@ describe('transactional Style linked-image editing', () => {
     expect(latest.style.isOpen).toBe(false)
   })
 
+  it('loads a main-authorized saved-template image as a preview candidate and promotes it on Apply', async () => {
+    const path = '/templates/available.png'
+    const candidateUrl = 'studio-media://asset/template-candidate'
+    const initial = capability(null, 'initial')
+    const promoted = capability(candidateUrl, 'promoted')
+    const controller = createController(initial)
+    const resolveStyleTemplateBackground = vi.fn<StudioApi['resolveStyleTemplateBackground']>(
+      async () => ({ status: 'success', media: chosen(path, candidateUrl) }),
+    )
+    const settleBackgroundImage = vi.fn(async (_url: string, accepted: boolean) =>
+      accepted ? promoted : initial,
+    )
+    installStudio({ resolveStyleTemplateBackground, settleBackgroundImage })
+    const commit = vi.fn(() => 'applied' as const)
+    await render(controller.controller, styleDraft(), commit)
+    await open()
+
+    let loaded!: Awaited<ReturnType<BackgroundImageStyleSession['prepareTemplateBackground']>>
+    await act(async () => {
+      loaded = await latest.background.prepareTemplateBackground('template-available')
+      if (loaded.status === 'stale' || loaded.status === 'cleared') {
+        throw new Error('Expected template background')
+      }
+      latest.style.change((current) => ({
+        ...current,
+        stageStyle: {
+          ...current.stageStyle,
+          background: { ...current.stageStyle.background, imagePath: loaded.path, mode: 'image' },
+        },
+      }))
+    })
+    expect(resolveStyleTemplateBackground).toHaveBeenCalledExactlyOnceWith('template-available')
+    expect(latest.background.preview.url).toBe(candidateUrl)
+    await readyCandidate()
+    await act(async () => expect(await latest.background.apply()).toBe(true))
+
+    expect(settleBackgroundImage).toHaveBeenCalledWith(candidateUrl, true)
+    expect(controller.snapshots.get(path)).toBe(candidateUrl)
+    expect(commit).toHaveBeenCalledOnce()
+  })
+
+  it('keeps a missing saved-template link in the draft while dropping any stale snapshot', async () => {
+    const path = '/templates/missing.png'
+    const staleUrl = 'studio-media://asset/stale-snapshot'
+    const controller = createController(capability(staleUrl, 'initial'), [[path, staleUrl]])
+    const retainBackground = vi.fn(async (expected, url) => ({ ...expected, activeUrl: url }))
+    installStudio({
+      resolveStyleTemplateBackground: vi.fn(async () => ({ status: 'missing', path })),
+      retainBackground,
+    })
+    const commit = vi.fn(() => 'applied' as const)
+    await render(controller.controller, styleDraft(), commit)
+    await open()
+
+    await act(async () => {
+      const loaded = await latest.background.prepareTemplateBackground('template-missing')
+      expect(loaded).toEqual({ status: 'missing', path })
+      latest.style.change((current) => ({
+        ...current,
+        stageStyle: {
+          ...current.stageStyle,
+          background: { ...current.stageStyle.background, imagePath: path, mode: 'image' },
+        },
+      }))
+    })
+    expect(controller.snapshots.has(path)).toBe(false)
+    expect(latest.background.preview.resolutionStatus).toBe('missing')
+    await act(async () => expect(await latest.background.apply()).toBe(true))
+    expect(retainBackground).toHaveBeenCalledWith(expect.anything(), null)
+    expect(commit).toHaveBeenCalledOnce()
+  })
+
+  it('discards an image candidate before loading a non-image template without rewriting its background', async () => {
+    const candidatePath = '/media/discarded-candidate.png'
+    const candidateUrl = 'studio-media://asset/discarded-candidate'
+    const initial = capability(null, 'initial')
+    const controller = createController(initial)
+    const settleBackgroundImage = vi.fn(async () => initial)
+    const resolveStyleTemplateBackground = vi.fn()
+    installStudio({
+      chooseBackgroundImage: vi.fn(async () => chosen(candidatePath, candidateUrl)),
+      resolveStyleTemplateBackground,
+      settleBackgroundImage,
+    })
+    const templateBackground = {
+      ...cloneStageStyle().background,
+      imagePath: '/templates/remembered-image.png',
+      mode: 'solid' as const,
+      solidColor: '#102030',
+    }
+    const commit = vi.fn(() => 'applied' as const)
+    await render(controller.controller, styleDraft(), commit)
+    await open()
+    await act(async () => latest.background.controls.choose())
+
+    await act(async () => {
+      await expect(latest.background.prepareTemplateBackground(null)).resolves.toEqual({
+        status: 'cleared',
+      })
+      latest.style.change((current) => ({
+        ...current,
+        stageStyle: { ...current.stageStyle, background: templateBackground },
+      }))
+    })
+    expect(settleBackgroundImage).toHaveBeenCalledExactlyOnceWith(candidateUrl, false)
+    expect(resolveStyleTemplateBackground).not.toHaveBeenCalled()
+    expect(latest.background.preview).toMatchObject({ url: null, resolutionStatus: 'none' })
+
+    await act(async () => expect(await latest.background.apply()).toBe(true))
+    expect(commit.mock.calls[0]![0].stageStyle.background).toEqual(templateBackground)
+  })
+
   it('preserves the current draft when a replacement picker is canceled or decoder validation fails', async () => {
     const draftUrl = 'studio-media://asset/draft'
     const chooseBackgroundImage = vi

@@ -12,10 +12,15 @@ const {
   STABLE_RENDERER_SCRIPT,
   STUDIO_BRIDGE_KEYS,
   STYLE_SESSION_READINESS_TIMEOUT_MS,
+  STYLE_TEMPLATE_NAME,
   STYLE_TARGET_SCRIPT,
   executeBeforeDeadline,
   projectLyricsReadinessScript,
+  styleTemplateFormReadinessScript,
+  styleTemplateReadinessScript,
   validProjectLyricsState,
+  validStyleTemplateFormState,
+  validStyleTemplateState,
   validStyleTarget,
 } = require('./visual-smoke-renderer-contracts.cjs')
 const {
@@ -24,6 +29,7 @@ const {
   captureStyleSession,
   runVisualSmoke,
   sendTrustedStyleActivation,
+  sendTrustedStyleText,
 } = require('./visual-smoke-orchestration.cjs')
 
 const TRIGGER = '--oks-video-style-visual-smoke'
@@ -249,6 +255,7 @@ module.exports = {
   STUDIO_BRIDGE_KEYS,
   STYLE_SESSION_READINESS_TIMEOUT_MS,
   STYLE_SESSION_SCENARIO,
+  STYLE_TEMPLATE_NAME,
   STYLE_TARGET_SCRIPT,
   TRIGGER,
   VIEWPORT,
@@ -261,6 +268,11 @@ module.exports = {
   projectLyricsReadinessScript,
   runVisualSmoke,
   sendTrustedStyleActivation,
+  sendTrustedStyleText,
+  styleTemplateFormReadinessScript,
+  styleTemplateReadinessScript,
   validProjectLyricsState,
+  validStyleTemplateFormState,
+  validStyleTemplateState,
   validStyleTarget,
 }

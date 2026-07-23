@@ -21,7 +21,12 @@ interface BackgroundCandidate {
   readonly url: string
 }
 
-type BackgroundOperation = 'apply' | 'cancel' | 'choose' | 'clear'
+type BackgroundOperation = 'apply' | 'cancel' | 'choose' | 'clear' | 'load-template'
+
+export type StyleTemplateBackgroundPreparationResult =
+  | { readonly status: 'success' | 'missing'; readonly path: string }
+  | { readonly status: 'cleared' }
+  | { readonly status: 'stale' }
 
 export interface BackgroundImageStyleControls {
   readonly applyBlockedReason: string | null
@@ -39,6 +44,9 @@ export interface BackgroundImageStyleSession {
   readonly preview: BackgroundImagePreviewSource
   apply(): Promise<boolean>
   cancel(): Promise<boolean>
+  prepareTemplateBackground(
+    templateId: string | null,
+  ): Promise<StyleTemplateBackgroundPreparationResult>
   start(trigger: HTMLElement): void
 }
 
@@ -227,6 +235,76 @@ export function useBackgroundImageStyleSession({
       finishOperation('choose', generation)
     }
   }, [backgroundImages, beginOperation, finishOperation, publishCandidate, studio])
+
+  const prepareTemplateBackground = useCallback(
+    async (templateId: string | null): Promise<StyleTemplateBackgroundPreparationResult> => {
+      if (
+        !sessionRef.current.isOpen ||
+        !baselineRef.current ||
+        (templateId !== null && !studio?.resolveStyleTemplateBackground)
+      ) {
+        return { status: 'stale' }
+      }
+      const generation = beginOperation('load-template')
+      if (generation === null) return { status: 'stale' }
+      const previous = candidateRef.current
+      setMessage(null)
+      try {
+        if (previous && !(await rejectCandidate(previous))) {
+          throw new Error('Candidate rejection could not be verified')
+        }
+        if (
+          generation !== generationRef.current ||
+          !mountedRef.current ||
+          !sessionRef.current.isOpen
+        ) {
+          return { status: 'stale' }
+        }
+        publishCandidate(null)
+        if (templateId === null) return { status: 'cleared' }
+        if (!studio?.resolveStyleTemplateBackground) return { status: 'stale' }
+        const result = await studio.resolveStyleTemplateBackground(templateId)
+        if (
+          generation !== generationRef.current ||
+          !mountedRef.current ||
+          !sessionRef.current.isOpen
+        ) {
+          if (result.status === 'success') {
+            void studio.settleBackgroundImage?.(result.media.url, false).catch(() => null)
+          }
+          return { status: 'stale' }
+        }
+        if (result.status === 'stale') return result
+        if (result.status === 'missing') {
+          // A fresh main-process read failed. Do not let an older retained
+          // snapshot for this path make the linked template export-ready.
+          const priorUrl = backgroundImages.urlForPath(result.path)
+          if (priorUrl) backgroundImages.forgetSnapshot(result.path, priorUrl)
+          return result
+        }
+        const next: BackgroundCandidate = {
+          generation,
+          loadStatus: 'loading',
+          path: result.media.path,
+          previousUrl: backgroundImages.urlForPath(result.media.path),
+          reloadKey: 0,
+          url: result.media.url,
+        }
+        publishCandidate(next)
+        return { status: 'success', path: result.media.path }
+      } catch {
+        if (generation === generationRef.current && mountedRef.current) {
+          setMessage(
+            'The saved template image could not be linked. Try loading the template again.',
+          )
+        }
+        return { status: 'stale' }
+      } finally {
+        finishOperation('load-template', generation)
+      }
+    },
+    [backgroundImages, beginOperation, finishOperation, publishCandidate, rejectCandidate, studio],
+  )
 
   const clear = useCallback(async () => {
     if (!sessionRef.current.isOpen) return
@@ -542,6 +620,7 @@ export function useBackgroundImageStyleSession({
     preview,
     apply,
     cancel,
+    prepareTemplateBackground,
     start,
   }
 }

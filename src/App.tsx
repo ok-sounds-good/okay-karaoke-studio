@@ -18,6 +18,10 @@ import {
   validateProject,
 } from './lib/model'
 import { DEFAULT_VOCAL_STYLE, cloneStageStyle, cloneVocalStyle } from './lib/video-style'
+import {
+  DEFAULT_VIDEO_EXPORT_SETTINGS,
+  type VideoExportDefaults,
+} from './lib/video-export-settings'
 import { TopBar } from './components/TopBar'
 import { InspectorPanel } from './components/InspectorPanel'
 import { KaraokePreview } from './components/KaraokePreview'
@@ -337,6 +341,9 @@ export default function App() {
   const [syncCursor, setSyncCursor] = useState(0)
   const [lyricsDialogOpen, setLyricsDialogOpen] = useState(false)
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
+  const [nextExportDefaults, setNextExportDefaults] = useState<VideoExportDefaults>(() => ({
+    ...DEFAULT_VIDEO_EXPORT_SETTINGS,
+  }))
   const [videoExportProgress, setVideoExportProgress] = useState<StudioVideoExportProgress | null>(
     null,
   )
@@ -487,8 +494,11 @@ export default function App() {
       if (!canonicalVocal) return 'blocked'
       if (
         sameStageStyle(current.stageStyle, draft.stageStyle) &&
+        current.lyricDisplay.lineCount === draft.lyricDisplay.lineCount &&
+        current.lyricDisplay.advanceMode === draft.lyricDisplay.advanceMode &&
         (!currentTrack || sameVocalStyle(currentTrack.vocalStyle, canonicalVocal))
       ) {
+        setNextExportDefaults({ ...draft.videoExportDefaults })
         return 'noop'
       }
 
@@ -507,13 +517,17 @@ export default function App() {
           return latest
         }
         const stageChanged = !sameStageStyle(latest.stageStyle, acceptedStageStyle)
+        const lyricDisplayChanged =
+          latest.lyricDisplay.lineCount !== draft.lyricDisplay.lineCount ||
+          latest.lyricDisplay.advanceMode !== draft.lyricDisplay.advanceMode
         const vocalChanged =
           targetIndex >= 0 &&
           !sameVocalStyle(latest.tracks[targetIndex]!.vocalStyle, acceptedVocalStyle)
-        if (!stageChanged && !vocalChanged) return latest
+        if (!stageChanged && !lyricDisplayChanged && !vocalChanged) return latest
         return {
           ...latest,
           stageStyle: stageChanged ? cloneStageStyle(acceptedStageStyle) : latest.stageStyle,
+          lyricDisplay: lyricDisplayChanged ? { ...draft.lyricDisplay } : latest.lyricDisplay,
           tracks: vocalChanged
             ? latest.tracks.map((track, index) =>
                 index === targetIndex
@@ -523,14 +537,20 @@ export default function App() {
             : latest.tracks,
         }
       })
+      setNextExportDefaults({ ...draft.videoExportDefaults })
       return 'applied'
     },
     [commitHistory, projectMutationIsBlocked],
   )
   const projectStyleSource = useMemo<ProjectStyleDraft>(
     () =>
-      createProjectStyleDraft(project.stageStyle, activeTrack?.vocalStyle ?? DEFAULT_VOCAL_STYLE),
-    [activeTrack?.vocalStyle, project.stageStyle],
+      createProjectStyleDraft(
+        project.stageStyle,
+        activeTrack?.vocalStyle ?? DEFAULT_VOCAL_STYLE,
+        project.lyricDisplay,
+        nextExportDefaults,
+      ),
+    [activeTrack?.vocalStyle, nextExportDefaults, project.lyricDisplay, project.stageStyle],
   )
   const styleSession = useProjectStyleSession({
     ownerKey: {
@@ -1814,6 +1834,7 @@ export default function App() {
           leadVocalAvailable={Boolean(activeTrack)}
           fonts={installedFonts}
           onDraftChange={styleSession.change}
+          onPrepareTemplateBackground={backgroundStyleSession.prepareTemplateBackground}
           backgroundPreview={backgroundStyleSession.preview}
           backgroundControls={backgroundStyleSession.controls}
           onRetryFonts={installedFonts.request}
@@ -1951,6 +1972,7 @@ export default function App() {
           issueCount={reviewIssues.length}
           hasLyrics={projectHasLyrics}
           activeTrackHasLyrics={syncWords.length > 0}
+          defaults={nextExportDefaults}
           onClose={() => setExportDialogOpen(false)}
           onExportLrc={() => void exportText('lrc')}
           onExportAss={() => void exportText('ass')}

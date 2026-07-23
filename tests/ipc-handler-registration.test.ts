@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { cloneStageStyle, cloneVocalStyle } from '../src/lib/video-style'
 
 const require = createRequire(import.meta.url)
 const {
@@ -23,6 +24,7 @@ const channelNames = [
   'createStyleTemplate',
   'renameStyleTemplate',
   'deleteStyleTemplate',
+  'resolveStyleTemplateBackground',
   'getPendingWindowClose',
   'resolveWindowClose',
   'openProject',
@@ -168,5 +170,65 @@ describe('IPC handler registration', () => {
     expect(ownerIds).toEqual([7])
     expect(aborted).toBe(true)
     expect(finished).toBe(true)
+  })
+
+  it('rejects a renderer-authored image path before it can become resolver authority', async () => {
+    const readLinkedImage = vi.fn()
+    const beginRequest = vi.fn()
+    const registerBackgroundCandidate = vi.fn()
+    const makeMediaResult = vi.fn()
+    const stageStyle = cloneStageStyle()
+    stageStyle.background = { ...stageStyle.background, mode: 'image', imagePath: '/hostile.png' }
+    const hostile = {
+      name: 'Hostile',
+      preferences: {
+        stageStyle,
+        lyricDisplay: { lineCount: 3, advanceMode: 'scroll' },
+        vocalStyle: cloneVocalStyle(),
+        videoExportDefaults: { resolution: '720p', fps: 30 },
+      },
+    }
+    const store = {
+      authorizedBackgroundPaths: async () => new Set<string>(),
+      create: async (
+        value: typeof hostile,
+        options: { authorizeBackgroundPath(path: string): boolean },
+      ) => {
+        if (!options.authorizeBackgroundPath(value.preferences.stageStyle.background.imagePath!)) {
+          throw new Error('The linked background image is not authorized by Studio.')
+        }
+        return { id: 'hostile-id', ...value }
+      },
+      findAuthorized: async () => null,
+    }
+    const registrations = createIpcHandlerRegistration(
+      dependencies({
+        assertTrustedSender: (event: { sender: { id: number } }) => event.sender,
+        isRecord: (value: unknown) => Boolean(value && typeof value === 'object'),
+        linkedImageMedia: (value: unknown) => value,
+        makeMediaResult,
+        mediaCapabilities: {
+          backgroundPathIsAuthorized: () => false,
+          beginRequest,
+          finishRequest: () => true,
+          registerBackgroundCandidate,
+        },
+        readLinkedImage,
+        styleTemplateStore: store,
+      }),
+    )
+    const create = registrations.find(([channel]) => channel === 'studio:createStyleTemplate')![1]
+    const resolve = registrations.find(
+      ([channel]) => channel === 'studio:resolveStyleTemplateBackground',
+    )![1]
+
+    await expect(create({ sender: { id: 17 } }, hostile)).rejects.toThrow('not authorized')
+    await expect(resolve({ sender: { id: 17 } }, { id: 'hostile-id' })).resolves.toEqual({
+      status: 'stale',
+    })
+    expect(readLinkedImage).not.toHaveBeenCalled()
+    expect(beginRequest).not.toHaveBeenCalled()
+    expect(registerBackgroundCandidate).not.toHaveBeenCalled()
+    expect(makeMediaResult).not.toHaveBeenCalled()
   })
 })

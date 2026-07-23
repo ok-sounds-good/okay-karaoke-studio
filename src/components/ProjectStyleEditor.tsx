@@ -1,6 +1,9 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
 import type { InstalledFontState } from '../hooks/useInstalledFonts'
-import type { BackgroundImageStyleControls } from '../hooks/useBackgroundImageStyleSession'
+import type {
+  BackgroundImageStyleControls,
+  StyleTemplateBackgroundPreparationResult,
+} from '../hooks/useBackgroundImageStyleSession'
 import type { BackgroundImagePreviewSource } from '../hooks/useProjectBackgroundImage'
 import type {
   ProjectStyleDraft,
@@ -25,6 +28,7 @@ import '../video-style.css'
 import { KaraokePreview } from './KaraokePreview'
 import { LeadVocalStylePanel } from './LeadVocalStylePanel'
 import { StageFrameStylePanel, type StageFrameRole } from './StageFrameStylePanel'
+import { StyleTemplatesPanel } from './StyleTemplatesPanel'
 import { StyleDestinationTabs } from './StyleDestinationTabs'
 import { TitleCardStylePanel, type TitleCardRole } from './TitleCardStylePanel'
 import { TypefaceCombobox } from './TypefaceCombobox'
@@ -39,6 +43,9 @@ export interface ProjectStyleEditorProps {
   backgroundPreview?: BackgroundImagePreviewSource
   backgroundControls?: BackgroundImageStyleControls
   onDraftChange: ProjectStyleSession['change']
+  onPrepareTemplateBackground?: (
+    templateId: string | null,
+  ) => Promise<StyleTemplateBackgroundPreparationResult>
   onRetryFonts: () => void
   onTogglePlayback: () => void
   onCancel: () => Promise<boolean> | boolean
@@ -61,6 +68,7 @@ const STYLE_DESTINATIONS = [
   { id: 'background', label: 'Background' },
   { id: 'title-card', label: 'Title card' },
   { id: 'stage-frame', label: 'Stage frame' },
+  { id: 'templates', label: 'Templates' },
 ] as const
 
 type StyleDestination = (typeof STYLE_DESTINATIONS)[number]['id']
@@ -101,6 +109,7 @@ export function ProjectStyleEditor({
   backgroundPreview,
   backgroundControls,
   onDraftChange,
+  onPrepareTemplateBackground,
   onRetryFonts,
   onTogglePlayback,
   onCancel,
@@ -114,6 +123,7 @@ export function ProjectStyleEditor({
   const [titleCardPreviewRole, setTitleCardPreviewRole] = useState<TitleCardRole>('eyebrow')
   const [stageFramePreviewRole, setStageFramePreviewRole] = useState<StageFrameRole>('brand')
   const stageStyle = draft.stageStyle
+  const previewProject = { ...project, lyricDisplay: { ...draft.lyricDisplay } }
   const canonicalVocal = canonicalVocalStyle(draft)
   const lyrics = stageStyle.lyrics
   const background = stageStyle.background
@@ -405,6 +415,15 @@ export function ProjectStyleEditor({
             onRetryFonts={onRetryFonts}
             onSelectedRoleChange={setStageFramePreviewRole}
           />
+
+          <StyleTemplatesPanel
+            active={destination === 'templates'}
+            id={`${titleId}-templates-panel`}
+            labelledBy={`${titleId}-templates-tab`}
+            draft={draft}
+            onDraftChange={onDraftChange}
+            onPrepareTemplateBackground={onPrepareTemplateBackground}
+          />
         </div>
 
         <footer className="style-editor__actions">
@@ -429,7 +448,7 @@ export function ProjectStyleEditor({
       </section>
 
       <KaraokePreview
-        project={project}
+        project={previewProject}
         playbackMs={playbackMs}
         lyricMs={playbackMs - project.offsetMs}
         selectedWordIds={new Set()}
@@ -446,7 +465,7 @@ export function ProjectStyleEditor({
                     vocalStyle: canonicalVocal ?? draft.vocalStyle,
                     timingValid: Boolean(canonicalVocal),
                   }
-                : { target: destination, stageStyle }
+                : { target: 'project-lyrics', stageStyle }
         }
       />
     </main>

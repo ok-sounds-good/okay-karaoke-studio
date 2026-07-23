@@ -25,6 +25,7 @@ const STYLE_SESSION_NAMES = Object.freeze([
   '13-stage-frame-footer-hidden-draft-1280x720.png',
   '14-stage-frame-applied-1280x720.png',
   '15-lead-vocal-destination-1280x720.png',
+  '16-templates-saved-1280x720.png',
 ])
 const RESULT_NAME = 'result.json'
 const EXPECTED_FILES = Object.freeze([BASELINE_NAME, RESULT_NAME])
@@ -32,6 +33,7 @@ const VIEWPORT = Object.freeze({ height: 720, width: 1280 })
 const STYLE_SESSION_VIEWPORTS = Object.freeze([
   VIEWPORT,
   Object.freeze({ height: 900, width: 1440 }),
+  VIEWPORT,
   VIEWPORT,
   VIEWPORT,
   VIEWPORT,

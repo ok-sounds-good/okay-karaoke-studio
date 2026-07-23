@@ -1,0 +1,156 @@
+<?xml version="1.0"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="title desc">
+  <title id="title">Concept C: hybrid Style split button and contextual template bar</title>
+  <desc id="desc">A 1280 by 720 Okay Karaoke Studio Style workspace. The header Style action is a split button whose disclosure opens recent templates and template-library commands. Inside Style, a compact bar says Warm Pub is loaded into the draft and offers Save draft as new and Manage. The fixed stage shows the loaded draft, and Apply and close remains the only project mutation.</desc>
+  <defs>
+    <linearGradient id="stage" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#56301f"/>
+      <stop offset=".55" stop-color="#9a5734"/>
+      <stop offset="1" stop-color="#2b1b22"/>
+    </linearGradient>
+    <filter id="popoverShadow" x="-20%" y="-20%" width="150%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#2d2038" flood-opacity=".2"/>
+    </filter>
+    <style>
+      text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#302b38}
+      .heading{font-size:16px;font-weight:800}.subheading{font-size:12px;font-weight:800}
+      .label{font-size:10px;font-weight:700}.small{font-size:8.5px;fill:#62576e}
+      .tiny{font-size:7px;fill:#72677c;font-weight:700;letter-spacing:.08em}
+      .panel{fill:#fff;stroke:#d9cce9}.soft{fill:#f3edf9;stroke:#d9cce9}.field{fill:#fff;stroke:#a88fba}
+      .selected{fill:#f1eafa;stroke:#9b78cf}.button{fill:#ff8a2b;stroke:#e66f12}
+      .buttonText{fill:#3c200e;font-size:8.5px;font-weight:800}.stageLine{fill:#f7efe9;font-size:23px;font-weight:800}
+      .stageSmall{fill:#ead7ca;font-size:7px;font-weight:700}.menuText{font-size:11px}.menuHint{font-size:9px;fill:#7a7081}
+    </style>
+  </defs>
+
+  <rect width="1280" height="720" fill="#f8f6fb"/>
+
+  <!-- Header with split Style action -->
+  <rect width="1280" height="58" fill="#fff"/>
+  <line x1="0" y1="58" x2="1280" y2="58" stroke="#ebe4f2"/>
+  <rect x="16" y="14" width="30" height="30" rx="9" fill="#aa8dde" stroke="#d8c9e9"/>
+  <path d="M25 21h13v16H25z" fill="#fbf9fd" transform="rotate(-5 31 29)"/>
+  <text x="56" y="25" class="label">Okay</text>
+  <text x="56" y="39" class="tiny">KARAOKE STUDIO</text>
+  <rect x="142" y="14" width="104" height="30" rx="9" fill="#e9def5" stroke="#9b78cf"/>
+  <line x1="218" y1="14" x2="218" y2="44" stroke="#b89fcf"/>
+  <text x="180" y="33" text-anchor="middle" class="label" fill="#70469e">Style</text>
+  <path d="M229 26l5 5 5-5" fill="none" stroke="#70469e" stroke-width="1.5"/>
+  <text x="510" y="33" class="small">Midnight Rehearsal · Style draft</text>
+  <rect x="1000" y="14" width="58" height="30" rx="8" class="soft"/>
+  <text x="1029" y="33" text-anchor="middle" class="small">Save</text>
+  <rect x="1067" y="14" width="84" height="30" rx="8" class="soft"/>
+  <text x="1109" y="33" text-anchor="middle" class="small">Workflow</text>
+  <rect x="1160" y="14" width="104" height="30" rx="9" class="button"/>
+  <text x="1212" y="33" text-anchor="middle" class="buttonText">Export</text>
+
+  <!-- Style editor -->
+  <rect x="16" y="70" width="504" height="568" rx="14" class="panel"/>
+  <text x="36" y="94" class="tiny">VIDEO STYLE · PROJECT LYRICS</text>
+  <text x="36" y="117" class="heading">Style</text>
+  <text x="496" y="102" text-anchor="end" class="tiny">DRAFT</text>
+  <line x1="16" y1="128" x2="520" y2="128" stroke="#ebe4f2"/>
+
+  <!-- Contextual template bar -->
+  <rect x="32" y="140" width="472" height="58" rx="10" fill="#fff8f1" stroke="#efc6a6"/>
+  <circle cx="51" cy="160" r="8" fill="#d9894f"/>
+  <text x="68" y="162" class="label">Warm Pub</text>
+  <rect x="129" y="149" width="94" height="20" rx="10" fill="#f3e7dd" stroke="#e3bea0"/>
+  <text x="176" y="162" text-anchor="middle" class="tiny" fill="#9b4e16">LOADED INTO DRAFT</text>
+  <text x="49" y="184" class="small">Template changes are provisional until Apply &amp; close.</text>
+  <rect x="327" y="153" width="104" height="30" rx="8" class="soft"/>
+  <text x="379" y="172" text-anchor="middle" class="small">Save draft as new…</text>
+  <rect x="438" y="153" width="54" height="30" rx="8" class="soft"/>
+  <text x="465" y="172" text-anchor="middle" class="small">Manage</text>
+
+  <!-- Existing style destinations remain focused on style roles -->
+  <g class="small">
+    <rect x="32" y="211" width="92" height="28" rx="8" class="selected"/><text x="78" y="229" text-anchor="middle" class="label" fill="#70469e">Project lyrics</text>
+    <rect x="130" y="211" width="74" height="28" rx="8" class="soft"/><text x="167" y="229" text-anchor="middle">Lead vocal</text>
+    <rect x="210" y="211" width="83" height="28" rx="8" class="soft"/><text x="251" y="229" text-anchor="middle">Background</text>
+    <rect x="299" y="211" width="72" height="28" rx="8" class="soft"/><text x="335" y="229" text-anchor="middle">Title card</text>
+    <rect x="377" y="211" width="101" height="28" rx="8" class="soft"/><text x="427" y="229" text-anchor="middle">Stage frame</text>
+  </g>
+
+  <text x="34" y="270" class="subheading">Typeface</text>
+  <rect x="34" y="280" width="470" height="34" rx="8" class="field"/>
+  <text x="48" y="302" class="label">Georgia</text>
+  <path d="M480 292l6 6 6-6" fill="none" stroke="#72677c"/>
+  <text x="34" y="342" class="subheading">Available faces</text>
+  <rect x="34" y="352" width="68" height="31" rx="8" class="selected"/>
+  <text x="68" y="372" text-anchor="middle" class="label">Regular</text>
+  <rect x="110" y="352" width="66" height="31" rx="8" class="soft"/>
+  <text x="143" y="372" text-anchor="middle" class="small" font-style="italic">Italic</text>
+  <rect x="184" y="352" width="68" height="31" rx="8" class="soft"/>
+  <text x="218" y="372" text-anchor="middle" class="label">Bold</text>
+  <text x="34" y="411" class="subheading">Size</text>
+  <rect x="34" y="421" width="118" height="34" rx="8" class="field"/>
+  <text x="48" y="443" class="label">76 px</text>
+  <path d="M129 433l6 6 6-6" fill="none" stroke="#72677c"/>
+  <text x="171" y="411" class="subheading">Sung</text>
+  <rect x="171" y="421" width="150" height="34" rx="8" class="field"/>
+  <circle cx="191" cy="438" r="10" fill="#ffb161"/>
+  <text x="210" y="442" class="small">#FFB161</text>
+  <text x="338" y="411" class="subheading">Unsung</text>
+  <rect x="338" y="421" width="166" height="34" rx="8" class="field"/>
+  <circle cx="358" cy="438" r="10" fill="#f4e2d6"/>
+  <text x="377" y="442" class="small">#F4E2D6</text>
+
+  <rect x="34" y="479" width="470" height="64" rx="9" class="soft"/>
+  <text x="50" y="504" class="label">Draft source remains visible while editing</text>
+  <text x="50" y="523" class="small">If any field changes, the bar can show “Modified from Warm Pub”.</text>
+
+  <line x1="16" y1="574" x2="520" y2="574" stroke="#ebe4f2"/>
+  <text x="34" y="602" class="small">Warm Pub is loaded; applying creates one project history entry.</text>
+  <rect x="338" y="593" width="68" height="31" rx="9" class="soft"/>
+  <text x="372" y="613" text-anchor="middle" class="small">Cancel</text>
+  <rect x="414" y="593" width="90" height="31" rx="9" class="button"/>
+  <text x="459" y="613" text-anchor="middle" class="buttonText">Apply &amp; close</text>
+
+  <!-- Fixed stage -->
+  <rect x="532" y="70" width="732" height="568" rx="14" class="panel"/>
+  <text x="554" y="96" class="tiny">STAGE MONITOR · DESIGN MODE</text>
+  <text x="554" y="120" class="heading">Warm Pub · Draft preview</text>
+  <rect x="554" y="135" width="688" height="387" rx="11" fill="url(#stage)"/>
+  <rect x="599" y="174" width="598" height="309" rx="3" fill="none" stroke="#d79060" stroke-width="2"/>
+  <text x="618" y="197" class="stageSmall">OKAY / STUDIO</text>
+  <text x="1178" y="197" text-anchor="end" class="stageSmall">00:42.600</text>
+  <text x="898" y="331" text-anchor="middle" class="stageLine" font-family="Georgia,serif" fill="#ffb161">Hold on to the night</text>
+  <text x="618" y="462" class="stageSmall">THE LATE SET · MIDNIGHT REHEARSAL</text>
+  <rect x="554" y="538" width="688" height="79" rx="9" fill="#fff8f1" stroke="#efc6a6"/>
+  <text x="575" y="562" class="tiny" fill="#9b4e16">CONCEPT C · QUICK ENTRY + CONTEXT</text>
+  <text x="575" y="584" class="label">Fast header access; clear draft context inside Style.</text>
+  <text x="575" y="602" class="small">Manage opens the full library only when needed.</text>
+
+  <!-- Split-button popover -->
+  <g filter="url(#popoverShadow)">
+    <rect x="142" y="49" width="340" height="244" rx="12" fill="#fff" stroke="#cfc5d6"/>
+    <text x="161" y="76" class="tiny">STYLE</text>
+    <rect x="151" y="86" width="322" height="35" rx="8" class="soft"/>
+    <text x="169" y="108" class="menuText" font-weight="700">Open Style without a template</text>
+    <text x="456" y="108" text-anchor="end" class="menuHint">Main button</text>
+    <text x="161" y="145" class="tiny">RECENT TEMPLATES</text>
+    <rect x="151" y="154" width="322" height="35" rx="8" fill="#fff8f1" stroke="#efc6a6"/>
+    <circle cx="170" cy="171" r="7" fill="#d9894f"/>
+    <text x="186" y="175" class="menuText" font-weight="700">Warm Pub</text>
+    <text x="455" y="175" text-anchor="end" class="menuHint">Loaded</text>
+    <circle cx="170" cy="207" r="7" fill="#513568"/>
+    <text x="186" y="211" class="menuText">Stage Show Dark</text>
+    <circle cx="170" cy="239" r="7" fill="#f9f7fb" stroke="#4e4457"/>
+    <text x="186" y="243" class="menuText">High-Contrast Practice</text>
+    <line x1="158" y1="256" x2="466" y2="256" stroke="#ece6f0"/>
+    <text x="161" y="280" class="menuText">Open template library…</text>
+    <text x="455" y="280" text-anchor="end" class="menuHint">Manage</text>
+  </g>
+
+  <!-- Fixed transport -->
+  <rect y="650" width="1280" height="70" fill="#fff"/>
+  <line x1="0" y1="650" x2="1280" y2="650" stroke="#ebe4f2"/>
+  <rect x="16" y="659" width="220" height="52" rx="11" class="soft"/>
+  <text x="34" y="683" class="label">Start sync</text>
+  <text x="34" y="700" class="tiny">CLOSE STYLE TO ENABLE</text>
+  <circle cx="566" cy="685" r="22" fill="#ff8a2b"/>
+  <path d="M560 676l16 9-16 9z" fill="#3c200e"/>
+  <text x="618" y="689" class="label">0:42.600 / 3:42.000</text>
+  <text x="1110" y="689" class="small">1.0× · Volume</text>
+</svg>

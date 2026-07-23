@@ -275,6 +275,7 @@ describe('smoke artifact ownership and publication', () => {
 
   it('enforces inclusive count, per-artifact, and aggregate byte limits', () => {
     const { maxArtifactBytes, maxArtifacts, maxTotalBytes } = artifacts.ARTIFACT_LIMITS
+    expect(maxArtifacts).toBe(17)
     expect(visualResults.STYLE_SESSION_NAMES.length + 1).toBe(maxArtifacts)
     const marker = { bytes: Buffer.from('x'), name: 'result.json' }
     const atCount = Array.from({ length: maxArtifacts - 1 }, (_, index) => ({

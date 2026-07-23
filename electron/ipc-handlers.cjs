@@ -84,7 +84,13 @@ function createIpcHandlerRegistration(dependencies) {
       channels.createStyleTemplate,
       async (event, value) => {
         assertTrustedSender(event)
-        return styleTemplateStore.create(value)
+        const ownerId = event.sender.id
+        const persistedPaths = await styleTemplateStore.authorizedBackgroundPaths()
+        return styleTemplateStore.create(value, {
+          authorizeBackgroundPath: (linkedPath) =>
+            mediaCapabilities.backgroundPathIsAuthorized(ownerId, linkedPath) ||
+            persistedPaths.has(linkedPath),
+        })
       },
     ],
     [
@@ -99,6 +105,47 @@ function createIpcHandlerRegistration(dependencies) {
       async (event, value) => {
         assertTrustedSender(event)
         return styleTemplateStore.delete(value)
+      },
+    ],
+    [
+      channels.resolveStyleTemplateBackground,
+      async (event, value) => {
+        assertTrustedSender(event)
+        if (!isRecord(value)) {
+          throw new TypeError('resolveStyleTemplateBackground requires an options object')
+        }
+        // The renderer supplies only an opaque template ID. Re-read the persisted,
+        // validated template here so its linked path never becomes renderer authority.
+        const template = await styleTemplateStore.findAuthorized({ id: value.id })
+        if (!template) return { status: 'stale' }
+        const background = template.preferences.stageStyle.background
+        if (background.mode !== 'image' || !background.imagePath) return { status: 'stale' }
+
+        const ownerId = event.sender.id
+        const requestSequence = mediaCapabilities.beginRequest(ownerId, 'background')
+        const linkedPath = template.backgroundImagePath
+        let image
+        try {
+          image = await readLinkedImage(linkedPath, {
+            decode: createElectronNativeImageDecoder(),
+          })
+        } catch {
+          return mediaCapabilities.finishRequest(ownerId, 'background', requestSequence)
+            ? { status: 'missing', path: linkedPath }
+            : { status: 'stale' }
+        }
+        const token = mediaCapabilities.registerBackgroundCandidate(
+          ownerId,
+          linkedPath,
+          linkedImageMedia(image),
+          requestSequence,
+        )
+        return token
+          ? {
+              status: 'success',
+              media: makeMediaResult(token, linkedPath, 'background'),
+            }
+          : { status: 'stale' }
       },
     ],
     [

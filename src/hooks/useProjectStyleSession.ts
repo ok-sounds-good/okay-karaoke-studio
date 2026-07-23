@@ -11,6 +11,9 @@ import {
   type VisibleTextStyle,
   type VocalStyle,
 } from '../lib/video-style'
+import type { LyricDisplaySettings } from '../lib/model'
+import type { VideoExportDefaults } from '../lib/video-export-settings'
+import { DEFAULT_VIDEO_EXPORT_SETTINGS } from '../lib/video-export-settings'
 import {
   VOCAL_STYLE_TIMING_ERROR,
   vocalStyleTimingDraft,
@@ -29,8 +32,10 @@ export type ProjectStyleCommitResult = 'applied' | 'noop' | 'blocked' | 'stale'
 
 export interface ProjectStyleDraft {
   stageStyle: StageStyle
+  lyricDisplay: LyricDisplaySettings
   vocalStyle: VocalStyle
   vocalTiming: VocalStyleTimingDraft
+  videoExportDefaults: VideoExportDefaults
 }
 
 export type ProjectStyleDraftChange =
@@ -152,19 +157,25 @@ export function sameVocalStyle(left: VocalStyle, right: VocalStyle): boolean {
 export function cloneProjectStyleDraft(draft: ProjectStyleDraft): ProjectStyleDraft {
   return {
     stageStyle: cloneStageStyle(draft.stageStyle),
+    lyricDisplay: { ...draft.lyricDisplay },
     vocalStyle: cloneVocalStyle(draft.vocalStyle),
     vocalTiming: { ...draft.vocalTiming },
+    videoExportDefaults: { ...draft.videoExportDefaults },
   }
 }
 
 export function createProjectStyleDraft(
   stageStyle: StageStyle,
   vocalStyle: VocalStyle,
+  lyricDisplay: LyricDisplaySettings = { lineCount: 2, advanceMode: 'clear' },
+  videoExportDefaults: VideoExportDefaults = DEFAULT_VIDEO_EXPORT_SETTINGS,
 ): ProjectStyleDraft {
   return {
     stageStyle,
+    lyricDisplay,
     vocalStyle,
     vocalTiming: vocalStyleTimingDraft(vocalStyle),
+    videoExportDefaults,
   }
 }
 
@@ -175,10 +186,14 @@ export function canonicalVocalStyle(draft: ProjectStyleDraft): VocalStyle | null
 export function sameProjectStyleDraft(left: ProjectStyleDraft, right: ProjectStyleDraft): boolean {
   return (
     sameStageStyle(left.stageStyle, right.stageStyle) &&
+    left.lyricDisplay.lineCount === right.lyricDisplay.lineCount &&
+    left.lyricDisplay.advanceMode === right.lyricDisplay.advanceMode &&
     sameVocalStyle(left.vocalStyle, right.vocalStyle) &&
     left.vocalTiming.previewMs === right.vocalTiming.previewMs &&
     left.vocalTiming.minLeadMs === right.vocalTiming.minLeadMs &&
-    left.vocalTiming.maxLeadMs === right.vocalTiming.maxLeadMs
+    left.vocalTiming.maxLeadMs === right.vocalTiming.maxLeadMs &&
+    left.videoExportDefaults.resolution === right.videoExportDefaults.resolution &&
+    left.videoExportDefaults.fps === right.videoExportDefaults.fps
   )
 }
 

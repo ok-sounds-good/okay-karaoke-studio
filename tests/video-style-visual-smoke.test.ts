@@ -215,6 +215,8 @@ function fakeStyleSessionWindow(
     displayScale?: number
     leadState?: unknown
     readiness?: Promise<never>
+    templateFormState?: unknown
+    templateState?: unknown
     target?: unknown
   } = {},
   capturePng = validPng,
@@ -223,6 +225,7 @@ function fakeStyleSessionWindow(
   const captures = [
     { height: 720, width: 1280 },
     { height: 900, width: 1440 },
+    { height: 720, width: 1280 },
     { height: 720, width: 1280 },
     { height: 720, width: 1280 },
     { height: 720, width: 1280 },
@@ -319,6 +322,32 @@ function fakeStyleSessionWindow(
           resourcesReady: true,
           stageHeight: 540,
           stageWidth: 960,
+          width: 1280,
+        },
+      )
+      .mockResolvedValueOnce(styleActionTarget('templates'))
+      .mockResolvedValueOnce(
+        options.templateFormState ?? {
+          controls: 2,
+          height: 720,
+          nameReady: true,
+          resourcesReady: true,
+          stageHeight: 540,
+          stageWidth: 960,
+          width: 1280,
+        },
+      )
+      .mockResolvedValueOnce(styleActionTarget('template-name'))
+      .mockResolvedValueOnce(styleActionTarget('save-template'))
+      .mockResolvedValueOnce(
+        options.templateState ?? {
+          controls: 5,
+          height: 720,
+          name: smoke.STYLE_TEMPLATE_NAME,
+          resourcesReady: true,
+          stageHeight: 540,
+          stageWidth: 960,
+          status: `Saved “${smoke.STYLE_TEMPLATE_NAME}”.`,
           width: 1280,
         },
       )
@@ -535,6 +564,7 @@ describe('production-window visual smoke', () => {
         '13-stage-frame-footer-hidden-draft-1280x720.png',
         '14-stage-frame-applied-1280x720.png',
         '15-lead-vocal-destination-1280x720.png',
+        '16-templates-saved-1280x720.png',
         'result.json',
       ])
     })
@@ -552,8 +582,8 @@ describe('production-window visual smoke', () => {
       ),
     ).resolves.toEqual({ ok: true })
     const inputEvents = window.webContents.sendInputEvent.mock.calls.map(([event]) => event)
-    expect(inputEvents).toHaveLength(127)
-    expect(inputEvents.filter(({ type }) => type === 'mouseDown')).toHaveLength(24)
+    expect(inputEvents).toHaveLength(163)
+    expect(inputEvents.filter(({ type }) => type === 'mouseDown')).toHaveLength(27)
     const expectedKeys = [
       'Tab',
       'Tab',
@@ -583,6 +613,16 @@ describe('production-window visual smoke', () => {
       'Tab',
       'Enter',
     ]
+    const expectedKeyboardEvents = expectedKeys.flatMap((key) => [
+      `keyDown:${key}`,
+      ...(key === 'Enter' ? [`char:${key}`] : []),
+      `keyUp:${key}`,
+    ])
+    const expectedTemplateEvents = [...smoke.STYLE_TEMPLATE_NAME].flatMap((key) => [
+      `keyDown:${key}`,
+      `char:${key}`,
+      `keyUp:${key}`,
+    ])
     expect(
       inputEvents
         .filter(({ type }) => ['keyDown', 'char', 'keyUp'].includes(type))
@@ -590,13 +630,7 @@ describe('production-window visual smoke', () => {
           ({ keyCode, modifiers, type }) =>
             `${type}:${modifiers?.includes('shift') ? 'Shift+' : ''}${keyCode}`,
         ),
-    ).toEqual(
-      expectedKeys.flatMap((key) => [
-        `keyDown:${key}`,
-        ...(key === 'Enter' ? [`char:${key}`] : []),
-        `keyUp:${key}`,
-      ]),
-    )
+    ).toEqual([...expectedKeyboardEvents, ...expectedTemplateEvents])
     const scripts = window.webContents.executeJavaScript.mock.calls.map(([script]) => script)
     const recorderScripts = scripts.filter((script) =>
       script.includes('__oksStyleKeyboardRecorder'),
@@ -630,10 +664,13 @@ describe('production-window visual smoke', () => {
       'reopen',
       'lead',
       'sync-aid',
+      'templates',
+      'template-name',
+      'save-template',
     ])
     expect(window.setContentSize.mock.calls).toContainEqual([1280, 720, false])
     expect(window.setContentSize.mock.calls).toContainEqual([1440, 900, false])
-    expect(window.webContents.capturePage).toHaveBeenCalledTimes(30)
+    expect(window.webContents.capturePage).toHaveBeenCalledTimes(32)
     expect(smoke.STYLE_TARGET_SCRIPT).not.toContain('.click(')
     expect(smoke.STYLE_TARGET_SCRIPT).not.toContain('setTimeout')
     const readinessScript = smoke.projectLyricsReadinessScript({ height: 720, width: 1280 })
@@ -681,7 +718,7 @@ describe('production-window visual smoke', () => {
       ),
     ).resolves.toEqual({ ok: true })
 
-    expect(window.webContents.sendInputEvent).toHaveBeenCalledTimes(127)
+    expect(window.webContents.sendInputEvent).toHaveBeenCalledTimes(163)
     expect(window.webContents.sendInputEvent.mock.calls[0][0]).toEqual({
       type: 'mouseMove',
       x: 61,
@@ -690,7 +727,7 @@ describe('production-window visual smoke', () => {
     expect(window.webContents.setZoomFactor).toHaveBeenCalledWith(0.5)
     expect(window.setContentSize.mock.calls).toContainEqual([640, 360, false])
     expect(window.setContentSize.mock.calls).toContainEqual([720, 450, false])
-    expect(window.webContents.capturePage).toHaveBeenCalledTimes(30)
+    expect(window.webContents.capturePage).toHaveBeenCalledTimes(32)
     expect(publish).toHaveBeenCalledOnce()
   })
 
@@ -849,6 +886,78 @@ describe('production-window visual smoke', () => {
     expect(writeFailure).toHaveBeenCalledOnce()
   })
 
+  it('rejects an incomplete saved-template readiness result before its capture', async () => {
+    const window = fakeStyleSessionWindow({
+      templateState: {
+        height: 720,
+        name: smoke.STYLE_TEMPLATE_NAME,
+        resourcesReady: true,
+        width: 1280,
+      },
+    })
+    const publish = vi.fn()
+    const writeFailure = vi.fn(async () => undefined)
+    await expect(
+      smoke.runVisualSmoke(
+        {
+          app: {},
+          config: { output: '/safe/evidence', scenario: smoke.STYLE_SESSION_SCENARIO },
+          window,
+        },
+        {
+          captureSettle: settleCaptureImmediately,
+          focus: vi.fn(async () => true),
+          publish,
+          writeFailure,
+        },
+      ),
+    ).resolves.toEqual({ ok: false })
+    expect(window.webContents.capturePage).toHaveBeenCalledTimes(30)
+    expect(publish).not.toHaveBeenCalled()
+    expect(writeFailure).toHaveBeenCalledOnce()
+  })
+
+  it('waits for the settled template form before focusing or typing its name', async () => {
+    const window = fakeStyleSessionWindow({
+      templateFormState: { height: 720, resourcesReady: true, width: 1280 },
+    })
+    const publish = vi.fn()
+    const writeFailure = vi.fn(async () => undefined)
+    await expect(
+      smoke.runVisualSmoke(
+        {
+          app: {},
+          config: { output: '/safe/evidence', scenario: smoke.STYLE_SESSION_SCENARIO },
+          window,
+        },
+        {
+          captureSettle: settleCaptureImmediately,
+          focus: vi.fn(async () => true),
+          publish,
+          writeFailure,
+        },
+      ),
+    ).resolves.toEqual({ ok: false })
+    const scripts = window.webContents.executeJavaScript.mock.calls.map(([script]) => script)
+    expect(
+      scripts.flatMap((script) => script.match(/const action = "([^"]+)"/u)?.[1] ?? []),
+    ).toEqual(expect.arrayContaining(['templates']))
+    expect(scripts).not.toContainEqual(expect.stringContaining('const action = "template-name"'))
+    expect(window.webContents.capturePage).toHaveBeenCalledTimes(30)
+    expect(window.webContents.sendInputEvent).toHaveBeenCalledTimes(130)
+    expect(publish).not.toHaveBeenCalled()
+    expect(writeFailure).toHaveBeenCalledOnce()
+  })
+
+  it('types only the fixed template name through trusted input events', () => {
+    const contents = { sendInputEvent: vi.fn() }
+    smoke.sendTrustedStyleText(contents, smoke.STYLE_TEMPLATE_NAME)
+    expect(contents.sendInputEvent).toHaveBeenCalledTimes(smoke.STYLE_TEMPLATE_NAME.length * 3)
+    expect(() => smoke.sendTrustedStyleText(contents, 'other template')).toThrow(
+      'VISUAL_SMOKE_ACTIVATION_INVALID',
+    )
+  })
+
   it('requires native-valid spinner-free timing with an explicit 100 ms Arrow contract', async () => {
     const readiness = smoke.projectLyricsReadinessScript(
       { height: 720, width: 1280 },
@@ -892,7 +1001,7 @@ describe('production-window visual smoke', () => {
         },
       ),
     ).resolves.toEqual({ ok: false })
-    expect(window.webContents.capturePage).toHaveBeenCalledTimes(30)
+    expect(window.webContents.capturePage).toHaveBeenCalledTimes(32)
     expect(publish).not.toHaveBeenCalled()
     expect(writeFailure).toHaveBeenCalledOnce()
   })

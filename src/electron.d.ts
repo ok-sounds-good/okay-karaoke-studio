@@ -68,6 +68,11 @@ declare global {
     | { status: 'missing'; state: StudioBackgroundCapabilityState }
     | { status: 'stale' }
 
+  type StudioStyleTemplateBackgroundResult =
+    | { status: 'success'; media: StudioBackgroundImageResult }
+    | { status: 'missing'; path: string }
+    | { status: 'stale' }
+
   interface StudioLrcImportResult {
     path: string
     name: string
@@ -127,6 +132,7 @@ declare global {
     }): Promise<StyleTemplate>
     renameStyleTemplate(id: string, name: string): Promise<StyleTemplate>
     deleteStyleTemplate(id: string): Promise<true>
+    resolveStyleTemplateBackground(id: string): Promise<StudioStyleTemplateBackgroundResult>
     openProject(): Promise<StudioOpenProjectResult | null>
     settleProjectOpen(requestId: string, accepted: boolean): Promise<boolean>
     resetProjectScope(): Promise<boolean>

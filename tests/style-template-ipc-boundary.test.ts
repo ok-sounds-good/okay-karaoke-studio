@@ -21,6 +21,7 @@ function loadStudio(result: unknown) {
     listStyleTemplates(): Promise<StyleTemplate[]>
     createStyleTemplate(value: unknown): Promise<StyleTemplate>
     renameStyleTemplate(id: string, name: string): Promise<StyleTemplate>
+    resolveStyleTemplateBackground(id: string): Promise<StudioStyleTemplateBackgroundResult>
   } | null = null
   runInNewContext(source('electron/preload.cjs'), {
     require: (specifier: string) => {
@@ -65,13 +66,22 @@ describe('style template Electron boundary', () => {
       'createStyleTemplate',
       'renameStyleTemplate',
       'deleteStyleTemplate',
+      'resolveStyleTemplateBackground',
     ]) {
       const start = handlers.indexOf(`channels.${channel}`)
       const end = handlers.indexOf('\n    ],', start)
       const handler = handlers.slice(start, end)
       expect(start).toBeGreaterThan(0)
       expect(handler).toContain('assertTrustedSender(event)')
-      if (channel !== 'listStyleTemplates') {
+      if (channel === 'createStyleTemplate') {
+        expect(handler.indexOf('assertTrustedSender(event)')).toBeLessThan(
+          handler.indexOf('styleTemplateStore.authorizedBackgroundPaths()'),
+        )
+      } else if (channel === 'resolveStyleTemplateBackground') {
+        expect(handler.indexOf('assertTrustedSender(event)')).toBeLessThan(
+          handler.indexOf('styleTemplateStore.findAuthorized({ id: value.id })'),
+        )
+      } else if (channel !== 'listStyleTemplates') {
         expect(handler.indexOf('assertTrustedSender(event)')).toBeLessThan(
           handler.indexOf(`styleTemplateStore.${channel.replace('StyleTemplate', '')}(value)`),
         )
@@ -88,14 +98,42 @@ describe('style template Electron boundary', () => {
     expect(preload).toContain("requireStyleTemplateId(id, 'deleteStyleTemplate')")
     expect(preload).toContain('requireStyleTemplate(')
     expect(preload).toContain('deleted !== true')
+    expect(preload).toContain("id: requireStyleTemplateId(id, 'resolveStyleTemplateBackground')")
+    expect(preload).toContain('requireStyleTemplateBackgroundResult')
     for (const method of [
       'listStyleTemplates()',
       'createStyleTemplate(options:',
       'renameStyleTemplate(id:',
       'deleteStyleTemplate(id:',
+      'resolveStyleTemplateBackground(id:',
     ]) {
       expect(types).toContain(method)
     }
+  })
+
+  it('allows only a template ID to authorize a linked-image candidate and rejects hostile results', async () => {
+    const valid = loadStudio({ status: 'missing', path: '/linked/missing.png' })
+    await expect(valid.studio.resolveStyleTemplateBackground('stable-id')).resolves.toEqual({
+      status: 'missing',
+      path: '/linked/missing.png',
+    })
+    expect(valid.invocations).toEqual([
+      {
+        channel: 'studio:resolve-style-template-background',
+        value: { id: 'stable-id' },
+      },
+    ])
+    await expect(
+      loadStudio({ status: 'missing', path: 'relative.png' }).studio.resolveStyleTemplateBackground(
+        'stable-id',
+      ),
+    ).rejects.toThrow('invalid result')
+    await expect(
+      loadStudio({
+        status: 'success',
+        media: { path: '/linked/a.png', name: 'a.png', url: 'https://evil.test/a.png' },
+      }).studio.resolveStyleTemplateBackground('stable-id'),
+    ).rejects.toThrow('invalid result')
   })
 
   it('rejects hostile nested requests and results while accepting canonical values', async () => {

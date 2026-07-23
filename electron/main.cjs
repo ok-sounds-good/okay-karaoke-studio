@@ -113,6 +113,7 @@ const CHANNELS = Object.freeze({
   createStyleTemplate: 'studio:create-style-template',
   renameStyleTemplate: 'studio:rename-style-template',
   deleteStyleTemplate: 'studio:delete-style-template',
+  resolveStyleTemplateBackground: 'studio:resolve-style-template-background',
 })
 
 const MENU_ACTIONS = new Set([

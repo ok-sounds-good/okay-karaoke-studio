@@ -126,7 +126,7 @@ describe('Windows packaged application smoke', () => {
       launches: [{ scenario: 'baseline' }, { scenario: 'style-session' }],
       runtime: { bridgeFrozen: true, ipcRoundTrip: 'getPendingWindowClose', windows: 1 },
     })
-    expect(result.manifest.launches[1].artifacts).toHaveLength(15)
+    expect(result.manifest.launches[1].artifacts).toHaveLength(16)
     expect(await readFile(join(output, 'launch.log'), 'utf8')).not.toContain(root)
   }, 20000)
 

@@ -130,6 +130,31 @@ describe('visual smoke renderer contracts', () => {
         viewport,
       ),
     ).toBe(false)
+    const template = {
+      controls: 5,
+      height: 720,
+      name: contracts.STYLE_TEMPLATE_NAME,
+      resourcesReady: true,
+      stageHeight: 360,
+      stageWidth: 640,
+      status: `Saved “${contracts.STYLE_TEMPLATE_NAME}”.`,
+      width: 1280,
+    }
+    expect(contracts.validStyleTemplateState(template, viewport)).toBe(true)
+    expect(contracts.validStyleTemplateState({ ...template, controls: 4 }, viewport)).toBe(false)
+    const templateForm = {
+      controls: 2,
+      height: 720,
+      nameReady: true,
+      resourcesReady: true,
+      stageHeight: 360,
+      stageWidth: 640,
+      width: 1280,
+    }
+    expect(contracts.validStyleTemplateFormState(templateForm, viewport)).toBe(true)
+    expect(
+      contracts.validStyleTemplateFormState({ ...templateForm, nameReady: false }, viewport),
+    ).toBe(false)
   })
 
   it('treats keyboard assertions as exact contracts, including every selection change', () => {
@@ -167,8 +192,23 @@ describe('visual smoke renderer contracts', () => {
     )
 
     const action = contracts.styleSessionActionScript('"; globalThis.pwned = true; //')
-    for (const script of [contracts.STABLE_RENDERER_SCRIPT, contracts.STYLE_TARGET_SCRIPT, action])
+    const template = contracts.styleTemplateReadinessScript(
+      { height: 720, width: 1280 },
+      contracts.STYLE_TEMPLATE_NAME,
+    )
+    const templateForm = contracts.styleTemplateFormReadinessScript({ height: 720, width: 1280 })
+    for (const script of [
+      contracts.STABLE_RENDERER_SCRIPT,
+      contracts.STYLE_TARGET_SCRIPT,
+      action,
+      template,
+      templateForm,
+    ])
       expect(script).not.toContain('require(')
     expect(action).not.toContain('const action = "; globalThis.pwned')
+    expect(template).not.toContain('window.studio')
+    expect(template).toContain('Saved “')
+    expect(templateForm).toContain('MutationObserver')
+    expect(templateForm).toContain('aria-busy')
   })
 })
