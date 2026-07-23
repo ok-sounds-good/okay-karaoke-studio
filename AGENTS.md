@@ -63,6 +63,10 @@ or silently incorporating them.
 - Application, test, or build-configuration changes: `bun run test` and
   `bun run build`.
 - Electron, preload, main-process, or packaging changes: `bun run dist:dir`.
+- On macOS under a Codex sandbox, request scoped escalation for the exact
+  GUI-bearing Electron command before its first run. Treat a sandbox `SIGABRT`
+  as an environment failure, not a test result; if escalation is unavailable,
+  report the gate as unrun. Do not broaden the whole agent sandbox.
 - Video rendering, audio muxing, frame planning, or media-process changes:
   `bun run test:video`.
 - User-visible behavior: exercise the affected workflow and record the result.

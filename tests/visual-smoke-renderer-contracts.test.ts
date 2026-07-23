@@ -1,8 +1,11 @@
+import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { runInNewContext } from 'node:vm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const require = createRequire(import.meta.url)
 const contracts = require('../electron/visual-smoke-renderer-contracts.cjs')
+const source = (file: string) => readFileSync(new URL(`../${file}`, import.meta.url), 'utf8')
 
 afterEach(() => vi.useRealTimers())
 
@@ -38,7 +41,36 @@ function styleTarget(overrides: Record<string, unknown> = {}) {
   }
 }
 
+function preloadBridgeKeys() {
+  const exposed: { api?: Record<string, unknown>; name?: string } = {}
+  runInNewContext(source('electron/preload.cjs'), {
+    require: (specifier: string) => {
+      if (specifier !== 'electron') throw new Error(`Unexpected require: ${specifier}`)
+      return {
+        contextBridge: {
+          exposeInMainWorld: (name: string, api: Record<string, unknown>) => {
+            exposed.name = name
+            exposed.api = api
+          },
+        },
+        ipcRenderer: {
+          invoke: async () => undefined,
+          on: () => {},
+          removeListener: () => {},
+        },
+      }
+    },
+  })
+  expect(exposed.name).toBe('studio')
+  expect(exposed.api).toBeDefined()
+  return Object.keys(exposed.api ?? {}).sort()
+}
+
 describe('visual smoke renderer contracts', () => {
+  it('matches the bridge contract to the real preload API', () => {
+    expect(preloadBridgeKeys()).toEqual(contracts.STUDIO_BRIDGE_KEYS)
+  })
+
   it('accepts only the deterministic renderer state at the packaged origin', () => {
     expect(contracts.validRendererState(rendererState())).toBe(true)
     expect(contracts.validRendererState(rendererState({ nodeAccess: true }))).toBe(false)

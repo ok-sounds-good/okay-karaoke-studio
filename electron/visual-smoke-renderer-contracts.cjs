@@ -65,7 +65,7 @@ const STYLE_KEY_FOCUS = Object.freeze([
 ])
 const STYLE_KEY_CHANGES = Object.freeze(['footer', 'clock', 'footer', 'brand', 'footer', 'brand'])
 const STUDIO_BRIDGE_KEYS = Object.freeze(
-  'cancelVideoExport,chooseBackgroundImage,createStyleTemplate,deleteStyleTemplate,exportText,exportVideo,getBackgroundState,getPendingWindowClose,importAudio,importLrc,listStyleTemplates,onMenuAction,onVideoExportProgress,onWindowCloseRequest,openProject,releaseAudio,releaseBackground,releaseBackgroundSnapshot,renameStyleTemplate,resetProjectScope,resolveProjectAudio,resolveProjectBackground,resolveWindowClose,retainBackground,saveProject,settleBackgroundImage,settleProjectOpen'.split(
+  'cancelVideoExport,chooseBackgroundImage,createStyleTemplate,deleteStyleTemplate,exportText,exportVideo,getBackgroundState,getPendingWindowClose,importAudio,importLrc,listStyleTemplates,onMenuAction,onVideoExportProgress,onWindowCloseRequest,openProject,releaseAudio,releaseBackground,releaseBackgroundSnapshot,renameStyleTemplate,resetProjectScope,resolveProjectAudio,resolveProjectBackground,resolveStyleTemplateBackground,resolveWindowClose,retainBackground,saveProject,settleBackgroundImage,settleProjectOpen'.split(
     ',',
   ),
 )
